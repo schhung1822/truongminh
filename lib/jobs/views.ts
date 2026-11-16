@@ -3,6 +3,7 @@ import type { SessionUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { canEditOwned } from "@/lib/permissions";
 import { fileUrl } from "@/lib/storage";
+import { compareSessionImages } from "./order";
 import { expectedDurationMs } from "./progress";
 import type { LayoutSnapshot } from "./snapshot";
 import type { ImageView } from "./view";
@@ -16,13 +17,7 @@ export async function loadSessionViews(sessionId: string, user: SessionUser): Pr
   });
 
   // Thứ tự ổn định: ảnh được tạo lại không nhảy xuống cuối danh sách
-  images.sort(
-    (a, b) =>
-      (a.sheet?.sortOrder ?? 0) - (b.sheet?.sortOrder ?? 0) ||
-      (a.materialId ?? "").localeCompare(b.materialId ?? "") ||
-      a.variantIndex - b.variantIndex ||
-      a.createdAt.getTime() - b.createdAt.getTime(),
-  );
+  images.sort(compareSessionImages);
 
   return images.map((img) => {
     const snapshot = img.layoutSnapshot as unknown as LayoutSnapshot;

@@ -27,7 +27,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!img || img.status !== "SUCCESS" || !img.finalPath) return jsonError(404, "Ảnh chưa sẵn sàng hoặc không tồn tại.");
 
   const snapshot = img.layoutSnapshot as unknown as LayoutSnapshot;
-  const name = `${img.session.logo.brand.name} - ${snapshot.title}.jpg`.replace(/[\\/:*?"<>|]+/g, " ");
+  // "Eventhub - Ảnh 1.jpg" (ảnh cũ chưa có số thứ tự thì dùng tên trang mẫu)
+  const part = snapshot.imageNumber ? `Ảnh ${snapshot.imageNumber}` : snapshot.title;
+  const name = `${img.session.logo.brand.name} - ${part}.jpg`.replace(/[\\/:*?"<>|]+/g, " ");
 
   const data = await getStorage().get(img.finalPath);
   return new Response(new Uint8Array(data), {

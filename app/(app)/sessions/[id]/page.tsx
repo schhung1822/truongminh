@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { loadSessionViews } from "@/lib/jobs/views";
+import { canEditOwned } from "@/lib/permissions";
 import { fileUrl } from "@/lib/storage";
 import { SessionResults } from "./session-results";
 
@@ -52,7 +53,11 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <SessionResults sessionId={session.id} initialImages={images} />
+      <SessionResults
+        sessionId={session.id}
+        initialImages={images}
+        canRefinish={canEditOwned(user, session.createdById)}
+      />
     </div>
   );
 }

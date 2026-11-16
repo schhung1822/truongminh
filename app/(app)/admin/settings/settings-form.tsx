@@ -63,11 +63,11 @@ export function SettingsForm({ settings }: { settings: Settings }) {
           </NativeSelect>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="workshopName">Tên xưởng (in ở chân ảnh)</Label>
+          <Label htmlFor="workshopName">Tên xưởng (một dòng chữ nhỏ ở chân ảnh)</Label>
           <Input id="workshopName" name="workshopName" defaultValue={settings.workshopName} maxLength={100} className="h-10" />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="footerNote">Dòng chú thích dưới ảnh</Label>
+          <Label htmlFor="footerNote">Dòng chú thích thêm dưới ảnh (để trống nếu không cần)</Label>
           <Input id="footerNote" name="footerNote" defaultValue={settings.footerNote} maxLength={200} className="h-10" />
         </div>
       </div>

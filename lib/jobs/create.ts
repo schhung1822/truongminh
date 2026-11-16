@@ -6,6 +6,7 @@ import { buildMaterialsList, renderPrompt } from "@/lib/prompts/render";
 import { getSettings } from "@/lib/settings";
 import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
 import { canEditOwned } from "@/lib/permissions";
+import { fallbackImageNumber } from "./finish";
 import { assertQuota, todayKey } from "./limits";
 import { MAX_SHEETS_PER_SESSION, type LayoutSnapshot } from "./snapshot";
 
@@ -31,6 +32,7 @@ async function buildSheetImage(
   sheetId: string,
   template: Template,
   model: string,
+  imageNumber?: number,
 ): Promise<{ error: string } | { data: BuiltImage }> {
   const sheet = await db.sheet.findUnique({
     where: { id: sheetId },
@@ -51,7 +53,14 @@ async function buildSheetImage(
     cols: sheet.cols,
     rows: sheet.rows,
     title: sheet.name,
-    cells: usable.map((m) => ({ materialId: m.id, code: m.code, name: m.name })),
+    imageNumber,
+    cells: usable.map((m) => ({
+      materialId: m.id,
+      code: m.code,
+      name: m.name,
+      groupName: m.groupName,
+      printTech: m.printTech,
+    })),
   };
   let promptUsed: string;
   try {
@@ -106,8 +115,9 @@ export async function createCatalogSession(
 
   const sheets = await db.sheet.findMany({ where: { id: { in: sheetIds } }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
   const built: BuiltImage[] = [];
-  for (const s of sheets) {
-    const r = await buildSheetImage(s.id, template, settings.imageModel);
+  for (const [index, s] of sheets.entries()) {
+    // số thứ tự ảnh trong phiên theo thứ tự trang mẫu: Ảnh 1, Ảnh 2...
+    const r = await buildSheetImage(s.id, template, settings.imageModel, index + 1);
     if ("error" in r) return { error: r.error };
     built.push(r.data);
   }
@@ -149,7 +159,10 @@ export async function retryImage(user: SessionUser, imageId: string): Promise<{ 
     } catch (e) {
       return { error: e instanceof Error ? e.message : "Thiếu prompt." };
     }
-    const r = await buildSheetImage(old.sheetId, template, settings.imageModel);
+    // tạo lại giữ nguyên số thứ tự của ảnh cũ
+    const oldNumber =
+      (old.layoutSnapshot as unknown as LayoutSnapshot).imageNumber ?? (await fallbackImageNumber(old.sessionId, old.id));
+    const r = await buildSheetImage(old.sheetId, template, settings.imageModel, oldNumber);
     if ("error" in r) return { error: r.error };
     built = r.data;
   } else {

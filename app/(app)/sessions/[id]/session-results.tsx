@@ -7,6 +7,7 @@ import {
   CheckCircle2Icon,
   DownloadIcon,
   Loader2Icon,
+  PaletteIcon,
   RefreshCwIcon,
   ZoomInIcon,
 } from "lucide-react";
@@ -19,7 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { estimateProgress, formatElapsed, overallProgress } from "@/lib/jobs/progress";
 import { isFinished, type ImageView } from "@/lib/jobs/view";
 import { cn } from "@/lib/utils";
-import { retryImageAction } from "../actions";
+import { refinishSessionAction, retryImageAction } from "../actions";
 
 const POLL_MS = 3000;
 const TICK_MS = 500;
@@ -59,7 +60,16 @@ function ProgressBar({
   );
 }
 
-export function SessionResults({ sessionId, initialImages }: { sessionId: string; initialImages: ImageView[] }) {
+export function SessionResults({
+  sessionId,
+  initialImages,
+  canRefinish,
+}: {
+  sessionId: string;
+  initialImages: ImageView[];
+  /** người tạo phiên hoặc admin: được vẽ lại khung và nhãn */
+  canRefinish: boolean;
+}) {
   const [images, setImages] = useState(initialImages);
   const [zoom, setZoom] = useState<ImageView | null>(null);
   const [offline, setOffline] = useState(false);
@@ -93,6 +103,17 @@ export function SessionResults({ sessionId, initialImages }: { sessionId: string
       inFlight.current = false;
     }
   }, [sessionId, router]);
+
+  const [refinishing, startRefinish] = useTransition();
+
+  function refinish() {
+    startRefinish(async () => {
+      const r = await refinishSessionAction(sessionId);
+      if (r.error) return void toast.error(r.error);
+      toast.success(`Đã vẽ lại ${r.count} ảnh.`);
+      await refresh();
+    });
+  }
 
   // Hỏi lại server mỗi vài giây khi còn ảnh chưa xong; xong hết thì dừng.
   useEffect(() => {
@@ -162,6 +183,17 @@ export function SessionResults({ sessionId, initialImages }: { sessionId: string
                 {failed > 0 ? `Hoàn tất: ${done} ảnh xong, ${failed} ảnh lỗi (bấm Tạo lại ở ảnh lỗi)` : `Hoàn thành: đã tạo xong ${done}/${images.length} ảnh`}
               </p>
               <ProgressBar percent={100} tone={failed > 0 ? "error" : "success"} label="Đã hoàn thành" />
+              {canRefinish && done > 0 && (
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <Button type="button" variant="outline" size="sm" className="h-9" onClick={refinish} disabled={refinishing}>
+                    {refinishing ? <Loader2Icon className="animate-spin" /> : <PaletteIcon />}
+                    Vẽ lại khung và nhãn
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Áp dụng lại tên xưởng, nhãn chất liệu... theo cấu hình mới nhất. Không gọi AI nên không tốn token.
+                  </span>
+                </div>
+              )}
             </>
           )}
           {offline && <Badge variant="secondary">Mất kết nối, đang thử lại</Badge>}

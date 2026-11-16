@@ -17,8 +17,8 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   imageModel: "gpt-image-2-5-sunburst-image-to-image",
   defaultResolution: "2K",
   dailyLimitPerSale: 60,
-  workshopName: "Xưởng in logo",
-  footerNote: "Ảnh mô phỏng, màu sắc thực tế có thể chênh lệch",
+  workshopName: "Xưởng in Trường Minh",
+  footerNote: "",
   labelMode: "overlay",
 };
 

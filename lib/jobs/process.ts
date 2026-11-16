@@ -1,13 +1,12 @@
 import "server-only";
 import type { GeneratedImage } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
-import { finishImage } from "@/lib/imaging/finish-image";
 import { getEnv } from "@/lib/env";
 import { getProvider } from "@/lib/providers";
 import { ProviderFatalError } from "@/lib/providers/types";
-import { getSettings } from "@/lib/settings";
 import { getStorage } from "@/lib/storage";
 import { mapLimit } from "./async";
+import { renderFinal } from "./finish";
 import { ensureLogoUrl, ensureMaterialUrl, NoReferenceError } from "./references";
 import { MAX_ATTEMPTS, type LayoutSnapshot } from "./snapshot";
 import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
@@ -159,19 +158,7 @@ async function finalizeImage(imageId: string, resultUrl: string, credits?: numbe
     const originalKey = `images/${img.sessionId}/${img.id}-original.${ext}`;
     await storage.put(originalKey, buffer); // giữ ảnh gốc ngay: link của nhà cung cấp sẽ hết hạn
 
-    const snapshot = img.layoutSnapshot as unknown as LayoutSnapshot;
-    const settings = await getSettings();
-    const final = await finishImage({
-      original: buffer,
-      brandName: img.session.logo.brand.name,
-      title: snapshot.title,
-      cols: snapshot.cols,
-      rows: snapshot.rows,
-      cells: snapshot.cells.map((c) => ({ code: c.code, name: c.name })),
-      labelMode: settings.labelMode,
-      workshopName: settings.workshopName,
-      footerNote: settings.footerNote,
-    });
+    const final = await renderFinal(img, img.session.logo.brand.name, buffer);
     const finalKey = `images/${img.sessionId}/${img.id}-final.jpg`;
     await storage.put(finalKey, final);
 

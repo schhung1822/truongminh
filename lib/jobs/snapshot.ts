@@ -4,8 +4,17 @@ export type LayoutSnapshot = {
   rows: number;
   /** tên trang mẫu (ảnh catalog) hoặc tên chất liệu (ảnh thiết kế) */
   title: string;
+  /** số thứ tự ảnh trong phiên (1, 2, 3...), in ở đầu ảnh dạng "Ảnh 1"; giữ nguyên khi tạo lại */
+  imageNumber?: number;
   /** các ô theo thứ tự đọc; ảnh thiết kế chỉ có một ô */
-  cells: { materialId: string; code: string; name: string }[];
+  cells: {
+    materialId: string;
+    code: string;
+    name: string;
+    /** loại chất liệu (nhóm: vải, nhựa...) và công nghệ in, in trên nhãn */
+    groupName?: string;
+    printTech?: string;
+  }[];
   design?: { productType: string; styleName: string; note: string };
 };
 

@@ -1,31 +1,67 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { finishImage } from "./finish-image";
+import { finishImage, layoutMetrics } from "./finish-image";
 
 async function original(w: number, h: number) {
   return sharp({ create: { width: w, height: h, channels: 3, background: "#dde8f0" } }).png().toBuffer();
 }
 
-const cells = Array.from({ length: 4 }, (_, i) => ({ code: `V0${i + 1}`, name: `Chất liệu số ${i + 1} khá dài để thử cắt chữ` }));
+const cells = Array.from({ length: 4 }, (_, i) => ({
+  code: `V0${i + 1}`,
+  name: `Chất liệu số ${i + 1} khá dài để thử cắt chữ`,
+  groupName: "Vải",
+  printTech: "In UV",
+}));
 const common = {
   brandName: "Cà phê Ánh Dương",
-  title: "Trang vải 1",
+  imageLabel: "Ảnh 1",
   cols: 2,
   rows: 2,
   cells,
-  workshopName: "Xưởng in Thanh Bình",
-  footerNote: "Ảnh mô phỏng, màu sắc thực tế có thể chênh lệch",
+  workshopName: "Xưởng in Trường Minh",
+  footerNote: "",
 };
 
+/** Số điểm ảnh khác nhau giữa hai ảnh trong một vùng. */
+async function diffCount(a: Buffer, b: Buffer, region: { left: number; top: number; width: number; height: number }) {
+  const [ra, rb] = await Promise.all(
+    [a, b].map((x) => sharp(x).extract(region).raw().toBuffer()),
+  );
+  let n = 0;
+  for (let i = 0; i < ra.length; i += 3) {
+    if (Math.abs(ra[i] - rb[i]) + Math.abs(ra[i + 1] - rb[i + 1]) + Math.abs(ra[i + 2] - rb[i + 2]) > 30) n++;
+  }
+  return n;
+}
+
 describe("finishImage", () => {
-  it("giữ nguyên chiều rộng, thêm đầu trang và chân trang (overlay)", async () => {
+  it("giữ nguyên chiều rộng; thêm đầu trang một dòng và chân trang nhỏ", async () => {
     const out = await finishImage({ ...common, original: await original(800, 1200), labelMode: "overlay" });
     const meta = await sharp(out).metadata();
+    const m = layoutMetrics(800, { hasWorkshop: true, hasNote: false });
     expect(meta.format).toBe("jpeg");
     expect(meta.width).toBe(800);
-    expect(meta.height).toBeGreaterThan(1200);
-    // đầu trang = 0.115W, chân trang = 0.1W
-    expect(meta.height).toBe(1200 + Math.round(800 * 0.115) + Math.round(800 * 0.1));
+    expect(meta.height).toBe(1200 + m.headerH + m.footerH);
+    // chân trang kín đáo: nhỏ hơn đầu trang
+    expect(m.footerH).toBeLessThan(m.headerH);
+  });
+
+  it("có dòng chú thích thì chân trang cao hơn, không có xưởng và không có chú thích thì rất mỏng", () => {
+    const base = layoutMetrics(1000, { hasWorkshop: true, hasNote: false }).footerH;
+    expect(layoutMetrics(1000, { hasWorkshop: true, hasNote: true }).footerH).toBeGreaterThan(base);
+    expect(layoutMetrics(1000, { hasWorkshop: false, hasNote: false }).footerH).toBeLessThan(base);
+  });
+
+  it("nhãn overlay là thẻ nhỏ ở góc dưới trái mỗi ô, không đụng vào giữa ô", async () => {
+    const orig = await original(800, 1200);
+    const withLabels = await finishImage({ ...common, original: orig, labelMode: "overlay" });
+    const without = await finishImage({ ...common, original: orig, labelMode: "none" });
+    const headerH = layoutMetrics(800, { hasWorkshop: true, hasNote: false }).headerH;
+    // ô 1 chiếm x 0..400, y 0..600 của ảnh gốc
+    const bottomLeft = { left: 8, top: headerH + 600 - 70, width: 300, height: 60 };
+    const centre = { left: 150, top: headerH + 200, width: 100, height: 100 };
+    expect(await diffCount(withLabels, without, bottomLeft)).toBeGreaterThan(500);
+    expect(await diffCount(withLabels, without, centre)).toBe(0);
   });
 
   it("chế độ legend thêm bảng chú giải nên cao hơn overlay", async () => {
@@ -34,38 +70,25 @@ describe("finishImage", () => {
     expect(lg.height!).toBeGreaterThan(ov.height!);
   });
 
-  it("overlay vẽ dải nhãn tối ở đáy mỗi ô", async () => {
-    const out = await finishImage({ ...common, original: await original(800, 1200), labelMode: "overlay" });
-    const headerH = Math.round(800 * 0.115);
-    const raw = await sharp(out).raw().toBuffer({ resolveWithObject: true });
-    const lum = (x: number, y: number) => {
-      const i = (y * raw.info.width + x) * raw.info.channels;
-      return (raw.data[i] + raw.data[i + 1] + raw.data[i + 2]) / 3;
-    };
-    // giữa ô 1 (hàng 1) cao khoảng 600, dải nhãn ở sát đáy ô, lệch nhẹ khỏi chữ (x sát mép trái)
-    const yInStrip = headerH + 600 - 4;
-    const yInCell = headerH + 300;
-    expect(lum(6, yInStrip)).toBeLessThan(120); // tối
-    expect(lum(6, yInCell)).toBeGreaterThan(200); // nền ảnh sáng
-  });
-
-  it("không có nhãn thì chỉ thêm đầu/chân trang; tên xưởng trống vẫn chạy", async () => {
+  it("thiếu loại/công nghệ in, thiếu nhãn ảnh, tên xưởng trống: vẫn chạy", async () => {
     const out = await finishImage({
       ...common,
+      imageLabel: undefined,
       workshopName: "",
       original: await original(1000, 1000),
       cols: 1,
       rows: 1,
-      cells: [cells[0]],
-      labelMode: "none",
+      cells: [{ code: "A", name: "Chỉ có mã và tên" }],
+      labelMode: "overlay",
     });
     expect((await sharp(out).metadata()).width).toBe(1000);
   });
 
-  it("tên thương hiệu quá dài vẫn vừa khổ ảnh (không làm lệch kích thước)", async () => {
+  it("tên thương hiệu và tên chất liệu quá dài vẫn vừa khổ ảnh", async () => {
     const out = await finishImage({
       ...common,
       brandName: "Một thương hiệu có cái tên dài dằng dặc ".repeat(6),
+      cells: cells.map((c) => ({ ...c, name: c.name.repeat(5) })),
       original: await original(600, 900),
       labelMode: "overlay",
     });
