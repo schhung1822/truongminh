@@ -1,7 +1,11 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { prepareLogoForAi } from "@/lib/imaging/logo-for-ai";
 import { getProvider } from "@/lib/providers";
 import { getStorage } from "@/lib/storage";
+
+/** Hậu tố có trong tên file logo đã chuẩn bị cho AI. Đổi số khi thay cách chuẩn bị logo để buộc tải lại. */
+const LOGO_VERSION_TAG = "-v2-";
 
 // Chỉ dùng lại URL đã upload nếu còn hạn ít nhất ngần này
 const MIN_REMAINING_MS = 60 * 60 * 1000;
@@ -19,10 +23,14 @@ export async function ensureLogoUrl(logo: {
   kieExpiresAt: Date | null;
 }): Promise<string> {
   const provider = getProvider();
-  if (provider.cacheReferences && stillValid(logo.kieUrl, logo.kieExpiresAt)) return logo.kieUrl;
+  // "-v2-" là phiên bản chuẩn bị logo cho AI (nền tương phản). URL đệm của bản cũ (nền trong suốt) bị bỏ, tải lại bản mới.
+  if (provider.cacheReferences && stillValid(logo.kieUrl, logo.kieExpiresAt) && logo.kieUrl.includes(LOGO_VERSION_TAG)) {
+    return logo.kieUrl;
+  }
 
-  const buffer = await getStorage().get(logo.normalizedPath);
-  const up = await provider.uploadReference({ buffer, fileName: `logo-${logo.id}.png`, contentType: "image/png" });
+  const stored = await getStorage().get(logo.normalizedPath);
+  const { buffer } = await prepareLogoForAi(stored);
+  const up = await provider.uploadReference({ buffer, fileName: `logo-${logo.id}${LOGO_VERSION_TAG.slice(0, -1)}.png`, contentType: "image/png" });
   if (provider.cacheReferences) {
     await db.logo.update({ where: { id: logo.id }, data: { kieUrl: up.url, kieExpiresAt: up.expiresAt } });
   }

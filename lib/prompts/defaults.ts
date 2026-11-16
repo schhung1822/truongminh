@@ -9,7 +9,7 @@ export const DEFAULT_CATALOG_PROMPT = `Create one product-sample sheet as a stri
 
 What each cell shows: ONE finished logo piece, photographed straight-on. The piece is a die-cut copy of the customer's logo: its outer outline IS the silhouette of the logo (symbol and letters kept exactly as in the logo, with the same spacing). It is NOT a logo printed or engraved on a rectangular tag, plate, card or keychain. Do not add any backing shape, hole, ring or frame.
 
-Reference image 1 is the customer's logo. It may be white or light-coloured on a transparent background: use its shape. Reproduce its shapes, proportions and letterforms exactly. Do not redraw, restyle, add or remove anything.
+Reference image 1 is the customer's logo, shown on a plain flat background (white or dark). The background is NOT part of the logo: ignore it and use only the logo's shapes, symbol and letters. Reproduce its shapes, proportions and letterforms exactly. Do not redraw, restyle, add or remove anything, and do not invent or replace any letters.
 
 Reference images 2 onward are material samples from our workshop. Each one is a two-panel photo:
 - LEFT panel = FRONT material. The front (top) face of the logo piece is made of this material.
@@ -28,7 +28,7 @@ Rules:
 
 export const DEFAULT_DESIGN_PROMPT = `Create one realistic product photo of: {{product_type}}. The customer's logo appears on it as a die-cut logo piece (its outline follows the logo's silhouette exactly), attached to the product in a natural way.
 
-Reference image 1 is the customer's logo. It may be white or light-coloured on a transparent background: use its shape. Reproduce its shapes, proportions and letterforms exactly. Do not redraw, restyle, add or remove anything.
+Reference image 1 is the customer's logo, shown on a plain flat background (white or dark). The background is NOT part of the logo: ignore it and use only the logo's shapes, symbol and letters. Reproduce its shapes, proportions and letterforms exactly. Do not redraw, restyle, add or remove anything, and do not invent or replace any letters.
 
 Reference image 2 is a two-panel material photo from our workshop:
 - LEFT panel = FRONT material. The front (top) face of the logo piece is made of this material.
