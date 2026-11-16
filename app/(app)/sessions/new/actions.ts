@@ -82,3 +82,43 @@ export async function listLogosAction(brandId: string): Promise<{ error?: string
     })),
   };
 }
+
+export type LogoSessionOption = {
+  id: string;
+  createdAt: string;
+  creatorName: string;
+  done: number;
+  failed: number;
+  running: number;
+  total: number;
+};
+
+/** Các phiên tư vấn đã tạo với một logo (mới nhất trước). */
+export async function listLogoSessionsAction(logoId: string): Promise<{ sessions: LogoSessionOption[] }> {
+  await requireUser();
+  const sessions = await db.consultSession.findMany({
+    where: { logoId, type: "CATALOG" },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: {
+      createdBy: { select: { name: true } },
+      images: { where: { retries: { none: {} } }, select: { status: true } },
+    },
+  });
+  const fmt = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" });
+  return {
+    sessions: sessions.map((s) => {
+      const done = s.images.filter((i) => i.status === "SUCCESS").length;
+      const failed = s.images.filter((i) => i.status === "FAILED").length;
+      return {
+        id: s.id,
+        createdAt: fmt.format(s.createdAt),
+        creatorName: s.createdBy.name,
+        done,
+        failed,
+        running: s.images.length - done - failed,
+        total: s.images.length,
+      };
+    }),
+  };
+}

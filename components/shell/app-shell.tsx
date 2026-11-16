@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { logoutAction } from "@/app/(auth)/actions";
+import { HeaderStats } from "./header-stats";
 import { adminNav, mainNav, type NavItem } from "./nav-config";
 
 type ShellUser = { name: string; email: string; role: "ADMIN" | "SALE" };
@@ -97,10 +98,10 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Thanh trên cho điện thoại */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:hidden">
+        {/* Thanh đầu trang: nút menu (điện thoại) bên trái, thống kê token bên phải */}
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background px-3 md:px-8">
           <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger render={<Button variant="outline" size="icon" aria-label="Mở menu" />}>
+            <SheetTrigger render={<Button variant="outline" size="icon" aria-label="Mở menu" className="md:hidden" />}>
               <MenuIcon />
             </SheetTrigger>
             <SheetContent side="left" className="flex w-72 flex-col gap-4 p-4">
@@ -113,10 +114,13 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
               <UserBox user={user} />
             </SheetContent>
           </Sheet>
-          <p className="text-sm font-semibold">Ảnh mẫu in logo</p>
+          <p className="text-sm font-semibold md:hidden">Ảnh mẫu in logo</p>
+          <div className="ml-auto">
+            <HeaderStats role={user.role} />
+          </div>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl flex-1 p-4 md:p-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1440px] flex-1 p-4 md:p-8">{children}</main>
       </div>
     </div>
   );

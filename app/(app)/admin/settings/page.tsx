@@ -43,7 +43,7 @@ export default async function SettingsPage() {
               <b>
                 {credits === null
                   ? "không hỏi được (kiểm tra khóa API)"
-                  : `${credits.toLocaleString("vi-VN")} credits (khoảng $${(credits * USD_PER_CREDIT).toFixed(2)})`}
+                  : `${credits.toLocaleString("vi-VN")} token (khoảng $${(credits * USD_PER_CREDIT).toFixed(2)})`}
               </b>
             </p>
           )}

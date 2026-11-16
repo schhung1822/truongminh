@@ -1,12 +1,12 @@
 import {
   BarChart3Icon,
   BoxesIcon,
+  FolderTreeIcon,
   HistoryIcon,
   HomeIcon,
   LayoutGridIcon,
   type LucideIcon,
   PaletteIcon,
-  PlusCircleIcon,
   ScrollTextIcon,
   SettingsIcon,
   UsersIcon,
@@ -22,7 +22,7 @@ export type NavItem = {
 
 export const mainNav: NavItem[] = [
   { href: "/", label: "Trang chính", icon: HomeIcon, ready: true },
-  { href: "/sessions/new", label: "Tạo phiên mới", icon: PlusCircleIcon, ready: true },
+  { href: "/customers", label: "Khách hàng", icon: FolderTreeIcon, ready: true },
   { href: "/history", label: "Lịch sử", icon: HistoryIcon, ready: false },
 ];
 

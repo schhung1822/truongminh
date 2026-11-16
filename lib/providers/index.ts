@@ -17,13 +17,19 @@ export function getProvider(): ImageProvider {
   return instance;
 }
 
+let creditsCache: { value: number; at: number } | undefined;
+const CREDITS_CACHE_MS = 20_000; // thanh đầu trang tải lại thường xuyên, không cần hỏi kie.ai mỗi lần
+
 /** Số dư credits của kie.ai, hoặc null nếu đang dùng ảnh giả / không hỏi được. Không tốn credits. */
-export async function getKieCredits(): Promise<number | null> {
+export async function getKieCredits(opts?: { fresh?: boolean }): Promise<number | null> {
   const p = getProvider();
   if (!(p instanceof KieProvider)) return null;
+  if (!opts?.fresh && creditsCache && Date.now() - creditsCache.at < CREDITS_CACHE_MS) return creditsCache.value;
   try {
-    return await p.getCredits();
+    const value = await p.getCredits();
+    creditsCache = { value, at: Date.now() };
+    return value;
   } catch {
-    return null;
+    return creditsCache?.value ?? null;
   }
 }

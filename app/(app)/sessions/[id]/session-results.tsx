@@ -45,6 +45,13 @@ export function SessionResults({ sessionId, initialImages }: { sessionId: string
     }
   }, [sessionId, router]);
 
+  // Khi ảnh vừa xong hết thì báo thanh đầu trang cập nhật số token ngay
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open) window.dispatchEvent(new Event("usage:refresh"));
+    wasOpen.current = open;
+  }, [open]);
+
   // Hỏi lại server mỗi vài giây khi còn ảnh chưa xong; xong hết thì dừng.
   useEffect(() => {
     if (!open) return;
@@ -66,7 +73,7 @@ export function SessionResults({ sessionId, initialImages }: { sessionId: string
         {offline && <Badge variant="secondary">Mất kết nối, đang thử lại</Badge>}
       </div>
 
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {images.map((img) => (
           <li key={img.id}>
             <ImageCard img={img} onZoom={() => setZoom(img)} onRetried={refresh} />

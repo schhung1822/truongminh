@@ -1,11 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { CheckIcon, ChevronRightIcon, FolderIcon, FolderOpenIcon, HomeIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Lưới các ô thư mục / tệp, dùng chung cho các màn hình duyệt dạng thư mục. */
 export function TileGrid({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <ul className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4", className)}>{children}</ul>;
+  return (
+    <ul className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6", className)}>
+      {children}
+    </ul>
+  );
 }
 
 /** Một thư mục: biểu tượng thư mục lớn, tên, dòng phụ và số lượng bên trong. */
@@ -14,33 +19,63 @@ export function FolderTile({
   subtitle,
   count,
   countLabel,
+  footer,
+  tone = "default",
   onClick,
+  href,
 }: {
   name: string;
   subtitle?: string;
   count?: number;
   countLabel?: string;
-  onClick: () => void;
+  /** dòng chú thích dưới cùng thay cho "số lượng", ví dụ "3/3 ảnh xong" */
+  footer?: string;
+  tone?: "default" | "busy" | "error";
+  onClick?: () => void;
+  /** nếu có, ô là một liên kết (mở trang) thay vì nút */
+  href?: string;
 }) {
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={onClick}
-        className="group relative flex h-full min-h-36 w-full flex-col items-center gap-1.5 rounded-xl border bg-card p-3 text-center transition-all hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50/60 hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-      >
-        <FolderIcon
-          className="size-14 shrink-0 fill-amber-300 text-amber-500 transition-transform group-hover:scale-105"
-          strokeWidth={1.5}
-        />
-        <span className="line-clamp-2 w-full text-sm leading-tight font-medium break-words">{name}</span>
-        {subtitle && <span className="w-full truncate text-xs text-muted-foreground">{subtitle}</span>}
-        {count !== undefined && (
+  const className =
+    "group relative flex h-full min-h-36 w-full flex-col items-center gap-1.5 rounded-xl border bg-card p-3 text-center transition-all hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50/60 hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
+  const content = (
+    <>
+      <FolderIcon
+        className="size-14 shrink-0 fill-amber-300 text-amber-500 transition-transform group-hover:scale-105"
+        strokeWidth={1.5}
+      />
+      <span className="line-clamp-2 w-full text-sm leading-tight font-medium wrap-break-word">{name}</span>
+      {subtitle && <span className="line-clamp-2 w-full text-xs text-muted-foreground">{subtitle}</span>}
+      {footer !== undefined ? (
+        <span
+          className={cn(
+            "mt-auto rounded-full px-2 py-0.5 text-[11px]",
+            tone === "error" && "bg-red-100 text-red-700",
+            tone === "busy" && "bg-amber-100 text-amber-800",
+            tone === "default" && "bg-muted text-muted-foreground",
+          )}
+        >
+          {footer}
+        </span>
+      ) : (
+        count !== undefined && (
           <span className="mt-auto rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
             {count} {countLabel}
           </span>
-        )}
-      </button>
+        )
+      )}
+    </>
+  );
+  return (
+    <li>
+      {href ? (
+        <Link href={href} className={cn(className, "no-underline")}>
+          {content}
+        </Link>
+      ) : (
+        <button type="button" onClick={onClick} className={className}>
+          {content}
+        </button>
+      )}
     </li>
   );
 }

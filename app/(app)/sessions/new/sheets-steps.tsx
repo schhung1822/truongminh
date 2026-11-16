@@ -226,7 +226,7 @@ export function ConfirmStep({
               <>
                 <dt className="text-muted-foreground">Chi phí ước tính</dt>
                 <dd className="font-medium text-amber-700">
-                  {cost.credits} credits (khoảng ${cost.usd.toFixed(2)}) trên kie.ai
+                  {cost.credits} token (khoảng ${cost.usd.toFixed(2)}) trên kie.ai
                 </dd>
               </>
             )}
