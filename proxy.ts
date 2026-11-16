@@ -14,5 +14,5 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   // Bỏ qua: trang đăng nhập, file tĩnh của Next, favicon.
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!login|api/webhooks|_next/static|_next/image|favicon.ico).*)"],
 };

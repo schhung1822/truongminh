@@ -15,6 +15,10 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
+    // Ảnh nằm trong kho riêng, cần đăng nhập mới xem được nên không dùng next/image.
+    rules: { "@next/next/no-img-element": "off" },
+  },
+  {
     // Component do shadcn sinh ra, giữ nguyên mã gốc.
     files: ["components/ui/**"],
     rules: { "react-hooks/set-state-in-effect": "off" },

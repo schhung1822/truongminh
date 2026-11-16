@@ -27,3 +27,7 @@ Ghi lại những điểm kỹ thuật nhỏ đã tự quyết (không ảnh hư
 | D21 | Admin chỉ tạo được tài khoản SALE trong giao diện (admin thứ hai chưa có chức năng) | Brief chỉ nói "admin tạo tài khoản cho sale"; thêm vai trò khi chủ dự án cần |
 | D22 | Bản khởi đầu prompt "thiết kế" do kỹ sư soạn (brief chỉ cung cấp prompt catalog) | Cần có sẵn để chạy GĐ6; admin sửa được trong trang Prompt |
 | D23 | Mục nav chưa làm hiện mờ "Sắp có", bật dần theo giai đoạn | Tránh bấm vào trang chưa tồn tại |
+| D24 | Nhập CSV chất liệu: mã đã có thì BỎ QUA (không ghi đè), mã mới tạo với mô tả AI để trống | Tránh vô tình ghi đè chỉnh sửa của admin; mô tả AI bổ sung sau |
+| D25 | Trang mẫu: tối đa 5 cột, 10 hàng; số chất liệu ≤ số ô; có thể chưa đầy ô | Trang cuối của một nhóm thường không đủ 10 chất liệu |
+| D26 | Có lệnh `npm run db:seed-demo` tạo 12 chất liệu giả + 2 trang mẫu để thử | Chủ dự án thử được toàn luồng mà chưa cần nhập 80 chất liệu thật. Chỉ dùng khi dev |
+| D27 | Ảnh trong kho dùng thẻ img thường, không dùng next/image | Ảnh nằm sau đăng nhập, bộ tối ưu ảnh của Next không gửi cookie |
