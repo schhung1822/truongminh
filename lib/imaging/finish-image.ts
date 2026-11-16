@@ -39,8 +39,8 @@ const svg = (w: number, h: number, body: string) =>
   Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${body}</svg>`);
 
 /**
- * Thẻ nhãn nhỏ gọn đặt ở góc dưới trái mỗi ô: [MÃ] Tên chất liệu / Loại · Công nghệ in.
- * Nền trắng mờ, viền mảnh, vạch nhấn bên trái; che rất ít phần sản phẩm.
+ * Thẻ nhãn nhỏ gọn đặt ở góc dưới PHẢI mỗi ô: [MÃ] Tên chất liệu / Loại · Công nghệ in.
+ * Nền trắng mờ, viền mảnh, không có vạch nhấn; che rất ít phần sản phẩm.
  */
 async function buildLabelCard(
   cell: { x: number; y: number; w: number; h: number },
@@ -51,7 +51,7 @@ async function buildLabelCard(
   const m = Math.round(W * 0.008); // lề so với mép ô
   const padX = Math.round(W * 0.0065);
   const padY = Math.round(W * 0.0042);
-  const accent = Math.max(3, Math.round(W * 0.003));
+  const accent = 0; // không còn vạch đen bên trái thẻ
   const gap = Math.round(W * 0.0048);
   const nameSize = Math.max(10, W * 0.0124);
   const smallSize = Math.max(8, W * 0.0092);
@@ -76,7 +76,7 @@ async function buildLabelCard(
   const innerW = Math.max(line1W, meta?.width ?? 0);
   const cardW = accent + padX + innerW + padX;
   const cardH = padY * 2 + line1H + (meta ? Math.round(gap * 0.7) + meta.height : 0);
-  const x = cell.x + m;
+  const x = cell.x + cell.w - cardW - m; // sát mép phải của ô
   const y = top + cell.y + cell.h - cardH - m;
   const r = Math.round(W * 0.0045);
 
@@ -85,8 +85,7 @@ async function buildLabelCard(
       input: svg(
         cardW,
         cardH,
-        `<rect x="0.5" y="0.5" width="${cardW - 1}" height="${cardH - 1}" rx="${r}" fill="#ffffff" fill-opacity="0.93" stroke="#000000" stroke-opacity="0.14"/>` +
-          `<rect x="0" y="${r}" width="${accent}" height="${cardH - 2 * r}" fill="#1f1f1f"/>`,
+        `<rect x="0.5" y="0.5" width="${cardW - 1}" height="${cardH - 1}" rx="${r}" fill="#ffffff" fill-opacity="0.93" stroke="#000000" stroke-opacity="0.14"/>`,
       ),
       left: x,
       top: y,

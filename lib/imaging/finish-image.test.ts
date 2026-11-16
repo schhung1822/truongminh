@@ -52,15 +52,17 @@ describe("finishImage", () => {
     expect(layoutMetrics(1000, { hasWorkshop: false, hasNote: false }).footerH).toBeLessThan(base);
   });
 
-  it("nhãn overlay là thẻ nhỏ ở góc dưới trái mỗi ô, không đụng vào giữa ô", async () => {
+  it("nhãn overlay là thẻ nhỏ ở góc dưới PHẢI mỗi ô, không đụng vào giữa ô và góc trái", async () => {
     const orig = await original(800, 1200);
     const withLabels = await finishImage({ ...common, original: orig, labelMode: "overlay" });
     const without = await finishImage({ ...common, original: orig, labelMode: "none" });
     const headerH = layoutMetrics(800, { hasWorkshop: true, hasNote: false }).headerH;
     // ô 1 chiếm x 0..400, y 0..600 của ảnh gốc
-    const bottomLeft = { left: 8, top: headerH + 600 - 70, width: 300, height: 60 };
+    const bottomRight = { left: 400 - 8 - 200, top: headerH + 600 - 50, width: 200, height: 40 };
+    const bottomLeft = { left: 8, top: headerH + 600 - 50, width: 60, height: 40 };
     const centre = { left: 150, top: headerH + 200, width: 100, height: 100 };
-    expect(await diffCount(withLabels, without, bottomLeft)).toBeGreaterThan(500);
+    expect(await diffCount(withLabels, without, bottomRight)).toBeGreaterThan(300);
+    expect(await diffCount(withLabels, without, bottomLeft)).toBe(0);
     expect(await diffCount(withLabels, without, centre)).toBe(0);
   });
 
