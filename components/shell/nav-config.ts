@@ -22,7 +22,7 @@ export type NavItem = {
 
 export const mainNav: NavItem[] = [
   { href: "/", label: "Trang chính", icon: HomeIcon, ready: true },
-  { href: "/sessions/new", label: "Tạo phiên mới", icon: PlusCircleIcon, ready: false },
+  { href: "/sessions/new", label: "Tạo phiên mới", icon: PlusCircleIcon, ready: true },
   { href: "/history", label: "Lịch sử", icon: HistoryIcon, ready: false },
 ];
 

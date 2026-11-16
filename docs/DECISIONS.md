@@ -31,3 +31,5 @@ Ghi lại những điểm kỹ thuật nhỏ đã tự quyết (không ảnh hư
 | D25 | Trang mẫu: tối đa 5 cột, 10 hàng; số chất liệu ≤ số ô; có thể chưa đầy ô | Trang cuối của một nhóm thường không đủ 10 chất liệu |
 | D26 | Có lệnh `npm run db:seed-demo` tạo 12 chất liệu giả + 2 trang mẫu để thử | Chủ dự án thử được toàn luồng mà chưa cần nhập 80 chất liệu thật. Chỉ dùng khi dev |
 | D27 | Ảnh trong kho dùng thẻ img thường, không dùng next/image | Ảnh nằm sau đăng nhập, bộ tối ưu ảnh của Next không gửi cookie |
+| D28 | Sale xem được mọi khách/thương hiệu/logo, nhưng chỉ thêm thương hiệu/logo vào khách mình phụ trách hoặc mình tạo (admin: tất cả). Tạo phiên mới từ logo của người khác thì được | Đúng brief "xem của người khác, sửa của mình"; phiên mới là dữ liệu của chính người tạo |
+| D29 | SVG logo được vẽ ra PNG bằng sharp (mật độ 300) và không bị coi là "logo nhỏ" | SVG là vector, kích thước khai báo nhỏ không phản ánh chất lượng |
