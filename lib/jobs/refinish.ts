@@ -24,7 +24,10 @@ export async function refinishSession(sessionId: string): Promise<number> {
       const key = `images/${img.sessionId}/${img.id}-final-${Date.now().toString(36)}.jpg`;
       await storage.put(key, final);
       await db.generatedImage.update({ where: { id: img.id }, data: { finalPath: key } });
-      if (img.finalPath && img.finalPath !== key) await storage.delete(img.finalPath).catch(() => {});
+      if (img.finalPath && img.finalPath !== key) {
+        await storage.delete(img.finalPath).catch(() => {});
+        await storage.delete(img.finalPath.replace(/\.jpg$/, "-thumb.jpg")).catch(() => {}); // ảnh thu nhỏ cũ
+      }
       done++;
     } catch (e) {
       console.error(`refinish ${img.id} lỗi:`, e instanceof Error ? e.message : e);

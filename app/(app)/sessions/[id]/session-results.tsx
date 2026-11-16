@@ -6,6 +6,7 @@ import {
   AlertTriangleIcon,
   CheckCircle2Icon,
   DownloadIcon,
+  FileTextIcon,
   Loader2Icon,
   PaletteIcon,
   RefreshCwIcon,
@@ -183,16 +184,30 @@ export function SessionResults({
                 {failed > 0 ? `Hoàn tất: ${done} ảnh xong, ${failed} ảnh lỗi (bấm Tạo lại ở ảnh lỗi)` : `Hoàn thành: đã tạo xong ${done}/${images.length} ảnh`}
               </p>
               <ProgressBar percent={100} tone={failed > 0 ? "error" : "success"} label="Đã hoàn thành" />
-              {canRefinish && done > 0 && (
-                <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <Button type="button" variant="outline" size="sm" className="h-9" onClick={refinish} disabled={refinishing}>
-                    {refinishing ? <Loader2Icon className="animate-spin" /> : <PaletteIcon />}
-                    Vẽ lại khung và nhãn
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Áp dụng lại tên xưởng, nhãn chất liệu... theo cấu hình mới nhất. Không gọi AI nên không tốn token.
-                  </span>
+              {done > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <a href={`/api/sessions/${sessionId}/download?format=zip`} className={cn(buttonVariants({ size: "sm" }), "h-9")}>
+                    <DownloadIcon /> Tải tất cả (ZIP)
+                  </a>
+                  <a
+                    href={`/api/sessions/${sessionId}/download?format=pdf`}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9")}
+                  >
+                    <FileTextIcon /> Tải PDF
+                  </a>
+                  {canRefinish && (
+                    <Button type="button" variant="outline" size="sm" className="h-9" onClick={refinish} disabled={refinishing}>
+                      {refinishing ? <Loader2Icon className="animate-spin" /> : <PaletteIcon />}
+                      Vẽ lại khung và nhãn
+                    </Button>
+                  )}
                 </div>
+              )}
+              {canRefinish && done > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  &quot;Vẽ lại khung và nhãn&quot; áp dụng lại tên xưởng, nhãn chất liệu... theo cấu hình mới nhất. Không gọi AI nên không tốn token.
+                  Ảnh luôn được lưu lại, xem lại ở mục Lịch sử.
+                </p>
               )}
             </>
           )}
