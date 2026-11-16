@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
@@ -65,11 +66,17 @@ export function SessionResults({
   sessionId,
   initialImages,
   canRefinish,
+  designHref,
+  isDesign,
 }: {
   sessionId: string;
   initialImages: ImageView[];
   /** người tạo phiên hoặc admin: được vẽ lại khung và nhãn */
   canRefinish: boolean;
+  /** đường dẫn sang Bước 2 (thiết kế theo chất liệu khách chọn) */
+  designHref?: string;
+  /** đang xem một lượt thiết kế (bước 2) */
+  isDesign: boolean;
 }) {
   const [images, setImages] = useState(initialImages);
   const [zoom, setZoom] = useState<ImageView | null>(null);
@@ -184,6 +191,18 @@ export function SessionResults({
                 {failed > 0 ? `Hoàn tất: ${done} ảnh xong, ${failed} ảnh lỗi (bấm Tạo lại ở ảnh lỗi)` : `Hoàn thành: đã tạo xong ${done}/${images.length} ảnh`}
               </p>
               <ProgressBar percent={100} tone={failed > 0 ? "error" : "success"} label="Đã hoàn thành" />
+              {done > 0 && designHref && (
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <Link href={designHref} className={cn(buttonVariants({ size: "lg" }), "h-11 px-5")}>
+                    <PaletteIcon /> {isDesign ? "Thiết kế thêm theo chất liệu khác" : "Bước 2: Thiết kế theo chất liệu khách chọn"}
+                  </Link>
+                  <span className="text-sm text-muted-foreground">
+                    {isDesign
+                      ? "Chọn thêm chất liệu hoặc loại sản phẩm khác từ phiên catalog."
+                      : "Khách đã chọn được chất liệu ưng ý? Tạo ảnh thiết kế sản phẩm trên chất liệu đó."}
+                  </span>
+                </div>
+              )}
               {done > 0 && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <a href={`/api/sessions/${sessionId}/download?format=zip`} className={cn(buttonVariants({ size: "sm" }), "h-9")}>

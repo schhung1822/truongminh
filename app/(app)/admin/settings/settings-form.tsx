@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { RESOLUTIONS } from "@/lib/image-options";
+import { ASPECT_RATIOS, RESOLUTIONS } from "@/lib/image-options";
 import type { Settings } from "@/lib/settings";
 import { saveSettingsAction, type SettingsResult } from "./actions";
 
@@ -61,6 +61,27 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             <option value="overlay">Ghi &quot;mã - tên&quot; ngay trên từng ô</option>
             <option value="legend">Đánh số trên ô và có bảng chú giải bên dưới</option>
           </NativeSelect>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="designAspectRatio">Tỉ lệ ảnh thiết kế (bước 2)</Label>
+          <NativeSelect id="designAspectRatio" name="designAspectRatio" defaultValue={settings.designAspectRatio}>
+            {ASPECT_RATIOS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="designResolution">Độ phân giải ảnh thiết kế</Label>
+          <NativeSelect id="designResolution" name="designResolution" defaultValue={settings.designResolution}>
+            {RESOLUTIONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </NativeSelect>
+          <p className="text-xs text-muted-foreground">1K tiết kiệm token hơn (6 so với 10 token mỗi ảnh ở 2K).</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="workshopName">Tên xưởng (một dòng chữ nhỏ ở chân ảnh)</Label>

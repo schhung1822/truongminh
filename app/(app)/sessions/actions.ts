@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth/dal";
 import { createCatalogSession, retryImage } from "@/lib/jobs/create";
+import { createDesignSession } from "@/lib/jobs/design";
 import { kickSession } from "@/lib/jobs/process";
 import { refinishSession } from "@/lib/jobs/refinish";
 import { db } from "@/lib/db";
@@ -18,6 +19,23 @@ export async function createCatalogSessionAction(
   if (r.sessionId) {
     const id = r.sessionId;
     after(() => kickSession(id)); // gửi sang nhà cung cấp SAU khi đã trả lời trình duyệt
+  }
+  return r;
+}
+
+/** Bước 2: tạo các ảnh thiết kế cho những chất liệu khách đã chọn. */
+export async function createDesignSessionAction(input: {
+  parentSessionId: string;
+  materialIds: string[];
+  productType: string;
+  variants: number;
+  note: string;
+}): Promise<{ error?: string; sessionId?: string }> {
+  const user = await requireUser();
+  const r = await createDesignSession(user, input);
+  if (r.sessionId) {
+    const id = r.sessionId;
+    after(() => kickSession(id));
   }
   return r;
 }

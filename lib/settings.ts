@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { RESOLUTIONS } from "@/lib/image-options";
+import { ASPECT_RATIOS, RESOLUTIONS } from "@/lib/image-options";
 
 export const settingsSchema = z.object({
   imageModel: z.string().trim().min(1, "Vui lòng nhập tên model.").max(100),
@@ -10,6 +10,9 @@ export const settingsSchema = z.object({
   workshopName: z.string().trim().max(100),
   footerNote: z.string().trim().max(200),
   labelMode: z.enum(["overlay", "legend"]),
+  /** ảnh thiết kế (bước 2) là ảnh đơn nên có tỉ lệ và độ phân giải riêng */
+  designAspectRatio: z.enum(ASPECT_RATIOS),
+  designResolution: z.enum(RESOLUTIONS),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -21,6 +24,8 @@ export const SETTING_DEFAULTS: Settings = {
   workshopName: "Xưởng in Trường Minh",
   footerNote: "",
   labelMode: "overlay",
+  designAspectRatio: "1:1",
+  designResolution: "2K",
 };
 
 /** Đọc cấu hình, giá trị nào thiếu hoặc sai thì dùng mặc định. */

@@ -1,0 +1,217 @@
+import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
+import type { SessionUser } from "@/lib/auth/dal";
+import { db } from "@/lib/db";
+import { assignStyles, validateDesignRequest } from "@/lib/design/assign";
+import { renderPrompt } from "@/lib/prompts/render";
+import { getSettings, type Settings } from "@/lib/settings";
+import type { BuiltImage } from "./built";
+import { assertQuota, todayKey } from "./limits";
+import type { LayoutSnapshot } from "./snapshot";
+import { getActiveTemplate, type Template } from "./template";
+
+type MaterialRow = {
+  id: string;
+  code: string;
+  name: string;
+  groupName: string;
+  printTech: string;
+  referencePath: string | null;
+};
+type StyleRow = { id: string; name: string; description: string };
+
+/** Dựng dữ liệu MỘT ảnh thiết kế: một chất liệu + một kiểu thiết kế + loại sản phẩm + ghi chú. Dùng cho tạo mới và tạo lại. */
+export function buildDesignImage(input: {
+  material: MaterialRow;
+  style: StyleRow;
+  variantIndex: number;
+  imageNumber: number;
+  productType: string;
+  note: string;
+  template: Template;
+  settings: Settings;
+}): { error: string } | { data: BuiltImage } {
+  const { material, style, template, settings } = input;
+  if (!material.referencePath) {
+    return { error: `Chất liệu ${material.code} chưa có ảnh tham chiếu nên chưa thiết kế được.` };
+  }
+  let promptUsed: string;
+  try {
+    promptUsed = renderPrompt(template.body, {
+      product_type: input.productType,
+      design_style: `${style.name}: ${style.description}`,
+      note: input.note.trim() || "none",
+    });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Không sinh được prompt." };
+  }
+
+  const snapshot: LayoutSnapshot = {
+    cols: 1,
+    rows: 1,
+    title: `${material.code} - ${material.name}`,
+    imageNumber: input.imageNumber,
+    cells: [
+      {
+        materialId: material.id,
+        code: material.code,
+        name: material.name,
+        groupName: material.groupName,
+        printTech: material.printTech,
+      },
+    ],
+    design: { productType: input.productType, styleName: style.name, note: input.note },
+  };
+
+  return {
+    data: {
+      kind: "DESIGN",
+      materialId: material.id,
+      designStyleId: style.id,
+      variantIndex: input.variantIndex,
+      layoutSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+      promptUsed,
+      promptTemplateId: template.id,
+      promptVersion: template.version,
+      model: settings.imageModel,
+      resolution: settings.designResolution,
+      aspectRatio: settings.designAspectRatio,
+    },
+  };
+}
+
+/**
+ * Tạo phiên THIẾT KẾ (bước 2) từ một phiên catalog: với mỗi chất liệu khách chọn tạo N phương án,
+ * mỗi phương án một kiểu thiết kế khác nhau lấy từ danh sách admin quản lý. Việc gọi AI chạy sau (kickSession).
+ */
+export async function createDesignSession(
+  user: SessionUser,
+  input: { parentSessionId: string; materialIds: string[]; productType: string; variants: number; note: string },
+): Promise<{ error?: string; sessionId?: string }> {
+  const materialIds = [...new Set(input.materialIds)];
+  const productType = input.productType.trim().slice(0, 200);
+  const note = input.note.trim().slice(0, 1000);
+
+  const invalid = validateDesignRequest({ materialCount: materialIds.length, variants: input.variants, productType });
+  if (invalid) return { error: invalid };
+
+  const parent = await db.consultSession.findUnique({
+    where: { id: input.parentSessionId },
+    include: { images: { where: { status: "SUCCESS", retries: { none: {} } }, select: { layoutSnapshot: true } } },
+  });
+  if (!parent) return { error: "Không tìm thấy phiên." };
+  if (parent.type !== "CATALOG") return { error: "Chỉ thiết kế được từ phiên catalog (bước 1)." };
+
+  // chỉ nhận chất liệu thật sự có trong các ảnh catalog đã xong của phiên này
+  const allowed = new Set<string>();
+  for (const img of parent.images) {
+    for (const c of (img.layoutSnapshot as unknown as LayoutSnapshot).cells) allowed.add(c.materialId);
+  }
+  if (materialIds.some((id) => !allowed.has(id))) return { error: "Có chất liệu không thuộc phiên catalog này." };
+
+  const [materialRows, styles, settings] = await Promise.all([
+    db.material.findMany({ where: { id: { in: materialIds } } }),
+    db.designStyle.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+    getSettings(),
+  ]);
+  if (styles.length === 0) {
+    return { error: "Chưa có kiểu thiết kế nào đang bật. Quản trị viên hãy thêm ở Quản trị > Kiểu thiết kế." };
+  }
+  // giữ đúng thứ tự sale đã chọn
+  const byId = new Map(materialRows.map((m) => [m.id, m]));
+  const materials = materialIds.map((id) => byId.get(id)).filter((m): m is NonNullable<typeof m> => !!m);
+  if (materials.length !== materialIds.length) return { error: "Có chất liệu không còn tồn tại." };
+
+  const total = materials.length * input.variants;
+  const quotaError = await assertQuota(user, total);
+  if (quotaError) return { error: quotaError };
+
+  let template: Template;
+  try {
+    template = await getActiveTemplate("DESIGN");
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Thiếu prompt." };
+  }
+
+  const plan = assignStyles(materials.length, input.variants, styles.length);
+  const built: BuiltImage[] = [];
+  let number = 0;
+  for (const [mi, material] of materials.entries()) {
+    for (let v = 0; v < input.variants; v++) {
+      number++;
+      const r = buildDesignImage({
+        material,
+        style: styles[plan[mi][v]],
+        variantIndex: v,
+        imageNumber: number,
+        productType,
+        note,
+        template,
+        settings,
+      });
+      if ("error" in r) return { error: r.error };
+      built.push(r.data);
+    }
+  }
+
+  const day = todayKey();
+  const sessionId = await db.$transaction(async (tx) => {
+    const session = await tx.consultSession.create({
+      data: {
+        type: "DESIGN",
+        logoId: parent.logoId,
+        parentId: parent.id,
+        productType,
+        variantsPerMaterial: input.variants,
+        note: note || null,
+        createdById: user.id,
+      },
+    });
+    await tx.sessionSelectedMaterial.createMany({
+      data: materials.map((m) => ({ sessionId: session.id, materialId: m.id })),
+    });
+    for (const data of built) {
+      const image = await tx.generatedImage.create({ data: { ...data, sessionId: session.id, createdById: user.id } });
+      await tx.usageLog.create({ data: { userId: user.id, imageId: image.id, kind: "DESIGN", day } });
+    }
+    return session.id;
+  });
+  return { sessionId };
+}
+
+/** Dựng lại dữ liệu cho "Tạo lại" một ảnh thiết kế: cùng chất liệu, cùng kiểu thiết kế, cùng thông số, prompt hiện tại. */
+export async function rebuildDesignImage(old: {
+  sessionId: string;
+  materialId: string | null;
+  designStyleId: string | null;
+  variantIndex: number;
+  layoutSnapshot: unknown;
+}): Promise<{ error: string } | { data: BuiltImage }> {
+  if (!old.materialId || !old.designStyleId) return { error: "Ảnh thiết kế này thiếu thông tin để tạo lại." };
+  const [session, material, style, settings] = await Promise.all([
+    db.consultSession.findUnique({ where: { id: old.sessionId }, select: { productType: true, note: true } }),
+    db.material.findUnique({ where: { id: old.materialId } }),
+    db.designStyle.findUnique({ where: { id: old.designStyleId } }),
+    getSettings(),
+  ]);
+  if (!session || !material) return { error: "Không còn dữ liệu để tạo lại ảnh này." };
+  if (!style) return { error: "Kiểu thiết kế của ảnh này đã bị xóa." };
+
+  let template: Template;
+  try {
+    template = await getActiveTemplate("DESIGN");
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Thiếu prompt." };
+  }
+  const snap = old.layoutSnapshot as LayoutSnapshot;
+  return buildDesignImage({
+    material,
+    style,
+    variantIndex: old.variantIndex,
+    imageNumber: snap.imageNumber ?? 1,
+    productType: session.productType ?? snap.design?.productType ?? "",
+    note: session.note ?? "",
+    template,
+    settings,
+  });
+}

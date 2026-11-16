@@ -15,6 +15,8 @@ export async function saveSettingsAction(_prev: SettingsResult, formData: FormDa
     workshopName: formData.get("workshopName") ?? "",
     footerNote: formData.get("footerNote") ?? "",
     labelMode: formData.get("labelMode"),
+    designAspectRatio: formData.get("designAspectRatio"),
+    designResolution: formData.get("designResolution"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   await saveSettings(parsed.data);

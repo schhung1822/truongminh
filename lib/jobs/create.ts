@@ -1,6 +1,9 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import type { SessionUser } from "@/lib/auth/dal";
+import { rebuildDesignImage } from "./design";
+import type { BuiltImage } from "./built";
+import { getActiveTemplate, type Template } from "./template";
 import { db } from "@/lib/db";
 import { buildMaterialsList, renderPrompt } from "@/lib/prompts/render";
 import { getSettings } from "@/lib/settings";
@@ -9,20 +12,6 @@ import { canEditOwned } from "@/lib/permissions";
 import { fallbackImageNumber } from "./finish";
 import { assertQuota, todayKey } from "./limits";
 import { MAX_SHEETS_PER_SESSION, type LayoutSnapshot } from "./snapshot";
-
-type Template = { id: string; version: number; body: string };
-
-export async function getActiveTemplate(kind: "CATALOG" | "DESIGN"): Promise<Template> {
-  const t = await db.promptTemplate.findFirst({ where: { kind, isActive: true }, orderBy: { version: "desc" } });
-  if (!t) {
-    throw new Error(
-      `Chưa có prompt ${kind === "CATALOG" ? "catalog" : "thiết kế"} nào đang dùng. Hãy vào Quản trị > Prompt để tạo.`,
-    );
-  }
-  return { id: t.id, version: t.version, body: t.body };
-}
-
-type BuiltImage = Omit<Prisma.GeneratedImageUncheckedCreateInput, "sessionId" | "createdById">;
 
 /**
  * Dựng dữ liệu một ảnh catalog từ trang mẫu HIỆN TẠI: chỉ lấy chất liệu đang bật và đã có ảnh tham chiếu,
@@ -163,6 +152,10 @@ export async function retryImage(user: SessionUser, imageId: string): Promise<{ 
     const oldNumber =
       (old.layoutSnapshot as unknown as LayoutSnapshot).imageNumber ?? (await fallbackImageNumber(old.sessionId, old.id));
     const r = await buildSheetImage(old.sheetId, template, settings.imageModel, oldNumber);
+    if ("error" in r) return { error: r.error };
+    built = r.data;
+  } else if (old.kind === "DESIGN") {
+    const r = await rebuildDesignImage(old);
     if ("error" in r) return { error: r.error };
     built = r.data;
   } else {
