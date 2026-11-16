@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth/dal";
 import { parseMaterialsCsv } from "@/lib/csv/materials";
+import { deleteMaterials } from "@/lib/materials/delete";
 
 export type ActionResult = { error?: string; ok?: string };
 
@@ -15,6 +16,18 @@ export async function setMaterialActiveAction(id: string, isActive: boolean): Pr
   revalidatePath("/admin/materials");
   revalidatePath("/admin/sheets");
   return { ok: isActive ? "Đã bật chất liệu." : "Đã tắt chất liệu." };
+}
+
+export type DeleteState = { error?: string; deleted?: number; skipped?: { code: string; reason: string }[] };
+
+/** Xóa một hoặc nhiều chất liệu chưa từng dùng. Chất liệu đã dùng bị giữ lại và được báo rõ. */
+export async function deleteMaterialsAction(ids: string[]): Promise<DeleteState> {
+  await requireAdmin();
+  if (!Array.isArray(ids) || ids.length === 0) return { error: "Chưa chọn chất liệu nào." };
+  const r = await deleteMaterials(ids);
+  revalidatePath("/admin/materials");
+  revalidatePath("/admin/sheets");
+  return { deleted: r.deleted.length, skipped: r.skipped };
 }
 
 export type ImportState = {
