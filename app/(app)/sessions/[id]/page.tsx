@@ -28,7 +28,16 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start gap-4">
-        <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-white">
+        <div
+          className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border"
+          style={{
+            backgroundColor: "#fff",
+            backgroundImage:
+              "linear-gradient(45deg,#e5e5e5 25%,transparent 25%),linear-gradient(-45deg,#e5e5e5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e5e5e5 75%),linear-gradient(-45deg,transparent 75%,#e5e5e5 75%)",
+            backgroundSize: "16px 16px",
+            backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
+          }}
+        >
           <img src={fileUrl(session.logo.normalizedPath)!} alt="Logo" className="max-h-full max-w-full object-contain" />
         </div>
         <div className="min-w-0">

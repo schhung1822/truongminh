@@ -3,6 +3,7 @@ import type { SessionUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { canEditOwned } from "@/lib/permissions";
 import { fileUrl } from "@/lib/storage";
+import { expectedDurationMs } from "./progress";
 import type { LayoutSnapshot } from "./snapshot";
 import type { ImageView } from "./view";
 
@@ -36,6 +37,8 @@ export async function loadSessionViews(sessionId: string, user: SessionUser): Pr
       downloadUrl: img.status === "SUCCESS" ? `/api/images/${img.id}/download` : null,
       errorDetail: user.role === "ADMIN" ? img.errorMessage : null,
       attempt: img.attempt,
+      ageMs: Date.now() - img.createdAt.getTime(),
+      expectedMs: expectedDurationMs(img.resolution),
       materialId: img.materialId,
       canRetry: (img.status === "SUCCESS" || img.status === "FAILED") && canEditOwned(user, img.createdById),
     };

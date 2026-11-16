@@ -13,6 +13,10 @@ export type ImageView = {
   /** thông báo lỗi chi tiết, chỉ gửi cho admin */
   errorDetail: string | null;
   attempt: number;
+  /** thời gian đã trôi qua kể từ lúc ảnh được tạo (ms), tính lúc server trả lời; dùng cho thanh tiến trình */
+  ageMs: number;
+  /** thời gian chờ điển hình (ms) theo độ phân giải, để chỉnh tốc độ thanh tiến trình */
+  expectedMs: number;
   materialId: string | null;
   canRetry: boolean;
 };

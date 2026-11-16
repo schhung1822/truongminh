@@ -2,28 +2,75 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { AlertTriangleIcon, DownloadIcon, Loader2Icon, RefreshCwIcon, ZoomInIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  CheckCircle2Icon,
+  DownloadIcon,
+  Loader2Icon,
+  RefreshCwIcon,
+  ZoomInIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { estimateProgress, formatElapsed, overallProgress } from "@/lib/jobs/progress";
 import { isFinished, type ImageView } from "@/lib/jobs/view";
 import { cn } from "@/lib/utils";
 import { retryImageAction } from "../actions";
 
 const POLL_MS = 3000;
+const TICK_MS = 500;
+
+/** Thanh tiến trình. `tone` đổi màu theo trạng thái. */
+function ProgressBar({
+  percent,
+  tone = "primary",
+  label,
+  className,
+}: {
+  percent: number;
+  tone?: "primary" | "success" | "error";
+  label: string;
+  className?: string;
+}) {
+  const p = Math.max(0, Math.min(100, Math.round(percent)));
+  return (
+    <div
+      role="progressbar"
+      aria-valuenow={p}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={label}
+      className={cn("h-2.5 w-full overflow-hidden rounded-full bg-muted", className)}
+    >
+      <div
+        className={cn(
+          "h-full rounded-full transition-[width] duration-500 ease-out",
+          tone === "primary" && "bg-primary",
+          tone === "success" && "bg-emerald-500",
+          tone === "error" && "bg-red-500",
+        )}
+        style={{ width: `${p}%` }}
+      />
+    </div>
+  );
+}
 
 export function SessionResults({ sessionId, initialImages }: { sessionId: string; initialImages: ImageView[] }) {
   const [images, setImages] = useState(initialImages);
   const [zoom, setZoom] = useState<ImageView | null>(null);
   const [offline, setOffline] = useState(false);
+  const [now, setNow] = useState(() => performance.now());
+  const [receivedAt, setReceivedAt] = useState(() => performance.now());
   const inFlight = useRef(false);
   const router = useRouter();
 
   const open = images.some((i) => !isFinished(i.status));
   const done = images.filter((i) => i.status === "SUCCESS").length;
+  const failed = images.filter((i) => i.status === "FAILED").length;
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
@@ -37,6 +84,8 @@ export function SessionResults({ sessionId, initialImages }: { sessionId: string
       if (!res.ok) throw new Error(String(res.status));
       const body = (await res.json()) as { images: ImageView[] };
       setImages(body.images);
+      // mốc nhận dữ liệu: cộng thời gian trôi qua kể từ lúc này (không phụ thuộc đồng hồ máy)
+      setReceivedAt(performance.now());
       setOffline(false);
     } catch {
       setOffline(true);
@@ -45,13 +94,6 @@ export function SessionResults({ sessionId, initialImages }: { sessionId: string
     }
   }, [sessionId, router]);
 
-  // Khi ảnh vừa xong hết thì báo thanh đầu trang cập nhật số token ngay
-  const wasOpen = useRef(open);
-  useEffect(() => {
-    if (wasOpen.current && !open) window.dispatchEvent(new Event("usage:refresh"));
-    wasOpen.current = open;
-  }, [open]);
-
   // Hỏi lại server mỗi vài giây khi còn ảnh chưa xong; xong hết thì dừng.
   useEffect(() => {
     if (!open) return;
@@ -59,24 +101,83 @@ export function SessionResults({ sessionId, initialImages }: { sessionId: string
     return () => clearInterval(t);
   }, [open, refresh]);
 
+  // Làm thanh tiến trình chạy mượt giữa hai lần hỏi server
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(() => setNow(performance.now()), TICK_MS);
+    return () => clearInterval(t);
+  }, [open]);
+
+  const sinceReceived = open ? Math.max(0, now - receivedAt) : 0;
+  const percents = images.map((i) => estimateProgress(i.status, i.ageMs + sinceReceived, i.expectedMs));
+  const overall = open ? Math.min(99, overallProgress(percents)) : 100;
+  const longest = images.reduce((m, i) => (isFinished(i.status) ? m : Math.max(m, i.ageMs)), 0) + sinceReceived;
+
+  // Khi vừa xong hết: báo thanh đầu trang cập nhật token, hiện thông báo, đổi tiêu đề tab
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open) {
+      window.dispatchEvent(new Event("usage:refresh"));
+      if (failed === 0) toast.success(`Hoàn thành: đã tạo xong ${done} ảnh.`);
+      else toast.warning(`Đã xong ${done} ảnh, ${failed} ảnh bị lỗi.`);
+    }
+    wasOpen.current = open;
+  }, [open, done, failed]);
+
+  useEffect(() => {
+    const original = document.title;
+    if (open) document.title = `(${overall}%) Đang tạo ảnh... | Ảnh mẫu in logo`;
+    return () => {
+      document.title = original;
+    };
+  }, [open, overall]);
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm font-medium">
-          Đã xong {done}/{images.length} ảnh
-        </p>
-        {open && (
-          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Loader2Icon className="size-4 animate-spin" /> Đang tạo, trang tự cập nhật...
-          </span>
-        )}
-        {offline && <Badge variant="secondary">Mất kết nối, đang thử lại</Badge>}
-      </div>
+      {/* Tiến độ chung */}
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          {open ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-2 font-medium">
+                  <Loader2Icon className="size-4 animate-spin" />
+                  Đang tạo ảnh: xong {done}/{images.length}
+                  {failed > 0 && <span className="text-red-600"> · {failed} lỗi</span>}
+                </p>
+                <p className="text-sm tabular-nums text-muted-foreground">
+                  Ước tính {overall}% · đã chờ {formatElapsed(longest)}
+                </p>
+              </div>
+              <ProgressBar percent={overall} label="Tiến độ tạo ảnh" />
+              <p className="text-xs text-muted-foreground">
+                Thanh tiến độ là ước tính theo thời gian chờ (kie.ai không báo phần trăm thật). Bạn có thể để trang này mở,
+                trang tự cập nhật khi xong.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className={cn("flex items-center gap-2 font-medium", failed > 0 ? "text-amber-700" : "text-emerald-700")}>
+                {failed > 0 ? <AlertTriangleIcon className="size-5" /> : <CheckCircle2Icon className="size-5" />}
+                {failed > 0 ? `Hoàn tất: ${done} ảnh xong, ${failed} ảnh lỗi (bấm Tạo lại ở ảnh lỗi)` : `Hoàn thành: đã tạo xong ${done}/${images.length} ảnh`}
+              </p>
+              <ProgressBar percent={100} tone={failed > 0 ? "error" : "success"} label="Đã hoàn thành" />
+            </>
+          )}
+          {offline && <Badge variant="secondary">Mất kết nối, đang thử lại</Badge>}
+        </CardContent>
+      </Card>
 
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {images.map((img) => (
+        {images.map((img, i) => (
           <li key={img.id}>
-            <ImageCard img={img} onZoom={() => setZoom(img)} onRetried={refresh} />
+            <ImageCard
+              img={img}
+              percent={percents[i]}
+              elapsedMs={img.ageMs + sinceReceived}
+              onZoom={() => setZoom(img)}
+              onRetried={refresh}
+            />
           </li>
         ))}
       </ul>
@@ -97,7 +198,24 @@ export function SessionResults({ sessionId, initialImages }: { sessionId: string
   );
 }
 
-function ImageCard({ img, onZoom, onRetried }: { img: ImageView; onZoom: () => void; onRetried: () => void }) {
+function stageText(img: ImageView): string {
+  if (img.status === "PENDING") return img.attempt > 1 ? `Đang gửi lại (lần ${img.attempt})...` : "Đang chuẩn bị và gửi ảnh tham chiếu...";
+  return img.attempt > 1 ? `AI đang tạo ảnh (thử lại lần ${img.attempt})...` : "AI đang tạo ảnh...";
+}
+
+function ImageCard({
+  img,
+  percent,
+  elapsedMs,
+  onZoom,
+  onRetried,
+}: {
+  img: ImageView;
+  percent: number;
+  elapsedMs: number;
+  onZoom: () => void;
+  onRetried: () => void;
+}) {
   const [pending, startTransition] = useTransition();
 
   function retry() {
@@ -132,10 +250,13 @@ function ImageCard({ img, onZoom, onRetried }: { img: ImageView; onZoom: () => v
         )}
 
         {(img.status === "PENDING" || img.status === "PROCESSING") && (
-          <div className="flex aspect-[2/3] animate-pulse flex-col items-center justify-center gap-2 rounded-lg border bg-muted text-sm text-muted-foreground">
-            <Loader2Icon className="size-6 animate-spin" />
-            {img.status === "PENDING" ? "Đang chờ gửi..." : "AI đang tạo ảnh..."}
-            {img.attempt > 1 && <span className="text-xs">Đang thử lại lần {img.attempt}</span>}
+          <div className="flex aspect-2/3 flex-col items-center justify-center gap-3 rounded-lg border bg-muted/50 p-4 text-center">
+            <Loader2Icon className="size-7 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">{stageText(img)}</p>
+            <ProgressBar percent={percent} label={`Tiến độ: ${img.label}`} className="max-w-48" />
+            <p className="text-xs tabular-nums text-muted-foreground">
+              Khoảng {Math.round(percent)}% · {formatElapsed(elapsedMs)}
+            </p>
           </div>
         )}
 

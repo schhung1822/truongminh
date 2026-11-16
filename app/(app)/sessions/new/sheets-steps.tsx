@@ -178,13 +178,19 @@ export function ConfirmStep({
   function start() {
     setError(null);
     startTransition(async () => {
-      const r = await createCatalogSessionAction(
-        logo.id,
-        sheets.map((s) => s.id),
-      );
-      if (r.error || !r.sessionId) return setError(r.error ?? "Không tạo được phiên.");
-      toast.success("Đã bắt đầu tạo ảnh.");
-      router.push(`/sessions/${r.sessionId}`);
+      try {
+        const r = await createCatalogSessionAction(
+          logo.id,
+          sheets.map((s) => s.id),
+        );
+        if (r.error || !r.sessionId) return setError(r.error ?? "Không tạo được phiên.");
+        toast.success("Đã bắt đầu tạo ảnh. Đang chuyển sang màn hình theo dõi tiến độ...");
+        router.push(`/sessions/${r.sessionId}`);
+      } catch (e) {
+        // lỗi bất ngờ (mất kết nối, máy chủ khởi động lại...): luôn báo cho người dùng thay vì im lặng
+        console.error("Bắt đầu tạo ảnh thất bại:", e);
+        setError("Không gửi được yêu cầu tới máy chủ (có thể máy chủ vừa khởi động lại hoặc mất kết nối). Vui lòng bấm lại.");
+      }
     });
   }
 
@@ -278,6 +284,14 @@ export function ConfirmStep({
             Quay lại
           </Button>
         </div>
+        {pending && (
+          <div className="flex flex-col gap-1.5" role="status">
+            <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="absolute inset-y-0 w-1/3 animate-[indeterminate_1.2s_ease-in-out_infinite] rounded-full bg-primary" />
+            </div>
+            <p className="text-xs text-muted-foreground">Đang gửi yêu cầu và chuẩn bị ảnh tham chiếu, sẽ tự chuyển sang màn hình theo dõi tiến độ.</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

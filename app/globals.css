@@ -128,3 +128,13 @@
     @apply font-sans;
   }
 }
+
+/* Thanh tiến trình chạy qua lại khi chưa biết phần trăm (đang gửi yêu cầu) */
+@keyframes indeterminate {
+  0% {
+    left: -35%;
+  }
+  100% {
+    left: 100%;
+  }
+}
