@@ -33,3 +33,9 @@ Ghi lại những điểm kỹ thuật nhỏ đã tự quyết (không ảnh hư
 | D27 | Ảnh trong kho dùng thẻ img thường, không dùng next/image | Ảnh nằm sau đăng nhập, bộ tối ưu ảnh của Next không gửi cookie |
 | D28 | Sale xem được mọi khách/thương hiệu/logo, nhưng chỉ thêm thương hiệu/logo vào khách mình phụ trách hoặc mình tạo (admin: tất cả). Tạo phiên mới từ logo của người khác thì được | Đúng brief "xem của người khác, sửa của mình"; phiên mới là dữ liệu của chính người tạo |
 | D29 | SVG logo được vẽ ra PNG bằng sharp (mật độ 300) và không bị coi là "logo nhỏ" | SVG là vector, kích thước khai báo nhỏ không phản ánh chất lượng |
+| D30 | Chữ tiếng Việt trên ảnh vẽ bằng sharp (tùy chọn fontfile) với font Be Vietnam Pro (OFL) nhúng trong assets/fonts; đã thử đúng dấu trên Windows | Theo rủi ro số 1 của kế hoạch; không cần thêm thư viện canvas. Trên VPS cần thư viện fontconfig, sẽ đóng gói trong Docker |
+| D31 | "Tạo lại" dựng ảnh mới từ trang mẫu, chất liệu và prompt HIỆN TẠI (không dùng lại bản chụp cũ) | Admin sửa prompt hoặc mô tả chất liệu rồi sale bấm Tạo lại thì thấy hiệu quả ngay. Ảnh cũ vẫn lưu nguyên văn prompt đã dùng |
+| D32 | Chất liệu đang tắt hoặc chưa có ảnh tham chiếu trong trang mẫu bị bỏ qua khi tạo, ô được đánh số lại liên tục; trang không còn chất liệu nào dùng được thì báo lỗi | Tránh gửi ảnh thiếu cho AI và tốn tiền vô ích |
+| D33 | Khóa chống xử lý trùng dùng cột lastPolledAt (đặt thời điểm trong tương lai khi đang gửi hoặc đang xử lý ảnh kết quả) | Không cần thêm cột/bảng khóa; hai request cùng lúc chỉ một nơi chiếm được ảnh |
+| D34 | Lỗi khi tải/xử lý ảnh kết quả thử lại tối đa 3 lần mà KHÔNG tạo tác vụ AI mới | Tránh trả tiền hai lần cho một ảnh đã tạo xong |
+| D35 | MockProvider mã hóa toàn bộ thông tin tác vụ vào taskId; có MOCK_DELAY_MS, MOCK_FAIL_RATE, và chuỗi [[mock-fail]] trong prompt để thử lỗi | Khởi động lại máy chủ giữa chừng không làm mất tác vụ giả |

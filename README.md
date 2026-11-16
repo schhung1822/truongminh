@@ -4,7 +4,7 @@ Web app giúp đội sale của xưởng in tạo ảnh mô phỏng logo của k
 
 Tài liệu thiết kế: [docs/PLAN.md](docs/PLAN.md). Các quyết định kỹ thuật: [docs/DECISIONS.md](docs/DECISIONS.md).
 
-> Trạng thái: đang làm theo từng giai đoạn. Đã xong **GĐ1** (CSDL, đăng nhập, phân quyền, khung giao diện).
+> Trạng thái: đang làm theo từng giai đoạn. Đã xong **GĐ1 đến GĐ4** (luồng bước 1 chạy được với ảnh giả). Tiếp theo: GĐ5 nối kie.ai thật.
 
 ## Chạy trên máy cá nhân (Windows)
 
@@ -28,6 +28,9 @@ npm run db:migrate
 # 5. Tạo tài khoản admin đầu tiên + dữ liệu mặc định (chỉ lần đầu, chạy lại cũng an toàn)
 npm run db:seed
 
+# 5b. (Không bắt buộc) Tạo 12 chất liệu giả + 2 trang mẫu để thử ngay, chưa cần nhập chất liệu thật
+npm run db:seed-demo
+
 # 6. Chạy web
 npm run dev
 ```
@@ -49,6 +52,7 @@ Mặc định `IMAGE_PROVIDER="mock"`: ảnh AI là ảnh giả, **không tốn 
 | `npm run db:up` | Bật MySQL (Docker) |
 | `npm run db:migrate` | Cập nhật cấu trúc CSDL |
 | `npm run db:seed` | Tạo admin và dữ liệu mặc định |
+| `npm run db:seed-demo` | Tạo chất liệu và trang mẫu giả để thử (chỉ dùng khi dev) |
 | `npm run db:studio` | Xem dữ liệu trong CSDL bằng giao diện web |
 
 > Nếu `npm test` báo lỗi lạ khi chạy trong Git Bash, hãy chạy trong PowerShell hoặc terminal của VS Code.

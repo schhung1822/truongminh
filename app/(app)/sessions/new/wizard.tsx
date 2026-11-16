@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ConfirmStep, SheetsStep, type QuotaInfo, type SheetOption } from "./sheets-steps";
 import {
   createBrandAction,
   createCustomerAction,
@@ -20,13 +21,14 @@ import {
 } from "./actions";
 
 export type WizardInitial = { customer: CustomerOption; brand: BrandOption; logo: LogoOption };
-type Step = "customer" | "brand" | "logo" | "sheets";
+type Step = "customer" | "brand" | "logo" | "sheets" | "confirm";
 
 const STEP_LABELS: { key: Step; label: string }[] = [
   { key: "customer", label: "Khách hàng" },
   { key: "brand", label: "Thương hiệu" },
   { key: "logo", label: "Logo" },
   { key: "sheets", label: "Trang mẫu" },
+  { key: "confirm", label: "Xác nhận" },
 ];
 
 function Checker({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -50,9 +52,13 @@ function Checker({ children, className }: { children: React.ReactNode; className
 export function NewSessionWizard({
   customers: initialCustomers,
   initial,
+  sheets,
+  quota,
 }: {
   customers: CustomerOption[];
   initial: WizardInitial | null;
+  sheets: SheetOption[];
+  quota: QuotaInfo;
 }) {
   const [customers, setCustomers] = useState(initialCustomers);
   const [customer, setCustomer] = useState<CustomerOption | null>(initial?.customer ?? null);
@@ -62,6 +68,10 @@ export function NewSessionWizard({
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [logos, setLogos] = useState<LogoOption[]>([]);
   const [loading, startLoading] = useTransition();
+  // mặc định chọn tất cả trang mẫu dùng được
+  const [selectedSheets, setSelectedSheets] = useState<Set<string>>(
+    () => new Set(sheets.filter((x) => x.usable > 0).map((x) => x.id)),
+  );
 
   const stepIndex = STEP_LABELS.findIndex((s) => s.key === step);
 
@@ -167,12 +177,24 @@ export function NewSessionWizard({
         />
       )}
 
-      {step === "sheets" && customer && brand && logo && (
-        <Alert>
-          <AlertDescription>
-            Đã chọn logo của {customer.name} / {brand.name}. Bước chọn trang mẫu sẽ có ở giai đoạn tiếp theo.
-          </AlertDescription>
-        </Alert>
+      {step === "sheets" && (
+        <SheetsStep
+          sheets={sheets}
+          selected={selectedSheets}
+          onChange={setSelectedSheets}
+          onNext={() => setStep("confirm")}
+        />
+      )}
+
+      {step === "confirm" && customer && brand && logo && (
+        <ConfirmStep
+          customer={customer}
+          brand={brand}
+          logo={logo}
+          sheets={sheets.filter((x) => selectedSheets.has(x.id))}
+          quota={quota}
+          onBack={() => setStep("sheets")}
+        />
       )}
     </div>
   );

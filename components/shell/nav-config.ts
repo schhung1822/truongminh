@@ -29,9 +29,9 @@ export const mainNav: NavItem[] = [
 export const adminNav: NavItem[] = [
   { href: "/admin/materials", label: "Chất liệu", icon: BoxesIcon, ready: true },
   { href: "/admin/sheets", label: "Trang mẫu", icon: LayoutGridIcon, ready: true },
-  { href: "/admin/prompts", label: "Prompt", icon: ScrollTextIcon, ready: false },
+  { href: "/admin/prompts", label: "Prompt", icon: ScrollTextIcon, ready: true },
   { href: "/admin/design-styles", label: "Kiểu thiết kế", icon: PaletteIcon, ready: false },
   { href: "/admin/users", label: "Người dùng", icon: UsersIcon, ready: true },
-  { href: "/admin/settings", label: "Cấu hình", icon: SettingsIcon, ready: false },
+  { href: "/admin/settings", label: "Cấu hình", icon: SettingsIcon, ready: true },
   { href: "/admin/usage", label: "Thống kê", icon: BarChart3Icon, ready: false },
 ];
