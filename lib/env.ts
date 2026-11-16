@@ -9,6 +9,7 @@ const schema = z.object({
   IMAGE_PROVIDER: z.enum(["mock", "kie"]).default("mock"),
   KIE_API_KEY: z.string().optional(),
   KIE_API_BASE: z.url().default("https://api.kie.ai"),
+  KIE_UPLOAD_BASE: z.url().default("https://kieai.redpandaai.co"),
   KIE_CALLBACK_ENABLED: z
     .enum(["true", "false"])
     .default("false")
@@ -35,6 +36,10 @@ export function getEnv(): Env {
   const env = parsed.data;
   if (env.IMAGE_PROVIDER === "kie" && !env.KIE_API_KEY) {
     throw new Error('IMAGE_PROVIDER="kie" nhưng chưa có KIE_API_KEY trong .env');
+  }
+  if (env.KIE_CALLBACK_ENABLED) {
+    if (!env.KIE_CALLBACK_SECRET) throw new Error("KIE_CALLBACK_ENABLED=true nhưng chưa có KIE_CALLBACK_SECRET (lấy webhookHmacKey ở kie.ai/settings).");
+    if (!env.APP_URL.startsWith("https://")) throw new Error("Callback của kie.ai cần APP_URL là địa chỉ https công khai.");
   }
   cached = env;
   return env;

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { canEditCustomer } from "@/lib/permissions";
 import { fileUrl } from "@/lib/storage";
 import { getQuotaInfo } from "@/lib/jobs/limits";
+import { getEnv } from "@/lib/env";
 import { NewSessionWizard, type WizardInitial } from "./wizard";
 import type { CustomerOption } from "./actions";
 
@@ -79,7 +80,7 @@ export default async function NewSessionPage({ searchParams }: { searchParams: P
         <h1 className="text-2xl font-semibold">Tạo phiên tư vấn mới</h1>
         <p className="text-muted-foreground">Mở thư mục khách hàng, chọn logo, rồi chọn trang mẫu.</p>
       </div>
-      <NewSessionWizard customers={options} initial={initial} sheets={sheets} quota={quota} />
+      <NewSessionWizard customers={options} initial={initial} sheets={sheets} quota={quota} showCost={getEnv().IMAGE_PROVIDER === "kie"} />
     </div>
   );
 }

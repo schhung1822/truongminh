@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { estimateCost } from "@/lib/pricing";
 import { createCatalogSessionAction } from "../actions";
 import type { BrandOption, CustomerOption, LogoOption } from "./actions";
 
@@ -152,6 +153,7 @@ export function ConfirmStep({
   logo,
   sheets,
   quota,
+  showCost,
   onBack,
 }: {
   customer: CustomerOption;
@@ -159,6 +161,8 @@ export function ConfirmStep({
   logo: LogoOption;
   sheets: SheetOption[];
   quota: QuotaInfo;
+  /** true khi đang dùng kie.ai thật (tốn tiền): hiện ước tính credits */
+  showCost: boolean;
   onBack: () => void;
 }) {
   const router = useRouter();
@@ -166,6 +170,7 @@ export function ConfirmStep({
   const [pending, startTransition] = useTransition();
   const needed = sheets.length;
   const overQuota = quota !== null && needed > quota.left;
+  const cost = estimateCost(sheets.map((x) => x.resolution));
 
   function start() {
     setError(null);
@@ -217,6 +222,14 @@ export function ConfirmStep({
             </dd>
             <dt className="text-muted-foreground">Số trang mẫu</dt>
             <dd className="font-medium">{needed} (tạo {needed} ảnh)</dd>
+            {showCost && (
+              <>
+                <dt className="text-muted-foreground">Chi phí ước tính</dt>
+                <dd className="font-medium text-amber-700">
+                  {cost.credits} credits (khoảng ${cost.usd.toFixed(2)}) trên kie.ai
+                </dd>
+              </>
+            )}
             {quota && (
               <>
                 <dt className="text-muted-foreground">Lượt hôm nay</dt>

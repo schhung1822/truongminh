@@ -43,11 +43,13 @@ export function NewSessionWizard({
   initial,
   sheets,
   quota,
+  showCost,
 }: {
   customers: CustomerOption[];
   initial: WizardInitial | null;
   sheets: SheetOption[];
   quota: QuotaInfo;
+  showCost: boolean;
 }) {
   const [customers, setCustomers] = useState(initialCustomers);
   const [customer, setCustomer] = useState<CustomerOption | null>(initial?.customer ?? null);
@@ -162,6 +164,7 @@ export function NewSessionWizard({
           logo={logo}
           sheets={sheets.filter((x) => selectedSheets.has(x.id))}
           quota={quota}
+          showCost={showCost}
           onBack={() => setStep("sheets")}
         />
       )}

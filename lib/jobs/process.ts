@@ -2,7 +2,9 @@ import "server-only";
 import type { GeneratedImage } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { finishImage } from "@/lib/imaging/finish-image";
+import { getEnv } from "@/lib/env";
 import { getProvider } from "@/lib/providers";
+import { ProviderFatalError } from "@/lib/providers/types";
 import { getSettings } from "@/lib/settings";
 import { getStorage } from "@/lib/storage";
 import { mapLimit } from "./async";
@@ -19,6 +21,12 @@ const CONCURRENCY = 4;
 
 // Đếm số lần xử lý ảnh kết quả thất bại (một bản app duy nhất nên lưu trong bộ nhớ là đủ).
 const finalizeFailures = new Map<string, number>();
+
+/** Địa chỉ để kie.ai báo kết quả về (chỉ khi bật callback). Polling vẫn luôn chạy song song. */
+function callbackUrl(): string | undefined {
+  const env = getEnv();
+  return env.KIE_CALLBACK_ENABLED ? `${env.APP_URL.replace(/\/$/, "")}/api/webhooks/kie` : undefined;
+}
 
 function errorText(e: unknown): string {
   return (e instanceof Error ? e.message : String(e)).slice(0, 500);
@@ -79,6 +87,7 @@ export async function submitImage(imageId: string): Promise<void> {
       inputUrls: [logoUrl, ...materialUrls], // ảnh 1 là logo, các ảnh sau theo đúng thứ tự ô
       aspectRatio: img.aspectRatio,
       resolution: img.resolution,
+      callbackUrl: callbackUrl(),
     });
     await db.generatedImage.updateMany({
       where: { id: imageId, status: "PENDING" },
@@ -86,7 +95,8 @@ export async function submitImage(imageId: string): Promise<void> {
     });
   } catch (e) {
     console.error(`submitImage ${imageId} lỗi:`, errorText(e));
-    await failOrRetry(imageId, img.attempt, errorText(e), !(e instanceof NoReferenceError));
+    const retryable = !(e instanceof NoReferenceError || e instanceof ProviderFatalError);
+    await failOrRetry(imageId, img.attempt, errorText(e), retryable);
   }
 }
 
@@ -130,10 +140,10 @@ export async function pollImage(img: GeneratedImage): Promise<void> {
     where: { id: img.id, status: "PROCESSING" },
     data: { lastPolledAt: new Date(Date.now() + FINALIZE_LOCK_MS) },
   });
-  await finalizeImage(img.id, info.resultUrl ?? "");
+  await finalizeImage(img.id, info.resultUrl ?? "", info.credits);
 }
 
-async function finalizeImage(imageId: string, resultUrl: string): Promise<void> {
+async function finalizeImage(imageId: string, resultUrl: string, credits?: number): Promise<void> {
   try {
     const img = await db.generatedImage.findUnique({
       where: { id: imageId },
@@ -167,7 +177,14 @@ async function finalizeImage(imageId: string, resultUrl: string): Promise<void> 
 
     await db.generatedImage.updateMany({
       where: { id: imageId, status: "PROCESSING" },
-      data: { status: "SUCCESS", originalPath: originalKey, finalPath: finalKey, errorMessage: null, lastPolledAt: null },
+      data: {
+        status: "SUCCESS",
+        originalPath: originalKey,
+        finalPath: finalKey,
+        errorMessage: null,
+        lastPolledAt: null,
+        ...(credits !== undefined ? { costCredits: credits } : {}),
+      },
     });
     finalizeFailures.delete(imageId);
   } catch (e) {

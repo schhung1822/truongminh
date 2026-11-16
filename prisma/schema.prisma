@@ -294,6 +294,7 @@ model GeneratedImage {
   originalPath     String?     @db.VarChar(500)
   finalPath        String?     @db.VarChar(500)
   errorMessage     String?     @db.Text
+  costCredits      Float? // credits nhà cung cấp đã trừ cho ảnh này (nếu có thông tin)
   parentImageId    String?
   createdById      String
   createdAt        DateTime    @default(now())

@@ -16,7 +16,15 @@ export type TaskInfo = {
   resultUrl?: string;
   /** lý do khi FAILED */
   error?: string;
+  /** credits nhà cung cấp đã trừ (nếu có thông tin) */
+  credits?: number;
 };
+
+/**
+ * Lỗi KHÔNG nên thử lại vì thử lại cũng vẫn lỗi (sai khóa API, hết credits, tham số sai...).
+ * Các lỗi khác (mạng, quá tải) được tự thử lại 1 lần.
+ */
+export class ProviderFatalError extends Error {}
 
 /** Nhà cung cấp tạo ảnh AI. Có hai bản cài đặt: MockProvider (ảnh giả) và KieProvider (kie.ai thật). */
 export interface ImageProvider {
