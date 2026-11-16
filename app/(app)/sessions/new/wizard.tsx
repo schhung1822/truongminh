@@ -4,7 +4,9 @@ import { useState } from "react";
 import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Explorer } from "@/components/customers/explorer";
+import { QuickCreate } from "@/components/customers/quick-create";
 import { useFolderNav } from "@/components/customers/use-folder-nav";
+import { pickDefaultSheets } from "@/lib/default-sheets";
 import { cn } from "@/lib/utils";
 import { ConfirmStep, SheetsStep, type QuotaInfo, type SheetOption } from "./sheets-steps";
 import type { BrandOption, CustomerOption, LogoOption } from "./actions";
@@ -25,12 +27,14 @@ export function NewSessionWizard({
   sheets,
   quota,
   showCost,
+  isAdmin,
 }: {
   customers: CustomerOption[];
   initial: WizardInitial | null;
   sheets: SheetOption[];
   quota: QuotaInfo;
   showCost: boolean;
+  isAdmin: boolean;
 }) {
   const nav = useFolderNav(customers, initial);
   const [step, setStep] = useState<Step>(initial ? "sheets" : "browse");
@@ -79,15 +83,25 @@ export function NewSessionWizard({
           nav={nav}
           stepPrefix="Bước 1: "
           logoFooter={
-            <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-              <Button type="button" className="h-11 px-6" disabled={!logo} onClick={() => setStep("sheets")}>
-                Tiếp tục: chọn trang mẫu
-                <ChevronRightIcon />
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {logo ? `Đã chọn logo ${logo.width}x${logo.height}px` : "Chưa chọn logo nào."}
-              </span>
-            </div>
+            logo ? (
+              <div className="flex flex-col gap-3 border-t pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Đã chọn logo {logo.width}x{logo.height}px. Bấm <b>Tạo nhanh</b> để tạo ngay bằng trang mẫu mặc định, hoặc
+                  chọn trang mẫu khác.
+                </p>
+                <QuickCreate
+                  logoId={logo.id}
+                  data={{ defaultSheets: pickDefaultSheets(sheets), quota, showCost, isAdmin }}
+                >
+                  <Button type="button" variant="outline" className="h-12 px-5" onClick={() => setStep("sheets")}>
+                    Chọn trang mẫu khác
+                    <ChevronRightIcon />
+                  </Button>
+                </QuickCreate>
+              </div>
+            ) : (
+              <p className="border-t pt-4 text-sm text-muted-foreground">Chưa chọn logo nào. Bấm vào một logo để chọn.</p>
+            )
           }
         />
       )}

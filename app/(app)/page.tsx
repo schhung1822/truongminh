@@ -44,6 +44,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           sheets={wizard.sheets}
           quota={wizard.quota}
           showCost={wizard.showCost}
+          isAdmin={user.role === "ADMIN"}
         />
       </section>
 

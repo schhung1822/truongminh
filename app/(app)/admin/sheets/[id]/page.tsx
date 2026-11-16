@@ -32,6 +32,7 @@ export default async function EditSheetPage({ params }: { params: Promise<{ id: 
           aspectRatio: sheet.aspectRatio,
           resolution: sheet.resolution,
           isActive: sheet.isActive,
+          isDefault: sheet.isDefault,
           materialIds: sheet.materials.map((m) => m.materialId),
         }}
       />

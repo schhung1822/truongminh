@@ -52,16 +52,15 @@ export async function loadLogoContext(user: SessionUser, logoId: string, options
   };
 }
 
-/** Mọi dữ liệu cần để dựng màn hình tạo phiên mới. */
-export async function loadWizardData(user: SessionUser, logoId?: string) {
-  const [sheetRows, quota, customers] = await Promise.all([
+/** Các trang mẫu đang bật (kèm số chất liệu dùng được), quota và cờ hiện chi phí; dùng cho tạo phiên và nút Tạo nhanh. */
+export async function loadSheetOptions(user: SessionUser) {
+  const [sheetRows, quota] = await Promise.all([
     db.sheet.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       include: { materials: { include: { material: { select: { isActive: true, referencePath: true, descAi: true } } } } },
     }),
     getQuotaInfo(user),
-    loadCustomerOptions(user),
   ]);
   const sheets: SheetOption[] = sheetRows.map((s) => ({
     id: s.id,
@@ -74,7 +73,14 @@ export async function loadWizardData(user: SessionUser, logoId?: string) {
     total: s.materials.length,
     usable: s.materials.filter((m) => m.material.isActive && m.material.referencePath).length,
     missingDesc: s.materials.filter((m) => m.material.isActive && m.material.referencePath && !m.material.descAi.trim()).length,
+    isDefault: s.isDefault,
   }));
+  return { sheets, quota, showCost: getEnv().IMAGE_PROVIDER === "kie" };
+}
+
+/** Mọi dữ liệu cần để dựng màn hình tạo phiên mới. */
+export async function loadWizardData(user: SessionUser, logoId?: string) {
+  const [{ sheets, quota, showCost }, customers] = await Promise.all([loadSheetOptions(user), loadCustomerOptions(user)]);
   const initial = logoId ? await loadLogoContext(user, logoId, customers) : null;
-  return { customers, sheets, quota, initial, showCost: getEnv().IMAGE_PROVIDER === "kie" };
+  return { customers, sheets, quota, initial, showCost };
 }

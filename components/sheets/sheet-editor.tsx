@@ -34,6 +34,7 @@ export type SheetEditorInitial = {
   aspectRatio: string;
   resolution: string;
   isActive: boolean;
+  isDefault: boolean;
   materialIds: string[];
 };
 
@@ -56,6 +57,7 @@ export function SheetEditor({
   const [aspectRatio, setAspectRatio] = useState(initial.aspectRatio);
   const [resolution, setResolution] = useState(initial.resolution);
   const [isActive, setIsActive] = useState(initial.isActive);
+  const [isDefault, setIsDefault] = useState(initial.isDefault);
   const [ids, setIds] = useState<string[]>(initial.materialIds);
   const [filterGroup, setFilterGroup] = useState("");
   const [search, setSearch] = useState("");
@@ -91,6 +93,7 @@ export function SheetEditor({
         aspectRatio: aspectRatio as (typeof ASPECT_RATIOS)[number],
         resolution: resolution as (typeof RESOLUTIONS)[number],
         isActive,
+        isDefault: isActive && isDefault,
         materialIds: ids,
       });
       if (r.error) {
@@ -179,6 +182,16 @@ export function SheetEditor({
         <label className="flex items-center gap-2 self-end pb-2 text-sm">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="size-4" />
           Đang bật
+        </label>
+        <label className="flex items-center gap-2 self-end pb-2 text-sm sm:col-span-2 lg:col-span-1">
+          <input
+            type="checkbox"
+            checked={isActive && isDefault}
+            disabled={!isActive}
+            onChange={(e) => setIsDefault(e.target.checked)}
+            className="size-4"
+          />
+          Trang mẫu mặc định (dùng cho nút Tạo nhanh)
         </label>
       </div>
 

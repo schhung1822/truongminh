@@ -25,6 +25,8 @@ export type SheetOption = {
   usable: number;
   /** số chất liệu dùng được nhưng chưa có mô tả cho AI */
   missingDesc: number;
+  /** trang mẫu mặc định cho nút Tạo nhanh */
+  isDefault: boolean;
   total: number;
 };
 

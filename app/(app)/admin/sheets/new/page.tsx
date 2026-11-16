@@ -25,6 +25,7 @@ export default async function NewSheetPage() {
           aspectRatio: "2:3",
           resolution: settings.defaultResolution,
           isActive: true,
+          isDefault: false,
           materialIds: [],
         }}
       />

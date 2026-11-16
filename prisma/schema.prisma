@@ -111,6 +111,7 @@ model Sheet {
   aspectRatio String   @default("2:3")
   resolution  String   @default("2K")
   isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false) // trang mẫu mặc định: dùng cho nút "Tạo nhanh" (không cần chọn trang mẫu)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

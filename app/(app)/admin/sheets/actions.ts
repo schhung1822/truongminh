@@ -17,6 +17,7 @@ const sheetSchema = z.object({
   aspectRatio: z.enum(ASPECT_RATIOS),
   resolution: z.enum(RESOLUTIONS),
   isActive: z.boolean(),
+  isDefault: z.boolean().default(false),
   materialIds: z.array(z.string()).max(50),
 });
 
@@ -62,10 +63,22 @@ export async function saveSheetAction(id: string | null, input: SheetInput): Pro
   return { id: sheetId };
 }
 
+/** Đặt/bỏ "trang mẫu mặc định" (dùng cho nút Tạo nhanh). Có thể có nhiều trang mặc định, nút Tạo nhanh sẽ tạo cho tất cả. */
+export async function setSheetDefaultAction(id: string, isDefault: boolean): Promise<{ error?: string; ok?: string }> {
+  await requireAdmin();
+  const sheet = await db.sheet.findUnique({ where: { id }, select: { id: true, isActive: true } });
+  if (!sheet) return { error: "Không tìm thấy trang mẫu." };
+  if (isDefault && !sheet.isActive) return { error: "Trang mẫu đang tắt, hãy bật trước khi đặt làm mặc định." };
+  await db.sheet.update({ where: { id }, data: { isDefault } });
+  revalidatePath("/admin/sheets");
+  return { ok: isDefault ? "Đã đặt làm trang mẫu mặc định." : "Đã bỏ khỏi trang mẫu mặc định." };
+}
+
 export async function setSheetActiveAction(id: string, isActive: boolean): Promise<{ error?: string; ok?: string }> {
   await requireAdmin();
   if (!(await db.sheet.findUnique({ where: { id }, select: { id: true } }))) return { error: "Không tìm thấy trang mẫu." };
-  await db.sheet.update({ where: { id }, data: { isActive } });
+  // trang mẫu bị tắt thì không còn là mặc định
+  await db.sheet.update({ where: { id }, data: { isActive, ...(isActive ? {} : { isDefault: false }) } });
   revalidatePath("/admin/sheets");
   return { ok: isActive ? "Đã bật trang mẫu." : "Đã tắt trang mẫu." };
 }

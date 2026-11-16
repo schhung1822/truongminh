@@ -2,25 +2,38 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { SparklesIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Explorer } from "@/components/customers/explorer";
+import { QuickCreate, type QuickCreateData } from "@/components/customers/quick-create";
 import { useFolderNav } from "@/components/customers/use-folder-nav";
 import { FolderTile, TileGrid } from "@/components/folder-ui";
+import { cn } from "@/lib/utils";
 import { listLogoSessionsAction, type CustomerOption, type LogoSessionOption } from "../sessions/new/actions";
 
-/** Trang Khách hàng: duyệt thư mục Khách hàng > Thương hiệu > Logo, mở lại các phiên đã làm, hoặc tạo phiên mới từ logo. */
-export function CustomerBrowser({ customers }: { customers: CustomerOption[] }) {
+/**
+ * Trang Khách hàng: duyệt thư mục Khách hàng > Thương hiệu > Logo, mở lại các phiên đã làm,
+ * và TẠO NGAY phiên mới với logo đang chọn (nút Tạo nhanh dùng trang mẫu mặc định) mà không cần qua Trang chính.
+ */
+export function CustomerBrowser({ customers, quick }: { customers: CustomerOption[]; quick: QuickCreateData }) {
   const nav = useFolderNav(customers, null);
   return (
     <Explorer
       nav={nav}
-      logoFooter={nav.logo ? <LogoPanel key={nav.logo.id} logoId={nav.logo.id} /> : <p className="border-t pt-4 text-sm text-muted-foreground">Bấm vào một logo để xem các phiên đã làm với logo đó.</p>}
+      logoFooter={
+        nav.logo ? (
+          <LogoPanel key={nav.logo.id} logoId={nav.logo.id} quick={quick} />
+        ) : (
+          <p className="border-t pt-4 text-sm text-muted-foreground">
+            Bấm vào một logo để tạo phiên mới ngay hoặc xem các phiên đã làm với logo đó.
+          </p>
+        )
+      }
     />
   );
 }
 
-function LogoPanel({ logoId }: { logoId: string }) {
+function LogoPanel({ logoId, quick }: { logoId: string; quick: QuickCreateData }) {
   const [sessions, setSessions] = useState<LogoSessionOption[] | null>(null);
 
   useEffect(() => {
@@ -34,15 +47,21 @@ function LogoPanel({ logoId }: { logoId: string }) {
   }, [logoId]);
 
   return (
-    <div className="flex flex-col gap-3 border-t pt-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link href={`/?logoId=${encodeURIComponent(logoId)}`} className={buttonVariants({ className: "h-11 px-5" })}>
-          <SparklesIcon /> Tạo phiên mới với logo này
+    <div className="flex flex-col gap-4 border-t pt-4">
+      <QuickCreate logoId={logoId} data={quick}>
+        <Link href={`/?logoId=${encodeURIComponent(logoId)}`} className={cn(buttonVariants({ variant: "outline" }), "h-12 px-5")}>
+          Chọn trang mẫu khác
+          <ChevronRightIcon />
         </Link>
-        <span className="text-sm text-muted-foreground">
-          {sessions === null ? "Đang tải các phiên..." : sessions.length === 0 ? "Logo này chưa có phiên nào." : `${sessions.length} phiên đã làm với logo này:`}
-        </span>
-      </div>
+      </QuickCreate>
+
+      <p className="text-sm text-muted-foreground">
+        {sessions === null
+          ? "Đang tải các phiên..."
+          : sessions.length === 0
+            ? "Logo này chưa có phiên nào."
+            : `${sessions.length} phiên đã làm với logo này:`}
+      </p>
       {sessions && sessions.length > 0 && (
         <TileGrid>
           {sessions.map((s) => (
