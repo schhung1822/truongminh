@@ -78,6 +78,6 @@ describe("buildMaterialsList", () => {
     const list = buildMaterialsList([m("line one\n  line two", "UV"), m("", "UV")], { cols: 2, rows: 1 });
     const lines = list.split("\n");
     expect(lines[0]).toBe("Cell 1 = reference image 2: line one line two, technique: UV");
-    expect(lines[1]).toMatch(/match the material shown/);
+    expect(lines[1]).toMatch(/front and back materials shown/);
   });
 });

@@ -177,7 +177,8 @@ export function MaterialForm({
           <Label htmlFor="descAi">Mô tả cho AI</Label>
           <Textarea id="descAi" name="descAi" rows={4} maxLength={2000} defaultValue={initial?.descAi} />
           <p className="text-xs text-muted-foreground">
-            Viết bằng tiếng Anh sẽ tốt hơn: đặc điểm bề mặt, màu, độ bóng, cách logo hiện lên.
+            Mô tả cả hai mặt: mặt trước (ảnh lớp 1) làm mặt logo, mặt sau (ảnh lớp 2) làm viền. Nêu màu, vân, độ bóng. Viết
+            bằng tiếng Anh sẽ tốt hơn.
           </p>
         </div>
       </div>
@@ -185,11 +186,16 @@ export function MaterialForm({
       <div className="grid gap-6 sm:grid-cols-3">
         <ImageField
           name="layer1"
-          label="Ảnh lớp 1"
-          hint="PNG, JPG hoặc WEBP."
+          label="Ảnh lớp 1: MẶT TRƯỚC (làm mặt logo)"
+          hint="PNG, JPG hoặc WEBP. Hiện bên TRÁI trong ảnh tham chiếu."
           currentUrl={initial?.layer1Url}
         />
-        <ImageField name="layer2" label="Ảnh lớp 2" hint="Đặt cạnh lớp 1 thành một ảnh." currentUrl={initial?.layer2Url} />
+        <ImageField
+          name="layer2"
+          label="Ảnh lớp 2: MẶT SAU (làm viền logo)"
+          hint="Hiện bên PHẢI trong ảnh tham chiếu."
+          currentUrl={initial?.layer2Url}
+        />
         <div className="flex flex-col gap-2">
           <ImageField
             name="productPhoto"

@@ -53,7 +53,7 @@ export type MaterialForPrompt = { descAi: string; printTech: string };
 export function buildMaterialsList(materials: MaterialForPrompt[], grid: { cols: number; rows: number }): string {
   const clean = (s: string) => s.replace(/\s+/g, " ").trim();
   const lines = materials.map((m, i) => {
-    const desc = clean(m.descAi) || "match the material shown in the reference image";
+    const desc = clean(m.descAi) || "use the front and back materials shown in the two panels of the reference image";
     return `Cell ${i + 1} = reference image ${i + 2}: ${desc}, technique: ${clean(m.printTech)}`;
   });
 

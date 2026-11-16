@@ -3,26 +3,15 @@ import "dotenv/config";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "../generated/prisma/client";
+import { DEFAULT_CATALOG_PROMPT, DEFAULT_DESIGN_PROMPT } from "../lib/prompts/defaults";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("Thiếu DATABASE_URL trong .env");
 const db = new PrismaClient({ adapter: new PrismaMariaDb(url) });
 
-const CATALOG_PROMPT = `Create one product-sample sheet as a strict grid of {{cols}} columns and {{rows}} rows, equal cells, thin white gutters, plain white background.
-Reference image 1 is the customer's logo. Reproduce it exactly: same shapes, proportions, letters and colors. Do not redraw, restyle or add anything to it.
-Reference images 2 onward are material samples from our workshop. Each cell shows the logo produced on one material, photographed straight-on, same scale and lighting in every cell.
-Cells, in reading order (left to right, top to bottom):
-{{materials_list}}
-The material in each cell must match its reference image exactly (texture, color, finish, thickness). Do not mix materials between cells.
-Do not write any text, numbers or captions in the image.`;
-
-// Bản khởi đầu do kỹ sư soạn, brief chưa cung cấp prompt thiết kế. Admin chỉnh trong trang Prompt.
-const DESIGN_PROMPT = `Create one realistic product mockup of the customer's logo applied to: {{product_type}}.
-Reference image 1 is the customer's logo. Reproduce it exactly: same shapes, proportions, letters and colors. Do not redraw, restyle or add anything to it.
-Reference image 2 is a material sample from our workshop. The product must be made of this exact material (texture, color, finish, thickness) and the logo must appear on it the same way it appears in the sample (same printing or engraving technique).
-Design style: {{design_style}}
-Extra notes from the sales team: {{note}}
-Do not write any text, numbers or captions in the image apart from the logo itself.`;
+// Prompt mặc định nằm ở lib/prompts/defaults.ts (dùng chung với script cập nhật prompt). Admin chỉnh trong trang Prompt.
+const CATALOG_PROMPT = DEFAULT_CATALOG_PROMPT;
+const DESIGN_PROMPT = DEFAULT_DESIGN_PROMPT;
 
 const DEFAULT_SETTINGS: Record<string, unknown> = {
   imageModel: "gpt-image-2-5-sunburst-image-to-image",

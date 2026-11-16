@@ -15,7 +15,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
-    "db:seed-demo": "tsx prisma/seed-demo.ts"
+    "db:seed-demo": "tsx prisma/seed-demo.ts",
+    "db:update-prompts": "tsx prisma/update-prompts.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
