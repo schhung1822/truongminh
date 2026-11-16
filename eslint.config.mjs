@@ -7,12 +7,18 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    "generated/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // Component do shadcn sinh ra, giữ nguyên mã gốc.
+    files: ["components/ui/**"],
+    rules: { "react-hooks/set-state-in-effect": "off" },
+  },
 ]);
 
 export default eslintConfig;

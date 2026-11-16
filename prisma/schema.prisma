@@ -1,0 +1,332 @@
+// Schema CSDL. Xem docs/PLAN.md mục 3.
+// Đặt tên: "phiên đăng nhập" = AuthSession, "phiên tạo ảnh/phiên tư vấn" = ConsultSession.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum Role {
+  ADMIN
+  SALE
+}
+
+enum PromptKind {
+  CATALOG
+  DESIGN
+}
+
+enum SessionType {
+  CATALOG
+  DESIGN
+}
+
+enum ImageKind {
+  SHEET
+  DESIGN
+}
+
+enum ImageStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(SALE)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  authSessions     AuthSession[]
+  ownedCustomers   Customer[]       @relation("CustomerOwner")
+  createdCustomers Customer[]       @relation("CustomerCreator")
+  createdBrands    Brand[]
+  createdLogos     Logo[]
+  consultSessions  ConsultSession[]
+  generatedImages  GeneratedImage[]
+  usageLogs        UsageLog[]
+  promptTemplates  PromptTemplate[]
+
+  @@map("users")
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique @db.VarChar(64)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model Material {
+  id                 String    @id @default(cuid())
+  code               String    @unique
+  name               String
+  groupName          String
+  printTech          String
+  descHuman          String    @db.Text
+  descAi             String    @db.Text
+  layer1Path         String?   @db.VarChar(500)
+  layer2Path         String?   @db.VarChar(500)
+  productPhotoPath   String?   @db.VarChar(500)
+  referencePath      String?   @db.VarChar(500) // ảnh ghép lớp 1 + lớp 2, đây là ảnh gửi cho AI
+  referenceUpdatedAt DateTime?
+  kieRefUrl          String?   @db.VarChar(1000) // bộ nhớ đệm URL đã upload lên kie.ai
+  kieRefExpiresAt    DateTime?
+  isActive           Boolean   @default(true)
+  sortOrder          Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  sheetMaterials  SheetMaterial[]
+  selectedIn      SessionSelectedMaterial[]
+  generatedImages GeneratedImage[]
+
+  @@index([groupName, isActive])
+  @@map("materials")
+}
+
+model Sheet {
+  id          String   @id @default(cuid())
+  name        String
+  groupName   String   @default("")
+  cols        Int      @default(2)
+  rows        Int      @default(5)
+  aspectRatio String   @default("2:3")
+  resolution  String   @default("2K")
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  materials       SheetMaterial[]
+  generatedImages GeneratedImage[]
+
+  @@map("sheets")
+}
+
+model SheetMaterial {
+  id         String @id @default(cuid())
+  sheetId    String
+  materialId String
+  position   Int // 0, 1, 2... theo thứ tự đọc (trái sang phải, trên xuống dưới)
+
+  sheet    Sheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id])
+
+  @@unique([sheetId, position])
+  @@unique([sheetId, materialId])
+  @@index([materialId])
+  @@map("sheet_materials")
+}
+
+model PromptTemplate {
+  id          String     @id @default(cuid())
+  kind        PromptKind
+  version     Int
+  body        String     @db.Text
+  isActive    Boolean    @default(false)
+  note        String?
+  createdById String?
+  createdAt   DateTime   @default(now())
+
+  createdBy       User?            @relation(fields: [createdById], references: [id])
+  generatedImages GeneratedImage[]
+
+  @@unique([kind, version])
+  @@index([kind, isActive])
+  @@map("prompt_templates")
+}
+
+model DesignStyle {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @db.Text
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  generatedImages GeneratedImage[]
+
+  @@map("design_styles")
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?
+  note        String?  @db.Text
+  ownerId     String // sale phụ trách
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner     User    @relation("CustomerOwner", fields: [ownerId], references: [id])
+  createdBy User    @relation("CustomerCreator", fields: [createdById], references: [id])
+  brands    Brand[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([ownerId])
+  @@map("customers")
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  customerId  String
+  name        String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer  Customer @relation(fields: [customerId], references: [id])
+  createdBy User     @relation(fields: [createdById], references: [id])
+  logos     Logo[]
+
+  @@index([customerId])
+  @@index([name])
+  @@map("brands")
+}
+
+model Logo {
+  id             String    @id @default(cuid())
+  brandId        String
+  originalPath   String    @db.VarChar(500)
+  normalizedPath String    @db.VarChar(500)
+  width          Int
+  height         Int
+  note           String?   @db.Text
+  kieUrl         String?   @db.VarChar(1000)
+  kieExpiresAt   DateTime?
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  brand     Brand            @relation(fields: [brandId], references: [id])
+  createdBy User             @relation(fields: [createdById], references: [id])
+  sessions  ConsultSession[]
+
+  @@index([brandId])
+  @@map("logos")
+}
+
+model ConsultSession {
+  id                  String      @id @default(cuid())
+  type                SessionType
+  logoId              String
+  parentId            String? // phiên DESIGN trỏ về phiên CATALOG
+  productType         String?
+  variantsPerMaterial Int?
+  note                String?     @db.Text
+  createdById         String
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  logo              Logo                      @relation(fields: [logoId], references: [id])
+  parent            ConsultSession?           @relation("SessionParent", fields: [parentId], references: [id])
+  children          ConsultSession[]          @relation("SessionParent")
+  createdBy         User                      @relation(fields: [createdById], references: [id])
+  selectedMaterials SessionSelectedMaterial[]
+  images            GeneratedImage[]
+
+  @@index([logoId])
+  @@index([parentId])
+  @@index([createdById, createdAt])
+  @@map("consult_sessions")
+}
+
+model SessionSelectedMaterial {
+  id         String @id @default(cuid())
+  sessionId  String
+  materialId String
+
+  session  ConsultSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  material Material       @relation(fields: [materialId], references: [id])
+
+  @@unique([sessionId, materialId])
+  @@map("session_selected_materials")
+}
+
+model GeneratedImage {
+  id               String      @id @default(cuid())
+  sessionId        String
+  kind             ImageKind
+  sheetId          String?
+  materialId       String?
+  designStyleId    String?
+  variantIndex     Int         @default(0)
+  layoutSnapshot   Json // cột, hàng, danh sách (vị trí, mã, tên chất liệu) lúc tạo
+  promptUsed       String      @db.Text
+  promptTemplateId String?
+  promptVersion    Int?
+  model            String
+  resolution       String
+  aspectRatio      String
+  taskId           String?
+  status           ImageStatus @default(PENDING)
+  attempt          Int         @default(1)
+  lastPolledAt     DateTime?
+  originalPath     String?     @db.VarChar(500)
+  finalPath        String?     @db.VarChar(500)
+  errorMessage     String?     @db.Text
+  parentImageId    String?
+  createdById      String
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  session        ConsultSession   @relation(fields: [sessionId], references: [id])
+  sheet          Sheet?           @relation(fields: [sheetId], references: [id])
+  material       Material?        @relation(fields: [materialId], references: [id])
+  designStyle    DesignStyle?     @relation(fields: [designStyleId], references: [id])
+  promptTemplate PromptTemplate?  @relation(fields: [promptTemplateId], references: [id])
+  parentImage    GeneratedImage?  @relation("ImageRetry", fields: [parentImageId], references: [id])
+  retries        GeneratedImage[] @relation("ImageRetry")
+  createdBy      User             @relation(fields: [createdById], references: [id])
+  usageLogs      UsageLog[]
+
+  @@index([status, lastPolledAt])
+  @@index([sessionId])
+  @@index([createdById])
+  @@map("generated_images")
+}
+
+model UsageLog {
+  id        String    @id @default(cuid())
+  userId    String
+  imageId   String?
+  kind      ImageKind
+  day       String    @db.VarChar(10) // YYYY-MM-DD theo múi giờ APP_TIMEZONE
+  createdAt DateTime  @default(now())
+
+  user  User            @relation(fields: [userId], references: [id])
+  image GeneratedImage? @relation(fields: [imageId], references: [id])
+
+  @@index([userId, day])
+  @@index([day])
+  @@map("usage_logs")
+}

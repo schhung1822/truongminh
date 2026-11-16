@@ -1,0 +1,25 @@
+# MySQL cho máy dev. Chạy: docker compose -f docker-compose.dev.yml up -d
+services:
+  db:
+    image: mysql:8.4
+    container_name: truongminh-mysql-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: truongminh
+      TZ: Asia/Ho_Chi_Minh
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - truongminh_mysql_dev:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  truongminh_mysql_dev:

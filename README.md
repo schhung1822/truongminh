@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ảnh mẫu in logo
 
-## Getting Started
+Web app giúp đội sale của xưởng in tạo ảnh mô phỏng logo của khách trên nhiều chất liệu: sale chỉ upload logo và bấm nút, toàn bộ ảnh mẫu chất liệu, prompt và bố cục do admin cài sẵn.
 
-First, run the development server:
+Tài liệu thiết kế: [docs/PLAN.md](docs/PLAN.md). Các quyết định kỹ thuật: [docs/DECISIONS.md](docs/DECISIONS.md).
 
-```bash
+> Trạng thái: đang làm theo từng giai đoạn. Đã xong **GĐ1** (CSDL, đăng nhập, phân quyền, khung giao diện).
+
+## Chạy trên máy cá nhân (Windows)
+
+Cần cài sẵn: **Node.js 24** và **Docker Desktop** (mở Docker Desktop lên trước khi làm các bước dưới).
+
+Mở terminal trong thư mục dự án rồi chạy lần lượt:
+
+```powershell
+# 1. Cài thư viện (chỉ lần đầu)
+npm install
+
+# 2. Tạo file cấu hình (chỉ lần đầu). Mở file .env vừa tạo và đổi ADMIN_EMAIL, ADMIN_PASSWORD
+copy .env.example .env
+
+# 3. Bật cơ sở dữ liệu MySQL bằng Docker
+npm run db:up
+
+# 4. Tạo các bảng trong CSDL (chỉ lần đầu và mỗi khi có cập nhật)
+npm run db:migrate
+
+# 5. Tạo tài khoản admin đầu tiên + dữ liệu mặc định (chỉ lần đầu, chạy lại cũng an toàn)
+npm run db:seed
+
+# 6. Chạy web
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Mở trình duyệt vào <http://localhost:3000>, đăng nhập bằng `ADMIN_EMAIL` và `ADMIN_PASSWORD` đã điền trong `.env`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Lần sau chỉ cần: mở Docker Desktop, rồi `npm run db:up` và `npm run dev`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Mặc định `IMAGE_PROVIDER="mock"`: ảnh AI là ảnh giả, **không tốn tiền**. Chỉ đổi sang `kie` khi đã có khóa kie.ai (giai đoạn 5).
 
-## Learn More
+## Các lệnh hay dùng
 
-To learn more about Next.js, take a look at the following resources:
+| Lệnh | Việc |
+|---|---|
+| `npm run dev` | Chạy web để dùng/thử |
+| `npm run lint` | Kiểm tra lỗi mã |
+| `npm test` | Chạy test tự động |
+| `npm run build` | Build bản chạy thật |
+| `npm run db:up` | Bật MySQL (Docker) |
+| `npm run db:migrate` | Cập nhật cấu trúc CSDL |
+| `npm run db:seed` | Tạo admin và dữ liệu mặc định |
+| `npm run db:studio` | Xem dữ liệu trong CSDL bằng giao diện web |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+> Nếu `npm test` báo lỗi lạ khi chạy trong Git Bash, hãy chạy trong PowerShell hoặc terminal của VS Code.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Biến môi trường
 
-## Deploy on Vercel
+Xem chú thích tiếng Việt cho từng biến trong [.env.example](.env.example). **Không bao giờ** đưa file `.env` lên git hoặc gửi cho người khác.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Triển khai lên VPS
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Sẽ được viết đầy đủ ở giai đoạn 8 (Docker Compose, HTTPS, sao lưu). Hướng đi đã chốt nằm ở mục 9 của [docs/PLAN.md](docs/PLAN.md).
