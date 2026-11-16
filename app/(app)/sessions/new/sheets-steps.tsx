@@ -23,6 +23,8 @@ export type SheetOption = {
   resolution: string;
   /** số chất liệu dùng được (đang bật và đã có ảnh tham chiếu) */
   usable: number;
+  /** số chất liệu dùng được nhưng chưa có mô tả cho AI */
+  missingDesc: number;
   total: number;
 };
 
@@ -171,6 +173,7 @@ export function ConfirmStep({
   const needed = sheets.length;
   const overQuota = quota !== null && needed > quota.left;
   const cost = estimateCost(sheets.map((x) => x.resolution));
+  const missingDesc = sheets.reduce((n, x) => n + x.missingDesc, 0);
 
   function start() {
     setError(null);
@@ -248,6 +251,15 @@ export function ConfirmStep({
             </li>
           ))}
         </ul>
+
+        {missingDesc > 0 && (
+          <Alert>
+            <AlertDescription>
+              {missingDesc} chất liệu chưa có &quot;Mô tả cho AI&quot; (bề mặt, màu, độ bóng, cách logo hiện lên). Ảnh vẫn tạo
+              được nhưng AI chỉ dựa vào ảnh tham chiếu nên có thể kém chính xác. Nên bổ sung ở Quản trị &gt; Chất liệu.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {overQuota && (
           <Alert variant="destructive">

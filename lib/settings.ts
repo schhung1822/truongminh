@@ -15,7 +15,7 @@ export const settingsSchema = z.object({
 export type Settings = z.infer<typeof settingsSchema>;
 
 export const SETTING_DEFAULTS: Settings = {
-  imageModel: "gpt-image-2-5-flare-image-to-image",
+  imageModel: "gpt-image-2-5-sunburst-image-to-image",
   defaultResolution: "2K",
   dailyLimitPerSale: 60,
   workshopName: "Xưởng in logo",

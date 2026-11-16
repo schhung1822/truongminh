@@ -4,7 +4,7 @@ Web app giúp đội sale của xưởng in tạo ảnh mô phỏng logo của k
 
 Tài liệu thiết kế: [docs/PLAN.md](docs/PLAN.md). Các quyết định kỹ thuật: [docs/DECISIONS.md](docs/DECISIONS.md).
 
-> Trạng thái: đang làm theo từng giai đoạn. Đã xong **GĐ1 đến GĐ4** (luồng bước 1 chạy được với ảnh giả). Tiếp theo: GĐ5 nối kie.ai thật.
+> Trạng thái: đang làm theo từng giai đoạn. Đã xong **GĐ1 đến GĐ5** (luồng bước 1 chạy với ảnh giả và với kie.ai thật). Tiếp theo: GĐ6 bước 2 (thiết kế theo chất liệu đã chọn).
 
 ## Chạy trên máy cá nhân (Windows)
 
@@ -56,6 +56,16 @@ Mặc định `IMAGE_PROVIDER="mock"`: ảnh AI là ảnh giả, **không tốn 
 | `npm run db:studio` | Xem dữ liệu trong CSDL bằng giao diện web |
 
 > Nếu `npm test` báo lỗi lạ khi chạy trong Git Bash, hãy chạy trong PowerShell hoặc terminal của VS Code.
+
+## Chạy thử với kie.ai thật (tốn tiền)
+
+1. Tạo API key ở kie.ai, dán vào `KIE_API_KEY=` trong `.env`. **Không gửi khóa cho ai, không đưa lên git.**
+2. Trong `.env` đổi `IMAGE_PROVIDER="mock"` thành `IMAGE_PROVIDER="kie"`, rồi khởi động lại `npm run dev` (web chỉ đọc `.env` lúc khởi động).
+3. Vào **Quản trị > Cấu hình**: kiểm tra dòng "Số dư kie.ai" có hiện số, và "Model tạo ảnh" đúng ý (mặc định `gpt-image-2-5-sunburst-image-to-image`).
+4. Tạo phiên mới. Bước Xác nhận hiện **chi phí ước tính** (2K = 10 token ≈ 0,05 USD mỗi ảnh). Số token đã dùng và còn lại luôn hiện ở góc phải thanh đầu trang.
+5. Muốn quay lại ảnh giả: đổi `IMAGE_PROVIDER="mock"` và khởi động lại.
+
+Giá tham khảo (kie.ai, GPT Image 2.5): 1K = 6, 2K = 10, 4K = 16 token mỗi ảnh; 1 token ≈ 0,005 USD. Giá tính theo ảnh tạo ra, không theo số ảnh tham chiếu.
 
 ## Biến môi trường
 

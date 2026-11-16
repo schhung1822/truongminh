@@ -30,7 +30,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="imageModel">Model tạo ảnh</Label>
           <Input id="imageModel" name="imageModel" defaultValue={settings.imageModel} required maxLength={100} className="h-10" />
-          <p className="text-xs text-muted-foreground">Tên model của kie.ai, ví dụ gpt-image-2-5-flare-image-to-image.</p>
+          <p className="text-xs text-muted-foreground">Tên model của kie.ai, gpt-image-2-5-sunburst-image-to-image hoặc gpt-image-2-5-flare-image-to-image (cùng giá).</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="defaultResolution">Độ phân giải mặc định (khi tạo trang mẫu mới)</Label>

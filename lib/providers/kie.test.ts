@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KieProvider, classifyError } from "./kie";
 import { ProviderFatalError } from "./types";
@@ -133,6 +134,31 @@ describe("KieProvider.uploadReference", () => {
     expect(ms).toBeGreaterThan(22 * 3600_000);
     expect(ms).toBeLessThanOrEqual(23 * 3600_000);
     expect((calls[0].init!.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+  });
+});
+
+describe("KieProvider.downloadResult", () => {
+  const png = () => sharp({ create: { width: 8, height: 8, channels: 3, background: "#fff" } }).png().toBuffer();
+
+  it("nhận ảnh có content-type image/*", async () => {
+    const body = await png();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(body), { headers: { "content-type": "image/png" } })));
+    const r = await provider().downloadResult("https://cdn/a.png");
+    expect(r.contentType).toBe("image/png");
+    expect(r.buffer.length).toBe(body.length);
+  });
+
+  it("nhận ảnh dù kho trả application/octet-stream (nhận diện bằng nội dung)", async () => {
+    const body = await png();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(body), { headers: { "content-type": "application/octet-stream" } })));
+    expect((await provider().downloadResult("https://cdn/a")).contentType).toBe("image/png");
+  });
+
+  it("từ chối nội dung không phải ảnh và lỗi HTTP", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>", { headers: { "content-type": "text/html" } })));
+    await expect(provider().downloadResult("https://cdn/a")).rejects.toThrow(/không phải ảnh/);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status: 403 })));
+    await expect(provider().downloadResult("https://cdn/a")).rejects.toThrow(/403/);
   });
 });
 

@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { ProviderFatalError, type CreateTaskInput, type ImageProvider, type TaskInfo } from "./types";
 
 /**
@@ -153,10 +154,18 @@ export class KieProvider implements ImageProvider {
       throw new Error(`Không tải được ảnh kết quả: ${e instanceof Error ? e.message : String(e)}`);
     }
     if (!res.ok) throw new Error(`Tải ảnh kết quả thất bại (HTTP ${res.status}).`);
-    const contentType = res.headers.get("content-type")?.split(";")[0].trim() || "image/png";
-    if (!contentType.startsWith("image/")) throw new Error(`Kết quả không phải ảnh (${contentType}).`);
+    let contentType = res.headers.get("content-type")?.split(";")[0].trim() || "";
     const buffer = Buffer.from(await res.arrayBuffer());
     if (buffer.length === 0 || buffer.length > MAX_RESULT_BYTES) throw new Error("Ảnh kết quả rỗng hoặc quá lớn.");
+    if (!contentType.startsWith("image/")) {
+      // Kho của kie.ai đôi khi trả application/octet-stream: kiểm tra bằng nội dung thật của file
+      const format = await sharp(buffer)
+        .metadata()
+        .then((m) => m.format)
+        .catch(() => undefined);
+      if (!format) throw new Error(`Kết quả không phải ảnh (${contentType || "không rõ loại"}).`);
+      contentType = `image/${format === "jpeg" ? "jpeg" : format}`;
+    }
     return { buffer, contentType };
   }
 

@@ -58,7 +58,7 @@ export async function loadWizardData(user: SessionUser, logoId?: string) {
     db.sheet.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      include: { materials: { include: { material: { select: { isActive: true, referencePath: true } } } } },
+      include: { materials: { include: { material: { select: { isActive: true, referencePath: true, descAi: true } } } } },
     }),
     getQuotaInfo(user),
     loadCustomerOptions(user),
@@ -73,6 +73,7 @@ export async function loadWizardData(user: SessionUser, logoId?: string) {
     resolution: s.resolution,
     total: s.materials.length,
     usable: s.materials.filter((m) => m.material.isActive && m.material.referencePath).length,
+    missingDesc: s.materials.filter((m) => m.material.isActive && m.material.referencePath && !m.material.descAi.trim()).length,
   }));
   const initial = logoId ? await loadLogoContext(user, logoId, customers) : null;
   return { customers, sheets, quota, initial, showCost: getEnv().IMAGE_PROVIDER === "kie" };

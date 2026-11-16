@@ -25,7 +25,7 @@ Extra notes from the sales team: {{note}}
 Do not write any text, numbers or captions in the image apart from the logo itself.`;
 
 const DEFAULT_SETTINGS: Record<string, unknown> = {
-  imageModel: "gpt-image-2-5-flare-image-to-image",
+  imageModel: "gpt-image-2-5-sunburst-image-to-image",
   defaultResolution: "2K",
   dailyLimitPerSale: 60,
   workshopName: "Xưởng in logo",

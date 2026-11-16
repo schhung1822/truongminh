@@ -1,6 +1,6 @@
 # KẾ HOẠCH: Web app tạo ảnh mẫu in logo theo chất liệu
 
-> Trạng thái: **ĐÃ DUYỆT**. Đã xong GĐ1; đang chờ duyệt GĐ1 để sang GĐ2.
+> Trạng thái: **ĐÃ DUYỆT**. Đã xong GĐ1 đến GĐ5 (GĐ5 đã nối kie.ai, chờ chủ dự án chạy thử mẫu 8 chất liệu thật). Tiếp theo: GĐ6.
 > Nguồn yêu cầu: `prompt-claude-code-logo-mockup.md`.
 
 ---
