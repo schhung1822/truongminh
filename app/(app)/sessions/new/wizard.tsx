@@ -1,13 +1,22 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { CheckIcon, ChevronRightIcon, Loader2Icon, PlusIcon, UploadIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  CheckIcon,
+  FolderPlusIcon,
+  ImagePlusIcon,
+  Loader2Icon,
+  SearchIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FolderTile, ImageTile, NewTile, PathBar, TileGrid } from "@/components/folder-ui";
 import { cn } from "@/lib/utils";
 import { ConfirmStep, SheetsStep, type QuotaInfo, type SheetOption } from "./sheets-steps";
 import {
@@ -21,33 +30,13 @@ import {
 } from "./actions";
 
 export type WizardInitial = { customer: CustomerOption; brand: BrandOption; logo: LogoOption };
-type Step = "customer" | "brand" | "logo" | "sheets" | "confirm";
+type Step = "browse" | "sheets" | "confirm";
 
 const STEP_LABELS: { key: Step; label: string }[] = [
-  { key: "customer", label: "Khách hàng" },
-  { key: "brand", label: "Thương hiệu" },
-  { key: "logo", label: "Logo" },
+  { key: "browse", label: "Chọn logo" },
   { key: "sheets", label: "Trang mẫu" },
   { key: "confirm", label: "Xác nhận" },
 ];
-
-function Checker({ children, className }: { children: React.ReactNode; className?: string }) {
-  // nền caro để thấy rõ logo có nền trong suốt
-  return (
-    <div
-      className={cn("flex items-center justify-center overflow-hidden rounded-lg border", className)}
-      style={{
-        backgroundColor: "#fff",
-        backgroundImage:
-          "linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%)",
-        backgroundSize: "16px 16px",
-        backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
 
 export function NewSessionWizard({
   customers: initialCustomers,
@@ -64,7 +53,7 @@ export function NewSessionWizard({
   const [customer, setCustomer] = useState<CustomerOption | null>(initial?.customer ?? null);
   const [brand, setBrand] = useState<BrandOption | null>(initial?.brand ?? null);
   const [logo, setLogo] = useState<LogoOption | null>(initial?.logo ?? null);
-  const [step, setStep] = useState<Step>(initial ? "sheets" : "customer");
+  const [step, setStep] = useState<Step>(initial ? "sheets" : "browse");
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [logos, setLogos] = useState<LogoOption[]>([]);
   const [loading, startLoading] = useTransition();
@@ -75,36 +64,30 @@ export function NewSessionWizard({
 
   const stepIndex = STEP_LABELS.findIndex((s) => s.key === step);
 
-  function chooseCustomer(c: CustomerOption) {
+  function openRoot() {
+    setCustomer(null);
+    setBrand(null);
+    setLogo(null);
+  }
+
+  function openCustomer(c: CustomerOption) {
     setCustomer(c);
     setBrand(null);
     setLogo(null);
-    setStep("brand");
-    startLoading(async () => {
-      const r = await listBrandsAction(c.id);
-      setBrands(r.brands ?? []);
-    });
+    startLoading(async () => setBrands((await listBrandsAction(c.id)).brands ?? []));
   }
 
-  function chooseBrand(b: BrandOption) {
+  function openBrand(b: BrandOption) {
     setBrand(b);
     setLogo(null);
-    setStep("logo");
-    startLoading(async () => {
-      const r = await listLogosAction(b.id);
-      setLogos(r.logos ?? []);
-    });
+    startLoading(async () => setLogos((await listLogosAction(b.id)).logos ?? []));
   }
 
-  function goTo(target: Step) {
-    // Chỉ quay lại bước đã đi qua
-    setStep(target);
-    if (target === "brand" && customer) {
-      startLoading(async () => setBrands((await listBrandsAction(customer.id)).brands ?? []));
-    }
-    if (target === "logo" && brand) {
-      startLoading(async () => setLogos((await listLogosAction(brand.id)).logos ?? []));
-    }
+  /** Quay lại màn hình duyệt thư mục (giữ nguyên chỗ đang đứng, nạp lại danh sách). */
+  function backToBrowse() {
+    setStep("browse");
+    if (brand) startLoading(async () => setLogos((await listLogosAction(brand.id)).logos ?? []));
+    else if (customer) startLoading(async () => setBrands((await listBrandsAction(customer.id)).brands ?? []));
   }
 
   return (
@@ -113,13 +96,12 @@ export function NewSessionWizard({
       <ol className="flex flex-wrap gap-2 text-sm">
         {STEP_LABELS.map((s, i) => {
           const done = i < stepIndex;
-          const reachable = done;
           return (
             <li key={s.key}>
               <button
                 type="button"
-                disabled={!reachable}
-                onClick={() => goTo(s.key)}
+                disabled={!done}
+                onClick={() => (s.key === "browse" ? backToBrowse() : setStep(s.key))}
                 className={cn(
                   "flex items-center gap-1.5 rounded-full border px-3 py-1.5 transition-colors",
                   i === stepIndex && "border-primary bg-primary text-primary-foreground",
@@ -129,47 +111,34 @@ export function NewSessionWizard({
               >
                 {done ? <CheckIcon className="size-3.5" /> : <span className="font-semibold">{i + 1}</span>}
                 {s.label}
-                {done && s.key === "customer" && customer && <span className="max-w-32 truncate">: {customer.name}</span>}
-                {done && s.key === "brand" && brand && <span className="max-w-32 truncate">: {brand.name}</span>}
               </button>
             </li>
           );
         })}
       </ol>
 
-      {step === "customer" && (
-        <CustomerStep
+      {step === "browse" && (
+        <Explorer
           customers={customers}
-          onChoose={chooseCustomer}
-          onCreated={(c) => {
-            setCustomers((prev) => [c, ...prev]);
-            chooseCustomer(c);
-          }}
-        />
-      )}
-
-      {step === "brand" && customer && (
-        <BrandStep
           customer={customer}
-          brands={brands}
-          loading={loading}
-          onChoose={chooseBrand}
-          onCreated={(b) => {
-            setBrands((prev) => [b, ...prev]);
-            chooseBrand(b);
-          }}
-        />
-      )}
-
-      {step === "logo" && brand && (
-        <LogoStep
           brand={brand}
-          canUpload={customer?.editable ?? false}
+          brands={brands}
           logos={logos}
           loading={loading}
-          selected={logo}
-          onSelect={setLogo}
-          onUploaded={(l) => {
+          selectedLogo={logo}
+          onOpenRoot={openRoot}
+          onOpenCustomer={openCustomer}
+          onOpenBrand={openBrand}
+          onCustomerCreated={(c) => {
+            setCustomers((prev) => [c, ...prev]);
+            openCustomer(c);
+          }}
+          onBrandCreated={(b) => {
+            setBrands((prev) => [b, ...prev]);
+            openBrand(b);
+          }}
+          onSelectLogo={setLogo}
+          onLogoUploaded={(l) => {
             setLogos((prev) => [l, ...prev]);
             setLogo(l);
           }}
@@ -200,15 +169,125 @@ export function NewSessionWizard({
   );
 }
 
-/* ---------------- Bước 1: khách hàng ---------------- */
+/* ============ Duyệt thư mục: Khách hàng > Thương hiệu > Logo ============ */
 
-function CustomerStep({
+function Explorer({
   customers,
-  onChoose,
+  customer,
+  brand,
+  brands,
+  logos,
+  loading,
+  selectedLogo,
+  onOpenRoot,
+  onOpenCustomer,
+  onOpenBrand,
+  onCustomerCreated,
+  onBrandCreated,
+  onSelectLogo,
+  onLogoUploaded,
+  onNext,
+}: {
+  customers: CustomerOption[];
+  customer: CustomerOption | null;
+  brand: BrandOption | null;
+  brands: BrandOption[];
+  logos: LogoOption[];
+  loading: boolean;
+  selectedLogo: LogoOption | null;
+  onOpenRoot: () => void;
+  onOpenCustomer: (c: CustomerOption) => void;
+  onOpenBrand: (b: BrandOption) => void;
+  onCustomerCreated: (c: CustomerOption) => void;
+  onBrandCreated: (b: BrandOption) => void;
+  onSelectLogo: (l: LogoOption) => void;
+  onLogoUploaded: (l: LogoOption) => void;
+  onNext: () => void;
+}) {
+  const crumbs = [
+    { label: "Khách hàng", onClick: customer ? onOpenRoot : undefined },
+    ...(customer ? [{ label: customer.name, onClick: brand ? () => onOpenCustomer(customer) : undefined }] : []),
+    ...(brand ? [{ label: brand.name }] : []),
+  ];
+
+  const level = brand ? "logo" : customer ? "brand" : "customer";
+  const title =
+    level === "customer"
+      ? "Bước 1: Mở thư mục khách hàng"
+      : level === "brand"
+        ? `Bước 1: Mở thư mục thương hiệu của ${customer!.name}`
+        : `Bước 1: Chọn logo của ${brand!.name}`;
+  const hint =
+    level === "customer"
+      ? "Mỗi khách hàng là một thư mục, bên trong là các thương hiệu, bên trong thương hiệu là các logo."
+      : level === "brand"
+        ? "Mở thư mục thương hiệu để xem các logo, hoặc tạo thư mục thương hiệu mới."
+        : "Bấm vào logo để chọn, hoặc tải logo mới lên thư mục này.";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{hint}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <PathBar crumbs={crumbs} />
+
+        {level === "customer" && (
+          <CustomerFolders customers={customers} onOpen={onOpenCustomer} onCreated={onCustomerCreated} />
+        )}
+        {level === "brand" && (
+          <BrandFolders customer={customer!} brands={brands} loading={loading} onOpen={onOpenBrand} onCreated={onBrandCreated} />
+        )}
+        {level === "logo" && (
+          <LogoFiles
+            brand={brand!}
+            canUpload={customer?.editable ?? false}
+            logos={logos}
+            loading={loading}
+            selected={selectedLogo}
+            onSelect={onSelectLogo}
+            onUploaded={onLogoUploaded}
+          />
+        )}
+
+        {level === "logo" && (
+          <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+            <Button type="button" className="h-11 px-6" disabled={!selectedLogo} onClick={onNext}>
+              Tiếp tục: chọn trang mẫu
+              <ChevronRightIcon />
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {selectedLogo ? `Đã chọn logo ${selectedLogo.width}x${selectedLogo.height}px` : "Chưa chọn logo nào."}
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FolderSkeletons() {
+  return (
+    <TileGrid>
+      {[0, 1, 2, 3].map((i) => (
+        <li key={i}>
+          <Skeleton className="h-36 w-full rounded-xl" />
+        </li>
+      ))}
+    </TileGrid>
+  );
+}
+
+/* ---------- Cấp 1: thư mục khách hàng ---------- */
+
+function CustomerFolders({
+  customers,
+  onOpen,
   onCreated,
 }: {
   customers: CustomerOption[];
-  onChoose: (c: CustomerOption) => void;
+  onOpen: (c: CustomerOption) => void;
   onCreated: (c: CustomerOption) => void;
 }) {
   const [q, setQ] = useState("");
@@ -224,7 +303,7 @@ function CustomerStep({
     const list = s
       ? customers.filter((c) => c.name.toLowerCase().includes(s) || (c.phone ?? "").toLowerCase().includes(s))
       : customers;
-    return list.slice(0, 50);
+    return list.slice(0, 60);
   }, [customers, q]);
 
   function create() {
@@ -232,109 +311,98 @@ function CustomerStep({
     startTransition(async () => {
       const r = await createCustomerAction({ name, phone, note });
       if (r.error) return setError(r.error);
-      toast.success("Đã tạo khách hàng.");
+      toast.success("Đã tạo thư mục khách hàng.");
       onCreated(r.customer!);
     });
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Bước 1: Chọn khách hàng</CardTitle>
-        <CardDescription>Tìm khách đã có theo tên hoặc số điện thoại, hoặc tạo khách mới.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {customers.length > 0 && (
-          <>
-            <Input
-              placeholder="Tìm theo tên hoặc số điện thoại/Zalo"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="h-10"
-              aria-label="Tìm khách hàng"
-            />
-            <ul className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-              {filtered.length === 0 && <li className="text-sm text-muted-foreground">Không thấy khách nào khớp.</li>}
-              {filtered.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => onChoose(c)}
-                    className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{c.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {c.phone || "Chưa có số điện thoại"} · Sale phụ trách: {c.ownerName}
-                      </p>
-                    </div>
-                    <ChevronRightIcon className="size-4 text-muted-foreground" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+    <div className="flex flex-col gap-4">
+      {customers.length > 0 && (
+        <div className="relative sm:max-w-md">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Tìm theo tên hoặc số điện thoại/Zalo"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="h-10 pl-9"
+            aria-label="Tìm khách hàng"
+          />
+        </div>
+      )}
 
-        {!showNew ? (
-          <Button type="button" variant="outline" className="h-10 self-start" onClick={() => setShowNew(true)}>
-            <PlusIcon /> Tạo khách hàng mới
-          </Button>
-        ) : (
-          <div className="flex flex-col gap-3 rounded-lg border p-4">
-            <p className="font-medium">Khách hàng mới</p>
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="c-name">Tên khách hàng</Label>
-                <Input id="c-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={150} className="h-10" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="c-phone">Số điện thoại hoặc Zalo</Label>
-                <Input id="c-phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={50} className="h-10" />
-              </div>
+      {showNew && (
+        <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-4">
+          <p className="font-medium">Thư mục khách hàng mới</p>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="c-name">Tên khách hàng</Label>
+              <Input id="c-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={150} className="h-10" />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="c-note">Ghi chú</Label>
-              <Input id="c-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} className="h-10" />
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" className="h-10" onClick={create} disabled={pending || !name.trim()}>
-                {pending && <Loader2Icon className="animate-spin" />}
-                Tạo và tiếp tục
-              </Button>
-              {customers.length > 0 && (
-                <Button type="button" variant="ghost" className="h-10" onClick={() => setShowNew(false)}>
-                  Hủy
-                </Button>
-              )}
+              <Label htmlFor="c-phone">Số điện thoại hoặc Zalo</Label>
+              <Input id="c-phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={50} className="h-10" />
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="c-note">Ghi chú</Label>
+            <Input id="c-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} className="h-10" />
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" className="h-10" onClick={create} disabled={pending || !name.trim()}>
+              {pending && <Loader2Icon className="animate-spin" />}
+              Tạo và mở thư mục
+            </Button>
+            {customers.length > 0 && (
+              <Button type="button" variant="ghost" className="h-10" onClick={() => setShowNew(false)}>
+                Hủy
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <TileGrid>
+        {!showNew && <NewTile label="Khách hàng mới" icon={<FolderPlusIcon />} onClick={() => setShowNew(true)} />}
+        {filtered.map((c) => (
+          <FolderTile
+            key={c.id}
+            name={c.name}
+            subtitle={c.phone ? `${c.phone}` : `Sale: ${c.ownerName}`}
+            count={c.brandCount}
+            countLabel="thương hiệu"
+            onClick={() => onOpen(c)}
+          />
+        ))}
+      </TileGrid>
+      {customers.length > 0 && filtered.length === 0 && (
+        <p className="text-sm text-muted-foreground">Không thấy khách nào khớp &quot;{q}&quot;.</p>
+      )}
+    </div>
   );
 }
 
-/* ---------------- Bước 2: thương hiệu ---------------- */
+/* ---------- Cấp 2: thư mục thương hiệu ---------- */
 
-function BrandStep({
+function BrandFolders({
   customer,
   brands,
   loading,
-  onChoose,
+  onOpen,
   onCreated,
 }: {
   customer: CustomerOption;
   brands: BrandOption[];
   loading: boolean;
-  onChoose: (b: BrandOption) => void;
+  onOpen: (b: BrandOption) => void;
   onCreated: (b: BrandOption) => void;
 }) {
+  const [showNew, setShowNew] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -344,72 +412,70 @@ function BrandStep({
     startTransition(async () => {
       const r = await createBrandAction(customer.id, name);
       if (r.error) return setError(r.error);
-      toast.success("Đã tạo thương hiệu.");
+      toast.success("Đã tạo thư mục thương hiệu.");
       setName("");
+      setShowNew(false);
       onCreated(r.brand!);
     });
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Bước 2: Chọn thương hiệu của {customer.name}</CardTitle>
-        <CardDescription>Mỗi khách có thể có nhiều thương hiệu, mỗi thương hiệu có nhiều logo.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {loading && <p className="text-sm text-muted-foreground">Đang tải...</p>}
-        {!loading && brands.length === 0 && <p className="text-sm text-muted-foreground">Khách này chưa có thương hiệu nào.</p>}
-        <ul className="flex flex-col gap-2">
-          {brands.map((b) => (
-            <li key={b.id}>
-              <button
-                type="button"
-                onClick={() => onChoose(b)}
-                className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{b.name}</p>
-                  <p className="text-xs text-muted-foreground">{b.logoCount} logo</p>
-                </div>
-                <ChevronRightIcon className="size-4 text-muted-foreground" />
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        {customer.editable ? (
-          <div className="flex flex-col gap-3 rounded-lg border p-4">
-            <p className="font-medium">Thương hiệu mới</p>
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <div className="flex flex-col gap-1.5 sm:max-w-sm">
-              <Label htmlFor="b-name">Tên thương hiệu</Label>
-              <Input id="b-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={150} className="h-10" />
-            </div>
-            <Button type="button" className="h-10 self-start" onClick={create} disabled={pending || !name.trim()}>
+    <div className="flex flex-col gap-4">
+      {showNew && customer.editable && (
+        <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-4">
+          <p className="font-medium">Thư mục thương hiệu mới</p>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <div className="flex flex-col gap-1.5 sm:max-w-sm">
+            <Label htmlFor="b-name">Tên thương hiệu</Label>
+            <Input id="b-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={150} className="h-10" />
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" className="h-10" onClick={create} disabled={pending || !name.trim()}>
               {pending && <Loader2Icon className="animate-spin" />}
-              Tạo và tiếp tục
+              Tạo và mở thư mục
+            </Button>
+            <Button type="button" variant="ghost" className="h-10" onClick={() => setShowNew(false)}>
+              Hủy
             </Button>
           </div>
-        ) : (
-          <Alert>
-            <AlertDescription>
-              Khách hàng này do {customer.ownerName} phụ trách nên bạn không thêm thương hiệu mới được, nhưng vẫn dùng
-              được các thương hiệu có sẵn.
-            </AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+
+      {loading ? (
+        <FolderSkeletons />
+      ) : (
+        <TileGrid>
+          {customer.editable && !showNew && (
+            <NewTile label="Thương hiệu mới" icon={<FolderPlusIcon />} onClick={() => setShowNew(true)} />
+          )}
+          {brands.map((b) => (
+            <FolderTile key={b.id} name={b.name} count={b.logoCount} countLabel="logo" onClick={() => onOpen(b)} />
+          ))}
+        </TileGrid>
+      )}
+
+      {!loading && brands.length === 0 && (
+        <p className="text-sm text-muted-foreground">Khách này chưa có thương hiệu nào.</p>
+      )}
+      {!customer.editable && (
+        <Alert>
+          <AlertDescription>
+            Khách hàng này do {customer.ownerName} phụ trách nên bạn không thêm thương hiệu mới được, nhưng vẫn dùng
+            được các thương hiệu có sẵn.
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 }
 
-/* ---------------- Bước 3: logo ---------------- */
+/* ---------- Cấp 3: các tệp logo ---------- */
 
-function LogoStep({
+function LogoFiles({
   brand,
   canUpload,
   logos,
@@ -417,7 +483,6 @@ function LogoStep({
   selected,
   onSelect,
   onUploaded,
-  onNext,
 }: {
   brand: BrandOption;
   canUpload: boolean;
@@ -426,7 +491,6 @@ function LogoStep({
   selected: LogoOption | null;
   onSelect: (l: LogoOption) => void;
   onUploaded: (l: LogoOption) => void;
-  onNext: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -464,87 +528,62 @@ function LogoStep({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Bước 3: Chọn logo của {brand.name}</CardTitle>
-        <CardDescription>Chọn logo đã có hoặc tải logo mới (PNG, JPG, WEBP, SVG, tối đa 10MB).</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {loading && <p className="text-sm text-muted-foreground">Đang tải...</p>}
-        {logos.length > 0 && (
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {logos.map((l) => (
-              <li key={l.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(l)}
-                  aria-pressed={selected?.id === l.id}
-                  className={cn(
-                    "flex w-full flex-col gap-1.5 rounded-lg border p-2 text-left transition-colors hover:bg-muted",
-                    selected?.id === l.id && "border-primary ring-2 ring-primary",
-                  )}
-                >
-                  <Checker className="aspect-square w-full">
-                    <img src={l.url} alt="Logo" className="max-h-full max-w-full object-contain" />
-                  </Checker>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {l.width}x{l.height}px{l.note ? ` · ${l.note}` : ""}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {!loading && logos.length === 0 && <p className="text-sm text-muted-foreground">Thương hiệu này chưa có logo nào.</p>}
+    <div className="flex flex-col gap-4">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {warning && (
+        <Alert>
+          <AlertDescription>{warning}</AlertDescription>
+        </Alert>
+      )}
 
-        {canUpload ? (
-        <div className="flex flex-col gap-3 rounded-lg border p-4">
-          <p className="font-medium">Tải logo mới</p>
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {warning && (
-            <Alert>
-              <AlertDescription>{warning}</AlertDescription>
-            </Alert>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="l-note">Ghi chú (không bắt buộc)</Label>
-              <Input id="l-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="l-file">File logo</Label>
-              <Input
+      {loading ? (
+        <FolderSkeletons />
+      ) : (
+        <TileGrid>
+          {canUpload && (
+            <NewTile label={uploading ? "Đang tải..." : "Tải logo mới"} icon={uploading ? <Loader2Icon className="animate-spin" /> : <ImagePlusIcon />}>
+              <input
                 id="l-file"
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
                 onChange={upload}
                 disabled={uploading}
-                className="h-10 pt-1.5"
+                className="sr-only"
+                aria-label="File logo"
               />
-            </div>
-          </div>
-          {uploading && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" /> Đang tải và xử lý logo...
-            </p>
+            </NewTile>
           )}
-        </div>
-        ) : (
-          <Alert>
-            <AlertDescription>Khách hàng này do người khác phụ trách nên bạn không tải thêm logo được, nhưng vẫn dùng được logo có sẵn.</AlertDescription>
-          </Alert>
-        )}
+          {logos.map((l) => (
+            <ImageTile
+              key={l.id}
+              src={l.url}
+              caption={`${l.width}x${l.height}px${l.note ? ` · ${l.note}` : ""}`}
+              selected={selected?.id === l.id}
+              onClick={() => onSelect(l)}
+            />
+          ))}
+        </TileGrid>
+      )}
 
-        <Button type="button" className="h-11 self-start px-6" disabled={!selected} onClick={onNext}>
-          <UploadIcon className="hidden" />
-          Tiếp tục: chọn trang mẫu
-          <ChevronRightIcon />
-        </Button>
-      </CardContent>
-    </Card>
+      {!loading && logos.length === 0 && <p className="text-sm text-muted-foreground">Thư mục này chưa có logo nào.</p>}
+
+      {canUpload ? (
+        <div className="flex flex-col gap-1.5 sm:max-w-sm">
+          <Label htmlFor="l-note">Ghi chú cho logo sắp tải lên (không bắt buộc)</Label>
+          <Input id="l-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10" />
+          <p className="text-xs text-muted-foreground">PNG, JPG, WEBP hoặc SVG, tối đa 10MB.</p>
+        </div>
+      ) : (
+        <Alert>
+          <AlertDescription>
+            Khách hàng này do người khác phụ trách nên bạn không tải thêm logo được, nhưng vẫn dùng được logo có sẵn.
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 }

@@ -36,7 +36,7 @@ export default async function NewSessionPage({ searchParams }: { searchParams: P
   const customers = await db.customer.findMany({
     orderBy: { createdAt: "desc" },
     take: 1000,
-    include: { owner: { select: { name: true } } },
+    include: { owner: { select: { name: true } }, _count: { select: { brands: true } } },
   });
   const options: CustomerOption[] = customers.map((c) => ({
     id: c.id,
@@ -44,6 +44,7 @@ export default async function NewSessionPage({ searchParams }: { searchParams: P
     phone: c.phone,
     ownerName: c.owner.name,
     editable: canEditCustomer(user, c),
+    brandCount: c._count.brands,
   }));
 
   // Tạo phiên mới từ logo cũ: bỏ qua 3 bước đầu
@@ -58,6 +59,7 @@ export default async function NewSessionPage({ searchParams }: { searchParams: P
           phone: logo.brand.customer.phone,
           ownerName: "",
           editable: canEditCustomer(user, logo.brand.customer),
+          brandCount: 0,
         },
         brand: { id: logo.brand.id, name: logo.brand.name, logoCount: 0 },
         logo: {
@@ -75,7 +77,7 @@ export default async function NewSessionPage({ searchParams }: { searchParams: P
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Tạo phiên tư vấn mới</h1>
-        <p className="text-muted-foreground">Làm lần lượt từng bước: khách hàng, thương hiệu, logo, trang mẫu.</p>
+        <p className="text-muted-foreground">Mở thư mục khách hàng, chọn logo, rồi chọn trang mẫu.</p>
       </div>
       <NewSessionWizard customers={options} initial={initial} sheets={sheets} quota={quota} />
     </div>

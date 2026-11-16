@@ -65,7 +65,7 @@ export function SheetsStep({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Bước 4: Chọn trang mẫu</CardTitle>
+        <CardTitle>Bước 2: Chọn trang mẫu</CardTitle>
         <CardDescription>
           Mỗi trang mẫu sẽ tạo thành một ảnh gồm nhiều chất liệu. Mặc định chọn tất cả, bạn có thể lọc theo nhóm.
         </CardDescription>
@@ -183,7 +183,7 @@ export function ConfirmStep({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Bước 5: Xác nhận</CardTitle>
+        <CardTitle>Bước 3: Xác nhận</CardTitle>
         <CardDescription>Kiểm tra lại rồi bấm bắt đầu. Mỗi trang mẫu tạo một ảnh và tính một lượt.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

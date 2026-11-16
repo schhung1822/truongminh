@@ -12,6 +12,7 @@ export type CustomerOption = {
   phone: string | null;
   ownerName: string;
   editable: boolean;
+  brandCount: number;
 };
 export type BrandOption = { id: string; name: string; logoCount: number };
 export type LogoOption = { id: string; url: string; width: number; height: number; note: string | null };
@@ -38,7 +39,7 @@ export async function createCustomerAction(
       createdById: user.id,
     },
   });
-  return { customer: { id: c.id, name: c.name, phone: c.phone, ownerName: user.name, editable: true } };
+  return { customer: { id: c.id, name: c.name, phone: c.phone, ownerName: user.name, editable: true, brandCount: 0 } };
 }
 
 export async function listBrandsAction(customerId: string): Promise<{ error?: string; brands?: BrandOption[] }> {
