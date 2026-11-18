@@ -23,6 +23,7 @@ export function FolderTile({
   tone = "default",
   onClick,
   href,
+  actions,
 }: {
   name: string;
   subtitle?: string;
@@ -34,6 +35,8 @@ export function FolderTile({
   onClick?: () => void;
   /** nếu có, ô là một liên kết (mở trang) thay vì nút */
   href?: string;
+  /** các nút nhỏ ở góc ô (đổi tên, xóa), đặt ngoài nút chính để không lồng nút trong nút */
+  actions?: React.ReactNode;
 }) {
   const className =
     "group relative flex h-full min-h-36 w-full flex-col items-center gap-1.5 rounded-xl border bg-card p-3 text-center transition-all hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50/60 hover:shadow-sm focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
@@ -66,7 +69,7 @@ export function FolderTile({
     </>
   );
   return (
-    <li>
+    <li className="group/tile relative">
       {href ? (
         <Link href={href} className={cn(className, "no-underline")}>
           {content}
@@ -76,6 +79,7 @@ export function FolderTile({
           {content}
         </button>
       )}
+      {actions}
     </li>
   );
 }

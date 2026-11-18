@@ -63,6 +63,18 @@ export function useFolderNav(initialCustomers: CustomerOption[], initial: Folder
       setCustomers((prev) => [c, ...prev]);
       openCustomer(c);
     },
+    onCustomerRenamed(id: string, name: string) {
+      setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, name } : c)));
+    },
+    onCustomerDeleted(id: string) {
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+    },
+    onBrandRenamed(id: string, name: string) {
+      setBrands((prev) => prev.map((b) => (b.id === id ? { ...b, name } : b)));
+    },
+    onBrandDeleted(id: string) {
+      setBrands((prev) => prev.filter((b) => b.id !== id));
+    },
     onBrandCreated(b: BrandOption) {
       setBrands((prev) => [b, ...prev]);
       openBrand(b);

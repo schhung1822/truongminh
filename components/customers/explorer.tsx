@@ -17,6 +17,7 @@ import {
   type CustomerOption,
   type LogoOption,
 } from "@/app/(app)/sessions/new/actions";
+import { FolderActions } from "./folder-actions";
 import type { FolderNav } from "./use-folder-nav";
 
 /**
@@ -64,7 +65,13 @@ export function Explorer({
         <PathBar crumbs={crumbs} />
 
         {level === "customer" && (
-          <CustomerFolders customers={nav.customers} onOpen={nav.openCustomer} onCreated={nav.onCustomerCreated} />
+          <CustomerFolders
+            customers={nav.customers}
+            onOpen={nav.openCustomer}
+            onCreated={nav.onCustomerCreated}
+            onRenamed={nav.onCustomerRenamed}
+            onDeleted={nav.onCustomerDeleted}
+          />
         )}
         {level === "brand" && (
           <BrandFolders
@@ -73,6 +80,8 @@ export function Explorer({
             loading={nav.loading}
             onOpen={nav.openBrand}
             onCreated={nav.onBrandCreated}
+            onRenamed={nav.onBrandRenamed}
+            onDeleted={nav.onBrandDeleted}
           />
         )}
         {level === "logo" && (
@@ -111,10 +120,14 @@ function CustomerFolders({
   customers,
   onOpen,
   onCreated,
+  onRenamed,
+  onDeleted,
 }: {
   customers: CustomerOption[];
   onOpen: (c: CustomerOption) => void;
   onCreated: (c: CustomerOption) => void;
+  onRenamed: (id: string, name: string) => void;
+  onDeleted: (id: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [showNew, setShowNew] = useState(customers.length === 0);
@@ -203,6 +216,15 @@ function CustomerFolders({
             count={c.brandCount}
             countLabel="thương hiệu"
             onClick={() => onOpen(c)}
+            actions={
+              <FolderActions
+                kind="customer"
+                id={c.id}
+                name={c.name}
+                onRenamed={(n) => onRenamed(c.id, n)}
+                onDeleted={() => onDeleted(c.id)}
+              />
+            }
           />
         ))}
       </TileGrid>
@@ -221,12 +243,16 @@ function BrandFolders({
   loading,
   onOpen,
   onCreated,
+  onRenamed,
+  onDeleted,
 }: {
   customer: CustomerOption;
   brands: BrandOption[];
   loading: boolean;
   onOpen: (b: BrandOption) => void;
   onCreated: (b: BrandOption) => void;
+  onRenamed: (id: string, name: string) => void;
+  onDeleted: (id: string) => void;
 }) {
   const [showNew, setShowNew] = useState(false);
   const [name, setName] = useState("");
@@ -279,7 +305,22 @@ function BrandFolders({
             <NewTile label="Thương hiệu mới" icon={<FolderPlusIcon />} onClick={() => setShowNew(true)} />
           )}
           {brands.map((b) => (
-            <FolderTile key={b.id} name={b.name} count={b.logoCount} countLabel="logo" onClick={() => onOpen(b)} />
+            <FolderTile
+              key={b.id}
+              name={b.name}
+              count={b.logoCount}
+              countLabel="logo"
+              onClick={() => onOpen(b)}
+              actions={
+                <FolderActions
+                  kind="brand"
+                  id={b.id}
+                  name={b.name}
+                  onRenamed={(n) => onRenamed(b.id, n)}
+                  onDeleted={() => onDeleted(b.id)}
+                />
+              }
+            />
           ))}
         </TileGrid>
       )}
