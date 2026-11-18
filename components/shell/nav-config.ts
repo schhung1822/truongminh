@@ -33,5 +33,5 @@ export const adminNav: NavItem[] = [
   { href: "/admin/design-styles", label: "Kiểu thiết kế", icon: PaletteIcon, ready: true },
   { href: "/admin/users", label: "Người dùng", icon: UsersIcon, ready: true },
   { href: "/admin/settings", label: "Cấu hình", icon: SettingsIcon, ready: true },
-  { href: "/admin/usage", label: "Thống kê", icon: BarChart3Icon, ready: false },
+  { href: "/admin/usage", label: "Thống kê", icon: BarChart3Icon, ready: true },
 ];
