@@ -42,5 +42,10 @@ next-env.d.ts
 
 # dự án
 !.env.example
+!.env.production.example
 /generated/
 /storage/
+
+# triển khai VPS
+/data/
+/backups/

@@ -4,7 +4,7 @@ Web app giúp đội sale của xưởng in tạo ảnh mô phỏng logo của k
 
 Tài liệu thiết kế: [docs/PLAN.md](docs/PLAN.md). Các quyết định kỹ thuật: [docs/DECISIONS.md](docs/DECISIONS.md).
 
-> Trạng thái: đang làm theo từng giai đoạn. Đã xong **GĐ1 đến GĐ5** (luồng bước 1 chạy với ảnh giả và với kie.ai thật). Tiếp theo: GĐ6 bước 2 (thiết kế theo chất liệu đã chọn).
+> Trạng thái: đã xong các chức năng trong brief (đăng nhập, chất liệu, trang mẫu, khách hàng/logo, bước 1 và bước 2 với kie.ai, lịch sử, ZIP/PDF, thống kê) và có sẵn gói triển khai Docker. Việc còn lại: chạy thử thật trên VPS.
 
 ## Chạy trên máy cá nhân (Windows)
 
@@ -55,6 +55,9 @@ Mặc định `IMAGE_PROVIDER="mock"`: ảnh AI là ảnh giả, **không tốn 
 | `npm run db:seed-demo` | Tạo chất liệu và trang mẫu giả để thử (chỉ dùng khi dev) |
 | `npm run db:studio` | Xem dữ liệu trong CSDL bằng giao diện web |
 
+| `npm run db:seed-styles` | Thêm 4 kiểu thiết kế khởi đầu nếu chưa có |
+| `npm run db:update-prompts` | Tạo phiên bản prompt mới từ mặc định trong mã (không ghi đè bản cũ) |
+
 > Nếu `npm test` báo lỗi lạ khi chạy trong Git Bash, hãy chạy trong PowerShell hoặc terminal của VS Code.
 
 ## Chạy thử với kie.ai thật (tốn tiền)
@@ -73,4 +76,79 @@ Xem chú thích tiếng Việt cho từng biến trong [.env.example](.env.examp
 
 ## Triển khai lên VPS
 
-Sẽ được viết đầy đủ ở giai đoạn 8 (Docker Compose, HTTPS, sao lưu). Hướng đi đã chốt nằm ở mục 9 của [docs/PLAN.md](docs/PLAN.md).
+Chạy bằng Docker Compose gồm 3 container trên cùng một VPS: `app` (web), `db` (MySQL) và `caddy` (tự xin chứng chỉ HTTPS). Lý do chọn cách này: [docs/PLAN.md](docs/PLAN.md) mục 9.
+
+### Cần chuẩn bị
+- Một VPS Linux (khuyến nghị Ubuntu 22.04/24.04, **tối thiểu 2 GB RAM**, ổ đĩa 40 GB trở lên vì ảnh 2K tốn dung lượng).
+- Một tên miền (ví dụ `anh-mau.xuongin.com`) đã trỏ bản ghi **A** về địa chỉ IP của VPS.
+- Tường lửa VPS chỉ mở cổng **22** (SSH), **80** và **443**. Không mở cổng 3306 (MySQL).
+
+### Cài lần đầu (gõ trên VPS)
+```bash
+# 1. Cài Docker (chỉ lần đầu)
+curl -fsSL https://get.docker.com | sh
+
+# 2. Lấy mã nguồn về (dự án đang để chế độ công khai, nếu để riêng tư thì cần thêm bước đăng nhập git)
+git clone https://github.com/schhung1822/truongminh.git
+cd truongminh
+
+# 3. Tạo file cấu hình, rồi mở ra điền: tên miền, 2 mật khẩu CSDL, tài khoản admin, khóa kie.ai
+cp .env.production.example .env
+nano .env          # sửa xong bấm Ctrl+O, Enter, Ctrl+X để lưu
+
+# 4. Build và chạy (lần đầu mất vài phút). Cấu trúc CSDL tự tạo khi web khởi động.
+docker compose up -d --build
+
+# 5. Tạo tài khoản admin và dữ liệu mặc định (chạy một lần, chạy lại cũng an toàn)
+docker compose exec app npm run db:seed
+docker compose exec app npm run db:seed-styles
+```
+
+Mở `https://tên-miền-của-bạn`, đăng nhập bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD` trong `.env`, **đổi mật khẩu ngay** ở trang Người dùng. Lần đầu Caddy cần vài chục giây để xin chứng chỉ HTTPS; nếu trình duyệt báo lỗi thì chờ một phút rồi tải lại.
+
+Sau đó: vào **Quản trị > Chất liệu** nhập chất liệu thật, **Trang mẫu** xếp chất liệu vào trang, **Cấu hình** kiểm tra model và số dư kie.ai.
+
+### Kiểm tra web đang chạy
+```bash
+docker compose ps                 # 3 dòng đều "running", app có chữ "healthy"
+docker compose logs -f app        # xem nhật ký web (thoát: Ctrl+C)
+```
+
+### Cập nhật bản mới
+```bash
+cd truongminh
+bash deploy/update.sh
+```
+Script tự sao lưu trước, lấy mã mới (`git pull`), build lại và khởi động lại. Cấu trúc CSDL tự cập nhật khi web khởi động.
+
+### Sao lưu (rất quan trọng)
+Có hai thứ không được mất: **CSDL MySQL** và **thư mục ảnh** (`data/storage`). Mất hai thứ này là mất toàn bộ khách hàng, logo, ảnh đã tạo.
+
+```bash
+bash deploy/backup.sh             # tạo thư mục backups/<ngày-giờ>/ gồm db.sql.gz và storage.tar.gz (giữ 14 bản gần nhất)
+```
+Đặt lịch chạy mỗi đêm 2 giờ sáng: gõ `crontab -e`, thêm dòng (sửa đường dẫn cho đúng):
+```
+0 2 * * * cd /root/truongminh && bash deploy/backup.sh >> backups/backup.log 2>&1
+```
+**Nhớ tải thư mục `backups/` về máy khác định kỳ** (ví dụ dùng WinSCP/FileZilla hoặc `scp`), đừng chỉ để trên chính VPS.
+
+Khôi phục (khi chuyển VPS hoặc hỏng dữ liệu): cài lại như "Cài lần đầu" đến bước 4, rồi:
+```bash
+gunzip -c backups/<bản>/db.sql.gz | docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" truongminh'
+tar -xzf backups/<bản>/storage.tar.gz -C data
+```
+
+### Bật callback của kie.ai (không bắt buộc)
+Mặc định web tự hỏi kie.ai kết quả mỗi vài giây, đã đủ dùng. Nếu muốn ảnh về nhanh hơn: ở https://kie.ai/settings tạo `webhookHmacKey`, dán vào `KIE_CALLBACK_SECRET`, đổi `KIE_CALLBACK_ENABLED="true"` trong `.env`, rồi `docker compose up -d` để áp dụng.
+
+### Sự cố thường gặp
+| Hiện tượng | Cách xử lý |
+|---|---|
+| Vào web báo lỗi chứng chỉ / không vào được | Kiểm tra tên miền đã trỏ đúng IP VPS chưa, cổng 80 và 443 đã mở chưa; xem `docker compose logs caddy` |
+| Đăng nhập xong bị đưa về trang đăng nhập | `APP_URL` trong `.env` phải đúng `https://tên-miền` (không có dấu `/` ở cuối) |
+| Ảnh báo lỗi 402 hoặc "hết token" | Nạp thêm token ở kie.ai (xem số dư ở thanh đầu trang) |
+| Sửa `.env` mà web không đổi | Chạy `docker compose up -d` để web đọc lại cấu hình |
+| Hết dung lượng ổ đĩa | Kiểm tra `df -h`; xóa bớt thư mục `backups/` cũ, hoặc nâng ổ đĩa VPS |
+
+Sau khi thay đổi lớn, nên tự kiểm tra: đăng nhập admin, tạo một phiên thử với 1 logo, xem ảnh về đủ và tải được ZIP/PDF.

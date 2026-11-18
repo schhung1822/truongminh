@@ -1,0 +1,14 @@
+# Cổng vào: tự xin và gia hạn chứng chỉ HTTPS cho tên miền trong biến DOMAIN (file .env).
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Cho phép tải logo tối đa 10MB (chừa dư cho phần đóng gói).
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy app:3000 {
+		# Không đệm phản hồi để các màn hình tải dần hiển thị đúng.
+		flush_interval -1
+	}
+}

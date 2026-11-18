@@ -1,0 +1,61 @@
+# Chạy trên VPS: 3 container (web, MySQL, Caddy lo HTTPS). Xem README, mục "Triển khai lên VPS".
+# Cần file .env cùng thư mục (sao chép từ .env.production.example).
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Ghi đè để web nối đúng vào container MySQL bên dưới.
+      DATABASE_URL: mysql://truongminh:${DB_PASSWORD}@db:3306/truongminh
+      STORAGE_DIR: /app/storage
+      TZ: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
+    volumes:
+      - ./data/storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    # Cho web 30 giây để gửi nốt các tác vụ sang kie.ai trước khi tắt.
+    stop_grace_period: 30s
+    expose:
+      - "3000"
+
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: truongminh
+      MYSQL_USER: truongminh
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    # Không mở cổng MySQL ra ngoài.
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
