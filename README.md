@@ -142,6 +142,15 @@ tar -xzf backups/<bản>/storage.tar.gz -C data
 ### Bật callback của kie.ai (không bắt buộc)
 Mặc định web tự hỏi kie.ai kết quả mỗi vài giây, đã đủ dùng. Nếu muốn ảnh về nhanh hơn: ở https://kie.ai/settings tạo `webhookHmacKey`, dán vào `KIE_CALLBACK_SECRET`, đổi `KIE_CALLBACK_ENABLED="true"` trong `.env`, rồi `docker compose up -d` để áp dụng.
 
+### Tự động đăng kịch bản chăm sóc Zalo (không bắt buộc)
+Trên máy cá nhân bạn bấm đăng bằng tay trong mục **Kịch bản chăm sóc**. Trên VPS có thể cho máy tự lên kịch bản và đăng đúng giờ:
+1. Trong `.env` đặt `ZALO_CARE_CRON_SECRET` là một chuỗi dài (16 ký tự trở lên), rồi `docker compose up -d`.
+2. Ở **Quản trị > Zalo** bật công tắc "Tự động lên kịch bản và đăng đúng giờ".
+3. Gõ `crontab -e` và thêm dòng chạy mỗi 10 phút (thay khóa và tên miền):
+```
+*/10 * * * * curl -fsS -X POST -H "x-cron-secret: KHÓA_CỦA_BẠN" https://tên-miền/api/jobs/zalo-care >> /root/truongminh/backups/care.log 2>&1
+```
+
 ### Sự cố thường gặp
 | Hiện tượng | Cách xử lý |
 |---|---|

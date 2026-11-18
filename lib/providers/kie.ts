@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { ProviderFatalError, type CreateTaskInput, type ImageProvider, type TaskInfo } from "./types";
+import { ProviderFatalError, ProviderRateLimitError, type CreateTaskInput, type ImageProvider, type TaskInfo } from "./types";
 
 /**
  * Kết nối kie.ai. Đặc tả lấy từ docs.kie.ai (đã đọc ngày 16/11/2026):
@@ -185,7 +185,7 @@ export function classifyError(code: number, msg?: string): Error {
     case 402:
       return new ProviderFatalError(`Tài khoản kie.ai đã hết credits${detail}. Hãy nạp thêm rồi bấm Tạo lại.`);
     case 429:
-      return new Error(`kie.ai đang giới hạn tốc độ, sẽ thử lại${detail}.`);
+      return new ProviderRateLimitError(`kie.ai đang giới hạn tốc độ, sẽ thử lại${detail}.`);
     case 404:
     case 422:
       return new ProviderFatalError(`kie.ai từ chối yêu cầu (mã ${code})${detail}.`);

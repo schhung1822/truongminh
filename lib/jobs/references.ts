@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { prepareLogoForAi } from "@/lib/imaging/logo-for-ai";
 import { getProvider } from "@/lib/providers";
 import { getStorage } from "@/lib/storage";
+import { once, shared } from "./throttle";
 
 /** Hậu tố có trong tên file logo đã chuẩn bị cho AI. Đổi số khi thay cách chuẩn bị logo để buộc tải lại. */
 const LOGO_VERSION_TAG = "-v2-";
@@ -28,13 +29,18 @@ export async function ensureLogoUrl(logo: {
     return logo.kieUrl;
   }
 
-  const stored = await getStorage().get(logo.normalizedPath);
-  const { buffer } = await prepareLogoForAi(stored);
-  const up = await provider.uploadReference({ buffer, fileName: `logo-${logo.id}${LOGO_VERSION_TAG.slice(0, -1)}.png`, contentType: "image/png" });
-  if (provider.cacheReferences) {
-    await db.logo.update({ where: { id: logo.id }, data: { kieUrl: up.url, kieExpiresAt: up.expiresAt } });
-  }
-  return up.url;
+  // nhiều ảnh cùng phiên cần logo này cùng lúc: chỉ upload một lần, số upload cùng lúc toàn hệ thống cũng bị giới hạn
+  return once(`logo:${logo.id}`, () =>
+    shared().uploadLimit(async () => {
+      const stored = await getStorage().get(logo.normalizedPath);
+      const { buffer } = await prepareLogoForAi(stored);
+      const up = await provider.uploadReference({ buffer, fileName: `logo-${logo.id}${LOGO_VERSION_TAG.slice(0, -1)}.png`, contentType: "image/png" });
+      if (provider.cacheReferences) {
+        await db.logo.update({ where: { id: logo.id }, data: { kieUrl: up.url, kieExpiresAt: up.expiresAt } });
+      }
+      return up.url;
+    }),
+  );
 }
 
 /** URL ảnh tham chiếu (ghép lớp 1 + lớp 2) của một chất liệu. */
@@ -51,16 +57,22 @@ export async function ensureMaterialUrl(material: {
     return material.kieRefUrl;
   }
 
-  const buffer = await getStorage().get(material.referencePath);
-  const up = await provider.uploadReference({
-    buffer,
-    fileName: `material-${material.id}.jpg`,
-    contentType: "image/jpeg",
-  });
-  if (provider.cacheReferences) {
-    await db.material.update({ where: { id: material.id }, data: { kieRefUrl: up.url, kieRefExpiresAt: up.expiresAt } });
-  }
-  return up.url;
+  const referencePath = material.referencePath;
+  // nhiều phiên cùng cần chất liệu này lúc chưa có link: chỉ upload một lần
+  return once(`material:${material.id}`, () =>
+    shared().uploadLimit(async () => {
+      const buffer = await getStorage().get(referencePath);
+      const up = await provider.uploadReference({
+        buffer,
+        fileName: `material-${material.id}.jpg`,
+        contentType: "image/jpeg",
+      });
+      if (provider.cacheReferences) {
+        await db.material.update({ where: { id: material.id }, data: { kieRefUrl: up.url, kieRefExpiresAt: up.expiresAt } });
+      }
+      return up.url;
+    }),
+  );
 }
 
 /** Lỗi không thể tự khắc phục bằng cách thử lại (thiếu ảnh tham chiếu). */

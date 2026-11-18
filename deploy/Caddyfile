@@ -2,9 +2,9 @@
 {$DOMAIN} {
 	encode zstd gzip
 
-	# Cho phép tải logo tối đa 10MB (chừa dư cho phần đóng gói).
+	# Cho phép tải logo 10MB và video kịch bản chăm sóc Zalo tới 50MB (chừa dư cho phần đóng gói).
 	request_body {
-		max_size 25MB
+		max_size 60MB
 	}
 
 	reverse_proxy app:3000 {

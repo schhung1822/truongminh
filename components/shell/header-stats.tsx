@@ -27,15 +27,15 @@ function Stat({
     <div
       title={title}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs",
-        tone === "warn" ? "border-red-200 bg-red-50 text-red-700" : "bg-muted/40",
+        "flex h-9 items-center gap-2 rounded-lg border px-2.5 text-xs",
+        tone === "warn"
+          ? "border-red-400/40 bg-red-500/15 text-red-200"
+          : "border-white/15 bg-white/5 text-white/70",
       )}
     >
       <span className="[&_svg]:size-4">{icon}</span>
-      <span className="flex flex-col leading-tight">
-        <span className="hidden text-[10px] text-muted-foreground sm:block">{label}</span>
-        <span className="text-sm font-semibold tabular-nums">{value}</span>
-      </span>
+      <span className="hidden sm:inline">{label}</span>
+      <span className="text-sm font-semibold tabular-nums text-white">{value}</span>
     </div>
   );
 }
@@ -66,7 +66,7 @@ export function HeaderStats({ role }: { role: "ADMIN" | "SALE" }) {
   }, [load]);
 
   if (!data) {
-    return <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" aria-hidden />;
+    return <div className="h-9 w-40 animate-pulse rounded-lg bg-white/10" aria-hidden />;
   }
 
   if (data.role === "SALE") {

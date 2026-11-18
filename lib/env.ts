@@ -15,6 +15,13 @@ const schema = z.object({
     .default("false")
     .transform((v) => v === "true"),
   KIE_CALLBACK_SECRET: z.string().optional(),
+  // Bot Zalo (gửi ảnh vào nhóm). Bỏ trống ZALO_BOT_TOKEN = tắt tính năng.
+  ZALO_BOT_TOKEN: z.string().optional(),
+  ZALO_API_BASE: z.url().default("https://bot-api.zaloplatforms.com"),
+  // Chuỗi bí mật (8-256 ký tự) Zalo gửi kèm mỗi webhook trong header X-Bot-Api-Secret-Token.
+  ZALO_WEBHOOK_SECRET: z.string().min(8).max(256).optional(),
+  // Khóa để máy chủ (cron) gọi /api/jobs/zalo-care chạy kịch bản chăm sóc tự động. Bỏ trống = tắt đường gọi này.
+  ZALO_CARE_CRON_SECRET: z.string().min(16).max(256).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

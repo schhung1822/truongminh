@@ -26,6 +26,12 @@ export type TaskInfo = {
  */
 export class ProviderFatalError extends Error {}
 
+/**
+ * Nhà cung cấp báo gửi quá nhanh (HTTP/mã 429). Chưa có tác vụ nào được tạo và chưa tốn gì, nên KHÔNG tính là một lần
+ * thử lại của ảnh: hệ thống chờ giãn ra rồi gửi lại (xem lib/jobs/throttle.ts).
+ */
+export class ProviderRateLimitError extends Error {}
+
 /** Nhà cung cấp tạo ảnh AI. Có hai bản cài đặt: MockProvider (ảnh giả) và KieProvider (kie.ai thật). */
 export interface ImageProvider {
   readonly name: "mock" | "kie";

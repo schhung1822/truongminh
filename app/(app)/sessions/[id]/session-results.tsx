@@ -23,6 +23,7 @@ import { estimateProgress, formatElapsed, overallProgress } from "@/lib/jobs/pro
 import { isFinished, type ImageView } from "@/lib/jobs/view";
 import { cn } from "@/lib/utils";
 import { refinishSessionAction, retryImageAction } from "../actions";
+import { ZaloSendButton, type ZaloGroupOption } from "./zalo-send";
 
 const POLL_MS = 3000;
 const TICK_MS = 500;
@@ -68,6 +69,7 @@ export function SessionResults({
   canRefinish,
   designHref,
   isDesign,
+  zaloGroups = [],
 }: {
   sessionId: string;
   initialImages: ImageView[];
@@ -77,6 +79,8 @@ export function SessionResults({
   designHref?: string;
   /** đang xem một lượt thiết kế (bước 2) */
   isDesign: boolean;
+  /** nhóm Zalo đang bật mà người xem được phép gửi vào (rỗng = ẩn nút gửi) */
+  zaloGroups?: ZaloGroupOption[];
 }) {
   const [images, setImages] = useState(initialImages);
   const [zoom, setZoom] = useState<ImageView | null>(null);
@@ -214,6 +218,7 @@ export function SessionResults({
                   >
                     <FileTextIcon /> Tải PDF
                   </a>
+                  <ZaloSendButton sessionId={sessionId} groups={zaloGroups} count={done} label="Gửi tất cả lên nhóm Zalo" />
                   {canRefinish && (
                     <Button type="button" variant="outline" size="sm" className="h-9" onClick={refinish} disabled={refinishing}>
                       {refinishing ? <Loader2Icon className="animate-spin" /> : <PaletteIcon />}
@@ -243,6 +248,8 @@ export function SessionResults({
               elapsedMs={img.ageMs + sinceReceived}
               onZoom={() => setZoom(img)}
               onRetried={refresh}
+              sessionId={sessionId}
+              zaloGroups={zaloGroups}
             />
           </li>
         ))}
@@ -265,7 +272,7 @@ export function SessionResults({
 }
 
 function stageText(img: ImageView): string {
-  if (img.status === "PENDING") return img.attempt > 1 ? `Đang gửi lại (lần ${img.attempt})...` : "Đang chuẩn bị và gửi ảnh tham chiếu...";
+  if (img.status === "PENDING") return img.attempt > 1 ? `Đang gửi lại (lần ${img.attempt})...` : "Đang xếp hàng và gửi ảnh tham chiếu...";
   return img.attempt > 1 ? `AI đang tạo ảnh (thử lại lần ${img.attempt})...` : "AI đang tạo ảnh...";
 }
 
@@ -275,7 +282,11 @@ function ImageCard({
   elapsedMs,
   onZoom,
   onRetried,
+  sessionId,
+  zaloGroups,
 }: {
+  sessionId: string;
+  zaloGroups: ZaloGroupOption[];
   img: ImageView;
   percent: number;
   elapsedMs: number;
@@ -341,6 +352,9 @@ function ImageCard({
             <a href={img.downloadUrl} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9")}>
               <DownloadIcon /> Tải về
             </a>
+          )}
+          {img.status === "SUCCESS" && (
+            <ZaloSendButton sessionId={sessionId} imageId={img.id} groups={zaloGroups} count={1} label="Gửi Zalo" />
           )}
           {img.canRetry && (
             <Button

@@ -3,20 +3,32 @@ import type { GeneratedImage } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { getProvider } from "@/lib/providers";
-import { ProviderFatalError } from "@/lib/providers/types";
+import { ProviderFatalError, ProviderRateLimitError } from "@/lib/providers/types";
 import { getStorage } from "@/lib/storage";
 import { mapLimit } from "./async";
 import { renderFinal } from "./finish";
 import { ensureLogoUrl, ensureMaterialUrl, NoReferenceError } from "./references";
 import { MAX_ATTEMPTS, type LayoutSnapshot } from "./snapshot";
 import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
+import { autoSendImage } from "@/lib/zalo/send";
+import {
+  ACTIVE_CAP_WAIT_MS,
+  MAX_ACTIVE_TASKS,
+  clearDeferred,
+  noteDeferred,
+  noteRateLimited,
+  reserveSubmitSlot,
+  shared,
+} from "./throttle";
 
-const POLL_INTERVAL_MS = 3_000; // mỗi tác vụ tối đa 1 lần hỏi trạng thái / 3 giây, dù có nhiều người cùng xem
+const POLL_INTERVAL_MS = 5_000; // mỗi tác vụ tối đa 1 lần hỏi trạng thái / 5 giây, dù có nhiều người cùng xem (ảnh mất 1-3 phút nên đủ mịn)
 const SUBMIT_LOCK_MS = 90_000;
 const FINALIZE_LOCK_MS = 180_000;
 const PROCESSING_TIMEOUT_MS = 15 * 60_000;
 const MAX_FINALIZE_FAILURES = 3;
 const CONCURRENCY = 4;
+const KICK_INTERVAL_MS = 4_000;
+const KICK_MAX_MS = 12 * 60_000; // hơi dài hơn thời gian hoãn tối đa của một ảnh (MAX_DEFER_MS)
 
 // Đếm số lần xử lý ảnh kết quả thất bại (một bản app duy nhất nên lưu trong bộ nhớ là đủ).
 const finalizeFailures = new Map<string, number>();
@@ -36,6 +48,7 @@ function errorText(e: unknown): string {
  * hết lượt thì FAILED để hiện nút "Tạo lại" cho sale.
  */
 async function failOrRetry(id: string, attempt: number, message: string, retryable: boolean) {
+  clearDeferred(shared().throttle, id);
   if (retryable && attempt < MAX_ATTEMPTS) {
     await db.generatedImage.updateMany({
       where: { id, status: { in: ["PENDING", "PROCESSING"] } },
@@ -47,6 +60,36 @@ async function failOrRetry(id: string, attempt: number, message: string, retryab
       data: { status: "FAILED", errorMessage: message, lastPolledAt: null },
     });
   }
+}
+
+/** Nhích thêm 0-1,5 giây để nhiều ảnh cùng bị hoãn không đồng loạt thức dậy một lúc. */
+function jitter(): number {
+  return Math.floor(Math.random() * 1_500);
+}
+
+/**
+ * Ảnh chưa tới lượt gửi (hệ thống đang giữ nhịp, hoặc bị kie.ai báo 429): giữ nguyên PENDING, hẹn giờ gửi lại.
+ * KHÔNG tăng số lần thử và không tính hạn mức. Hoãn tổng cộng quá lâu thì báo lỗi để sale bấm Tạo lại.
+ */
+async function deferImage(id: string, waitMs: number, reason: string) {
+  if (noteDeferred(shared().throttle, id)) {
+    await failOrRetry(id, MAX_ATTEMPTS, `${reason} Đã chờ quá lâu, vui lòng bấm Tạo lại.`, false);
+    return;
+  }
+  await db.generatedImage.updateMany({
+    where: { id, status: "PENDING" },
+    data: { lastPolledAt: new Date(Date.now() + waitMs + jitter()) },
+  });
+}
+
+/**
+ * Cổng giữ nhịp trước khi gửi sang kie.ai (chỉ áp dụng khi dùng kie): đủ số tác vụ đang chạy và còn suất gửi trong
+ * cửa sổ 10 giây. Trả số ms phải chờ, 0 = được gửi ngay.
+ */
+async function submitGate(): Promise<number> {
+  const active = await db.generatedImage.count({ where: { status: "PROCESSING" } });
+  if (active >= MAX_ACTIVE_TASKS) return ACTIVE_CAP_WAIT_MS;
+  return reserveSubmitSlot(shared().throttle);
 }
 
 /** Gửi tác vụ sang nhà cung cấp cho một ảnh PENDING. An toàn khi nhiều nơi cùng gọi (chỉ một nơi "chiếm" được). */
@@ -62,6 +105,14 @@ export async function submitImage(imageId: string): Promise<void> {
     include: { session: { include: { logo: true } } },
   });
   if (!img) return;
+
+  if (getProvider().name === "kie") {
+    const wait = await submitGate();
+    if (wait > 0) {
+      await deferImage(imageId, wait, "Hệ thống đang đông, ảnh đang xếp hàng.");
+      return;
+    }
+  }
 
   try {
     const snapshot = img.layoutSnapshot as unknown as LayoutSnapshot;
@@ -92,7 +143,15 @@ export async function submitImage(imageId: string): Promise<void> {
       where: { id: imageId, status: "PENDING" },
       data: { status: "PROCESSING", taskId, lastPolledAt: null },
     });
+    clearDeferred(shared().throttle, imageId);
   } catch (e) {
+    if (e instanceof ProviderRateLimitError) {
+      // kie.ai báo gửi quá nhanh: cả hệ thống nghỉ một lúc, ảnh này chờ lâu dần rồi gửi lại (không tính lần thử lại)
+      const wait = noteRateLimited(shared().throttle, imageId);
+      console.warn(`submitImage ${imageId}: kie.ai báo 429, hẹn gửi lại sau ${Math.round(wait / 1000)}s`);
+      await deferImage(imageId, wait, errorText(e));
+      return;
+    }
     console.error(`submitImage ${imageId} lỗi:`, errorText(e));
     const retryable = !(e instanceof NoReferenceError || e instanceof ProviderFatalError);
     await failOrRetry(imageId, img.attempt, errorText(e), retryable);
@@ -139,7 +198,8 @@ export async function pollImage(img: GeneratedImage): Promise<void> {
     where: { id: img.id, status: "PROCESSING" },
     data: { lastPolledAt: new Date(Date.now() + FINALIZE_LOCK_MS) },
   });
-  await finalizeImage(img.id, info.resultUrl ?? "", info.credits);
+  // xử lý ảnh bằng sharp tốn RAM/CPU: toàn hệ thống chỉ làm vài ảnh cùng lúc, còn lại xếp hàng
+  await shared().finalizeLimit(() => finalizeImage(img.id, info.resultUrl ?? "", info.credits));
 }
 
 async function finalizeImage(imageId: string, resultUrl: string, credits?: number): Promise<void> {
@@ -174,6 +234,8 @@ async function finalizeImage(imageId: string, resultUrl: string, credits?: numbe
       },
     });
     finalizeFailures.delete(imageId);
+    // Tự gửi vào các nhóm Zalo đang bật "Tự động gửi". Chạy nền, không chờ và không bao giờ làm hỏng việc tạo ảnh.
+    void autoSendImage(imageId);
   } catch (e) {
     const n = (finalizeFailures.get(imageId) ?? 0) + 1;
     console.error(`finalizeImage ${imageId} lỗi lần ${n}:`, errorText(e));
@@ -196,10 +258,21 @@ export async function syncSession(sessionId: string): Promise<void> {
   await mapLimit(open, CONCURRENCY, (img) => (img.status === "PENDING" ? submitImage(img.id) : pollImage(img)));
 }
 
-/** Chạy ngay sau khi tạo phiên (qua after()), không giữ request mở. */
+/**
+ * Chạy ngay sau khi tạo phiên (qua after()), không giữ request mở.
+ * Nếu còn ảnh đang xếp hàng chờ tới lượt gửi (hệ thống giữ nhịp, xem throttle.ts) thì tiếp tục đẩy tới khi gửi hết
+ * hoặc hết KICK_MAX_MS, để ảnh vẫn được gửi dù sale đã đóng trang. Sau khi đã gửi hết, việc hỏi kết quả do màn hình
+ * kết quả (hoặc callback) lo như cũ.
+ */
 export async function kickSession(sessionId: string): Promise<void> {
   try {
-    await syncSession(sessionId);
+    const deadline = Date.now() + KICK_MAX_MS;
+    for (;;) {
+      await syncSession(sessionId);
+      const waiting = await db.generatedImage.count({ where: { sessionId, status: "PENDING" } });
+      if (waiting === 0 || Date.now() > deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, KICK_INTERVAL_MS));
+    }
   } catch (e) {
     console.error(`kickSession ${sessionId} lỗi:`, errorText(e));
   }

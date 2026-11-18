@@ -30,6 +30,11 @@ enum ImageKind {
   DESIGN
 }
 
+enum ZaloDeliveryStatus {
+  SENT
+  FAILED
+}
+
 enum ImageStatus {
   PENDING
   PROCESSING
@@ -310,6 +315,8 @@ model GeneratedImage {
   retries        GeneratedImage[] @relation("ImageRetry")
   createdBy      User             @relation(fields: [createdById], references: [id])
   usageLogs      UsageLog[]
+  zaloDeliveries ZaloDelivery[]
+  zaloPosts      ZaloPost[]
 
   @@index([status, lastPolledAt])
   @@index([sessionId])
@@ -331,4 +338,178 @@ model UsageLog {
   @@index([userId, day])
   @@index([day])
   @@map("usage_logs")
+}
+
+// Nhóm Zalo mà bot được mời vào. chatId là "chat.id" bot nhận được từ webhook (hoặc admin nhập tay).
+model ZaloGroup {
+  id         String    @id @default(cuid())
+  chatId     String    @unique @db.VarChar(100)
+  name       String    @db.VarChar(100)
+  isActive   Boolean   @default(true)
+  autoSend   Boolean   @default(false) // true = mỗi ảnh tạo xong tự gửi vào nhóm này
+  lastSeenAt DateTime? // lần cuối bot nhận được tin từ nhóm này
+  insight    String?   @db.Text // mô tả nhóm (khách là ai, quan tâm gì...) để AI lên kịch bản chăm sóc phù hợp
+  careEnabled Boolean  @default(false) // true = AI lên kịch bản chăm sóc cho nhóm này
+  postsPerDay Int      @default(2) // số lượt đăng mỗi ngày (2-3)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  deliveries ZaloDelivery[]
+  posts      ZaloPost[]
+
+  @@map("zalo_groups")
+}
+
+// Mỗi ảnh gửi vào mỗi nhóm đúng một dòng (để tự động gửi không bị gửi trùng, và xem được lý do lỗi).
+model ZaloDelivery {
+  id        String             @id @default(cuid())
+  imageId   String
+  groupId   String
+  status    ZaloDeliveryStatus
+  messageId String?            @db.VarChar(100)
+  error     String?            @db.Text
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  image GeneratedImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  group ZaloGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([imageId, groupId])
+  @@index([groupId, createdAt])
+  @@map("zalo_deliveries")
+}
+
+enum ZaloContactRole {
+  CUSTOMER // khách nhắn bot (mặc định)
+  STAFF // nhân viên/chủ đã ghép nối: dùng được lệnh gõ nhanh
+  BLOCKED // bị chặn: lưu tin nhưng bot không trả lời
+}
+
+enum ZaloMessageDirection {
+  IN
+  OUT
+}
+
+enum ZaloMessageAuthor {
+  CONTACT // người nhắn tới bot
+  BOT // bot AI tự trả lời
+  HUMAN // nhân viên trả lời từ web
+  SYSTEM // tin lệnh/ghép nối do hệ thống trả
+}
+
+enum ZaloMessageKind {
+  TEXT
+  IMAGE
+  FILE
+  VOICE
+  STICKER
+  OTHER
+}
+
+// Mỗi người (hoặc nhóm) đã nhắn cho bot Zalo là một "hội thoại" trong Hộp thư.
+model ZaloContact {
+  id               String          @id @default(cuid())
+  chatId           String          @unique @db.VarChar(100)
+  chatType         String          @default("PRIVATE") @db.VarChar(20) // PRIVATE | GROUP
+  displayName      String          @db.VarChar(150)
+  role             ZaloContactRole @default(CUSTOMER)
+  pairCode         String?         @db.VarChar(10) // mã ghép nối 4 số đang chờ admin cho phép
+  pairRequestedAt  DateTime?
+  botPaused        Boolean         @default(false) // true = người thật đang tiếp quản, bot im
+  needsHuman       Boolean         @default(false) // bot bí hoặc khách đòi gặp nhân viên
+  unreadCount      Int             @default(0)
+  lastMessageAt    DateTime?
+  lastMessageText  String?         @db.VarChar(200)
+  contextResetAt   DateTime? // lệnh /reset: bot không đọc tin cũ hơn mốc này
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  messages ZaloMessage[]
+
+  @@index([lastMessageAt])
+  @@index([role])
+  @@map("zalo_contacts")
+}
+
+model ZaloMessage {
+  id               String               @id @default(cuid())
+  contactId        String
+  direction        ZaloMessageDirection
+  author           ZaloMessageAuthor
+  kind             ZaloMessageKind      @default(TEXT)
+  text             String?              @db.Text
+  mediaPath        String?              @db.VarChar(500) // ảnh đã tải về kho lưu trữ
+  zaloMessageId    String?              @unique @db.VarChar(100) // chống xử lý trùng khi Zalo gửi lại webhook
+  authorUserId     String? // nhân viên trả lời từ web
+  failed           Boolean              @default(false)
+  error            String?              @db.Text
+  promptTokens     Int?
+  completionTokens Int?
+  createdAt        DateTime             @default(now())
+
+  contact ZaloContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt])
+  @@index([author, createdAt])
+  @@map("zalo_messages")
+}
+
+enum ZaloPostKind {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+enum ZaloPostStatus {
+  PLANNED // đã lên kịch bản, chờ tới giờ hoặc chờ bấm đăng
+  SENDING
+  SENT
+  FAILED
+  SKIPPED // người dùng bỏ qua
+}
+
+// Thư viện ảnh/video do người dùng tải lên để dùng trong kịch bản chăm sóc (ví dụ mẫu mã sản phẩm mới).
+model ZaloAsset {
+  id          String       @id @default(cuid())
+  kind        ZaloPostKind // IMAGE hoặc VIDEO
+  title       String       @db.VarChar(150)
+  description String?      @db.Text // mô tả để AI biết nên dùng khi nào
+  path        String       @db.VarChar(500)
+  mimeType    String       @db.VarChar(100)
+  sizeBytes   Int
+  createdById String
+  createdAt   DateTime     @default(now())
+
+  posts ZaloPost[]
+
+  @@index([createdAt])
+  @@map("zalo_assets")
+}
+
+// Một lượt đăng trong kịch bản chăm sóc nhóm Zalo: AI lên sẵn nội dung và giờ, người dùng chỉnh được, rồi đăng.
+model ZaloPost {
+  id               String         @id @default(cuid())
+  groupId          String
+  scheduledAt      DateTime
+  kind             ZaloPostKind
+  text             String         @db.Text
+  assetId          String?
+  imageId          String? // ảnh đã tạo trong hệ thống (mẫu mã mới)
+  status           ZaloPostStatus @default(PLANNED)
+  reason           String?        @db.VarChar(300) // vì sao AI chọn nội dung này (trời rét, dịp lễ...)
+  error            String?        @db.Text
+  sentAt           DateTime?
+  aiGenerated      Boolean        @default(true)
+  editedAt         DateTime?
+  editedByUserId   String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  group ZaloGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  asset ZaloAsset?      @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  image GeneratedImage? @relation(fields: [imageId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, scheduledAt])
+  @@index([status, scheduledAt])
+  @@map("zalo_posts")
 }
