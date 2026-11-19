@@ -54,7 +54,6 @@ async function main() {
         groupName,
         printTech,
         descHuman: `Chất liệu mẫu để thử: ${name}.`,
-        descAi: `${name} surface, color ${color}, matte finish, logo appears ${printTech === "Khắc laser" ? "engraved" : "printed flat"}.`,
         sortOrder: i + 1,
       },
     });

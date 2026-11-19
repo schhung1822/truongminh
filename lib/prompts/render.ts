@@ -43,19 +43,19 @@ export function renderPrompt(template: string, values: Partial<Record<PromptVari
   });
 }
 
-export type MaterialForPrompt = { descAi: string; printTech: string };
+export type MaterialForPrompt = { printTech: string };
 
 /**
- * Sinh {{materials_list}}. Mỗi dòng: "Cell 3 = reference image 4: <mô tả cho AI>, technique: <công nghệ in>".
+ * Sinh {{materials_list}}. Mỗi dòng: "Cell 3 = reference image 4: <cách lấy chất liệu>, technique: <công nghệ in>".
+ * Chất liệu được mô tả hoàn toàn bằng ảnh tham chiếu hai nửa (trái = mặt trước, phải = mặt sau), không có mô tả chữ.
  * Ảnh tham chiếu số 1 là logo nên ô thứ k (tính từ 1) ứng với ảnh tham chiếu số k + 1.
  * Nếu trang chưa đầy ô thì thêm dòng dặn AI để trống các ô còn lại.
  */
 export function buildMaterialsList(materials: MaterialForPrompt[], grid: { cols: number; rows: number }): string {
   const clean = (s: string) => s.replace(/\s+/g, " ").trim();
-  const lines = materials.map((m, i) => {
-    const desc = clean(m.descAi) || "use the front and back materials shown in the two panels of the reference image";
-    return `Cell ${i + 1} = reference image ${i + 2}: ${desc}, technique: ${clean(m.printTech)}`;
-  });
+  const lines = materials.map(
+    (m, i) => `Cell ${i + 1} = reference image ${i + 2}: use the front and back materials shown in the two panels of the reference image, technique: ${clean(m.printTech)}`,
+  );
 
   const total = grid.cols * grid.rows;
   if (materials.length < total) {

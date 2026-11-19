@@ -50,6 +50,59 @@ export async function renderText(opts: {
   return { input: data, width: info.width, height: info.height };
 }
 
+/** Vẽ chữ xuống dòng trong bề rộng `maxWidth`, tối đa `maxLines` dòng (dài hơn thì cắt và thêm "…"). */
+export async function renderTextWrap(opts: {
+  text: string;
+  size: number;
+  weight?: FontWeight;
+  color?: string;
+  maxWidth: number;
+  maxLines: number;
+}): Promise<TextImage> {
+  const font = FONTS[opts.weight ?? "regular"];
+  const clean = opts.text.replace(/\s+/g, " ").trim();
+  const single = await renderText({ ...opts, text: clean });
+  if (single.width <= opts.maxWidth) return single; // vừa một dòng
+
+  const wrapped = async (text: string) => {
+    const { data, info } = await sharp({
+      text: {
+        text: `<span foreground="${opts.color ?? "#222222"}">${escapeMarkup(text)}</span>`,
+        font: `${font.family} ${Math.max(6, Math.round(opts.size))}`,
+        fontfile: path.join(FONT_DIR, font.file),
+        width: Math.round(opts.maxWidth),
+        wrap: "word-char",
+        rgba: true,
+        dpi: 72,
+      },
+    })
+      .png()
+      .toBuffer({ resolveWithObject: true });
+    return { input: data, width: info.width, height: info.height } satisfies TextImage;
+  };
+  const lineCount = (img: TextImage) => Math.max(1, Math.round(img.height / single.height));
+
+  const full = await wrapped(clean);
+  if (lineCount(full) <= opts.maxLines) return full;
+
+  // quá số dòng cho phép: cắt bớt chữ cuối và thêm "…"
+  const chars = [...clean];
+  let lo = 1;
+  let hi = chars.length - 1;
+  let best: TextImage | null = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const candidate = await wrapped(chars.slice(0, mid).join("").trimEnd() + "…");
+    if (lineCount(candidate) <= opts.maxLines) {
+      best = candidate;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best ?? (await renderTextFit({ ...opts, text: clean }));
+}
+
 /** Vẽ chữ nhưng cắt bớt và thêm "…" nếu rộng hơn maxWidth. */
 export async function renderTextFit(opts: {
   text: string;

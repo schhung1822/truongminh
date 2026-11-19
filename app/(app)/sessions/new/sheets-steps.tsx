@@ -23,8 +23,8 @@ export type SheetOption = {
   resolution: string;
   /** số chất liệu dùng được (đang bật và đã có ảnh tham chiếu) */
   usable: number;
-  /** số chất liệu dùng được nhưng chưa có mô tả cho AI */
-  missingDesc: number;
+  /** số ảnh sẽ tạo từ trang này (trang nhiều chất liệu hơn số ô được chia thành nhiều ảnh) */
+  images: number;
   /** trang mẫu mặc định cho nút Tạo nhanh */
   isDefault: boolean;
   total: number;
@@ -50,6 +50,7 @@ export function SheetsStep({
   const shown = group ? sheets.filter((s) => s.groupName === group) : sheets;
   const selectable = shown.filter((s) => s.usable > 0);
   const allShownSelected = selectable.length > 0 && selectable.every((s) => selected.has(s.id));
+  const selectedImages = sheets.filter((s) => selected.has(s.id)).reduce((n, s) => n + s.images, 0);
 
   function toggle(id: string) {
     const next = new Set(selected);
@@ -72,7 +73,7 @@ export function SheetsStep({
       <CardHeader>
         <CardTitle>Bước 2: Chọn trang mẫu</CardTitle>
         <CardDescription>
-          Mỗi trang mẫu sẽ tạo thành một ảnh gồm nhiều chất liệu. Mặc định chọn tất cả, bạn có thể lọc theo nhóm.
+          Mỗi ảnh gồm nhiều chất liệu. Trang mẫu có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh. Mặc định chọn tất cả, bạn có thể lọc theo nhóm.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -127,7 +128,8 @@ export function SheetsStep({
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{s.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {s.usable}/{s.total} chất liệu dùng được · {s.cols} x {s.rows} · {s.aspectRatio} · {s.resolution}
+                          {s.usable}/{s.total} chất liệu dùng được · {s.images > 1 ? `${s.images} ảnh, mỗi ảnh ` : ""}
+                          {s.cols} x {s.rows} · {s.aspectRatio} · {s.resolution}
                         </p>
                       </div>
                       {s.groupName && <Badge variant="secondary">{s.groupName}</Badge>}
@@ -141,7 +143,7 @@ export function SheetsStep({
         )}
 
         <Button type="button" className="h-11 self-start px-6" disabled={selected.size === 0} onClick={onNext}>
-          Tiếp tục: xác nhận ({selected.size} trang)
+          Tiếp tục: xác nhận ({selected.size} trang, {selectedImages} ảnh)
           <ChevronRightIcon />
         </Button>
       </CardContent>
@@ -172,10 +174,10 @@ export function ConfirmStep({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const needed = sheets.length;
+  // số ảnh = tổng số ảnh của các trang (trang dài chia nhiều ảnh), mỗi ảnh tính một lượt
+  const needed = sheets.reduce((n, s) => n + s.images, 0);
   const overQuota = quota !== null && needed > quota.left;
-  const cost = estimateCost(sheets.map((x) => x.resolution));
-  const missingDesc = sheets.reduce((n, x) => n + x.missingDesc, 0);
+  const cost = estimateCost(sheets.flatMap((x) => Array<string>(x.images).fill(x.resolution)));
 
   function start() {
     setError(null);
@@ -200,7 +202,7 @@ export function ConfirmStep({
     <Card>
       <CardHeader>
         <CardTitle>Bước 3: Xác nhận</CardTitle>
-        <CardDescription>Kiểm tra lại rồi bấm bắt đầu. Mỗi trang mẫu tạo một ảnh và tính một lượt.</CardDescription>
+        <CardDescription>Kiểm tra lại rồi bấm bắt đầu. Mỗi ảnh tính một lượt; trang mẫu nhiều chất liệu sẽ tạo nhiều ảnh.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error && (
@@ -232,7 +234,9 @@ export function ConfirmStep({
               {logo.width}x{logo.height}px
             </dd>
             <dt className="text-muted-foreground">Số trang mẫu</dt>
-            <dd className="font-medium">{needed} (tạo {needed} ảnh)</dd>
+            <dd className="font-medium">
+              {sheets.length} (tạo {needed} ảnh)
+            </dd>
             {showCost && (
               <>
                 <dt className="text-muted-foreground">Chi phí ước tính</dt>
@@ -255,19 +259,13 @@ export function ConfirmStep({
         <ul className="flex flex-wrap gap-2">
           {sheets.map((s) => (
             <li key={s.id}>
-              <Badge variant="secondary">{s.name}</Badge>
+              <Badge variant="secondary">
+                {s.name}
+                {s.images > 1 && ` · ${s.images} ảnh`}
+              </Badge>
             </li>
           ))}
         </ul>
-
-        {missingDesc > 0 && (
-          <Alert>
-            <AlertDescription>
-              {missingDesc} chất liệu chưa có &quot;Mô tả cho AI&quot; (bề mặt, màu, độ bóng, cách logo hiện lên). Ảnh vẫn tạo
-              được nhưng AI chỉ dựa vào ảnh tham chiếu nên có thể kém chính xác. Nên bổ sung ở Quản trị &gt; Chất liệu.
-            </AlertDescription>
-          </Alert>
-        )}
 
         {overQuota && (
           <Alert variant="destructive">

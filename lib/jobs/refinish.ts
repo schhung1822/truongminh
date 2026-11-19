@@ -1,5 +1,7 @@
 import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
+import type { LabelPos, LabelStyle } from "@/lib/imaging/label-pos";
 import { getStorage } from "@/lib/storage";
 import { mapLimit } from "./async";
 import { renderFinal } from "./finish";
@@ -8,9 +10,18 @@ import { renderFinal } from "./finish";
  * Vẽ lại ảnh hoàn thiện của các ảnh ĐÃ XONG trong một phiên từ ảnh gốc AI đang lưu, theo giao diện và cấu hình hiện tại
  * (đầu trang, nhãn chất liệu, chân trang). KHÔNG gọi AI nên không tốn token. Trả về số ảnh đã vẽ lại.
  */
-export async function refinishSession(sessionId: string): Promise<number> {
+export async function refinishSession(
+  sessionId: string,
+  opts: { imageId?: string; labelPos?: LabelPos; labelStyle?: LabelStyle } = {},
+): Promise<number> {
   const images = await db.generatedImage.findMany({
-    where: { sessionId, status: "SUCCESS", originalPath: { not: null }, retries: { none: {} } },
+    where: {
+      sessionId,
+      status: "SUCCESS",
+      originalPath: { not: null },
+      retries: { none: {} },
+      ...(opts.imageId ? { id: opts.imageId } : {}),
+    },
     include: { session: { include: { logo: { include: { brand: true } } } } },
   });
   const storage = getStorage();
@@ -19,11 +30,23 @@ export async function refinishSession(sessionId: string): Promise<number> {
   await mapLimit(images, 3, async (img) => {
     try {
       const original = await storage.get(img.originalPath!);
-      const final = await renderFinal(img, img.session.logo.brand.name, original);
+      // đổi kiểu hoặc vị trí nhãn: ghi vào bản chụp của ảnh để các lần vẽ lại và tạo lại sau này vẫn giữ
+      const changed = !!(opts.labelPos || opts.labelStyle);
+      const snapshot = changed
+        ? {
+            ...(img.layoutSnapshot as object),
+            ...(opts.labelPos ? { labelPos: opts.labelPos } : {}),
+            ...(opts.labelStyle ? { labelStyle: opts.labelStyle } : {}),
+          }
+        : img.layoutSnapshot;
+      const final = await renderFinal({ ...img, layoutSnapshot: snapshot }, img.session.logo.brand.name, original);
       // tên file mới mỗi lần để trình duyệt không dùng lại ảnh cũ đã lưu đệm
       const key = `images/${img.sessionId}/${img.id}-final-${Date.now().toString(36)}.jpg`;
       await storage.put(key, final);
-      await db.generatedImage.update({ where: { id: img.id }, data: { finalPath: key } });
+      await db.generatedImage.update({
+        where: { id: img.id },
+        data: { finalPath: key, ...(changed ? { layoutSnapshot: snapshot as Prisma.InputJsonValue } : {}) },
+      });
       if (img.finalPath && img.finalPath !== key) {
         await storage.delete(img.finalPath).catch(() => {});
         await storage.delete(img.finalPath.replace(/\.jpg$/, "-thumb.jpg")).catch(() => {}); // ảnh thu nhỏ cũ

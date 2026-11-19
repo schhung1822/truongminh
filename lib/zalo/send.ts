@@ -8,9 +8,8 @@ import { getStorage } from "@/lib/storage";
 import { buildCaption, publicSessionUrl } from "./caption";
 import { ZaloError } from "./client";
 import { getZaloClient } from "./index";
-import { groupSendEnabled } from "./settings";
+import { getZaloSettings, groupSendEnabled } from "./settings";
 
-const GAP_BETWEEN_SENDS_MS = 600; // giãn nhịp để không dồn dập vào nhóm và vào API
 const RETRY_DELAYS_MS = [3_000, 8_000]; // lỗi tạm thời: thử lại tối đa 2 lần
 /** Lỗi mà gửi tiếp ảnh khác vào cùng nhóm cũng sẽ lỗi y hệt: dừng cả loạt. */
 const STOP_CODES = new Set([401, 410, 422, 429]);
@@ -37,6 +36,8 @@ export async function deliverImage(imageId: string, group: GroupRef, opts?: { fo
   if (!client) return { outcome: "failed", error: "Chưa cấu hình ZALO_BOT_TOKEN.", stop: true };
   if (!(await groupSendEnabled())) return { outcome: "failed", error: "Chức năng gửi ảnh vào nhóm Zalo đang tắt (Quản trị > Zalo).", stop: true };
 
+  const settings = await getZaloSettings(); // mẫu chữ đi kèm ảnh và khoảng nghỉ giữa các ảnh
+
   return shared().zaloSend(async () => {
     const existing = await db.zaloDelivery.findUnique({ where: { imageId_groupId: { imageId, groupId: group.id } } });
     if (existing?.status === "SENT" && !opts?.force) return { outcome: "skipped" } as const;
@@ -59,13 +60,16 @@ export async function deliverImage(imageId: string, group: GroupRef, opts?: { fo
         : snapshot.imageNumber
           ? `Ảnh ${snapshot.imageNumber} · ${snapshot.title}`
           : snapshot.title;
-    const caption = buildCaption({
-      brandName: img.session.logo.brand.name,
-      customerName: img.session.logo.brand.customer.name,
-      label,
-      saleName: img.createdBy.name,
-      sessionUrl: publicSessionUrl(getEnv().APP_URL, img.sessionId),
-    });
+    const caption = buildCaption(
+      {
+        brandName: img.session.logo.brand.name,
+        customerName: img.session.logo.brand.customer.name,
+        label,
+        saleName: img.createdBy.name,
+        sessionUrl: publicSessionUrl(getEnv().APP_URL, img.sessionId),
+      },
+      settings.captionTemplate,
+    );
 
     let error: ZaloError | Error | undefined;
     let messageId: string | undefined;
@@ -94,7 +98,7 @@ export async function deliverImage(imageId: string, group: GroupRef, opts?: { fo
       update: { status: error ? "FAILED" : "SENT", messageId: messageId ?? null, error: error ? errText(error) : null },
     });
 
-    await sleep(GAP_BETWEEN_SENDS_MS);
+    await sleep(settings.sendGapMs);
     if (error) {
       return { outcome: "failed", error: errText(error), stop: error instanceof ZaloError && STOP_CODES.has(error.code) } as const;
     }

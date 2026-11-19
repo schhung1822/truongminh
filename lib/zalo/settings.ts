@@ -12,8 +12,6 @@ export const zaloSettingsSchema = z.object({
   enabled: z.boolean(),
   /** Gửi ảnh mẫu vào nhóm Zalo (tự động hoặc bấm nút). */
   groupSend: z.boolean(),
-  /** Hộp thư: lưu tin khách nhắn bot, xem và trả lời ngay trên web. */
-  inbox: z.boolean(),
   /** Nhân viên gõ /ghepnoi để ghép tài khoản Zalo, admin bấm Cho phép. */
   pairing: z.boolean(),
   /** Lệnh gõ nhanh cho tài khoản đã ghép nối (/help, /status...). */
@@ -24,10 +22,14 @@ export const zaloSettingsSchema = z.object({
   groupReply: z.boolean(),
   /** Bot nhìn được ảnh khách gửi (cần model AI hỗ trợ ảnh). */
   vision: z.boolean(),
-  /** Nút "AI soạn" gợi ý câu trả lời trong Hộp thư. */
-  aiDraft: z.boolean(),
-  /** Nhân viên trả lời từ web thì bot tạm dừng ở hội thoại đó (tiếp quản). */
-  takeoverOnReply: z.boolean(),
+  /** Khi bot chuyển khách cho nhân viên, nhắn báo cho các nhân viên đã ghép nối (qua Zalo). */
+  staffNotify: z.boolean(),
+  /** Trả lời nhanh theo từ khóa (không tốn token), chạy trước bot AI. */
+  quickReplies: z.boolean(),
+  /** Gửi lời chào cho khách nhắn lần đầu. */
+  welcome: z.boolean(),
+  /** Bật giờ làm việc: ngoài giờ thì bot dùng câu "ngoài giờ" khi chuyển nhân viên. */
+  hoursEnabled: z.boolean(),
 
   /** Model chat của kie.ai, ví dụ gpt-5-2. */
   chatModel: z.string().trim().min(1, "Vui lòng nhập tên model chat.").max(100),
@@ -41,6 +43,29 @@ export const zaloSettingsSchema = z.object({
   unsupportedReply: z.string().trim().min(1).max(500),
   /** Câu bot trả khi chuyển cho nhân viên. */
   handoffReply: z.string().trim().min(1).max(500),
+  /** Câu bot trả khi chuyển nhân viên mà đang ngoài giờ làm việc. */
+  afterHoursReply: z.string().trim().min(1, "Câu trả lời ngoài giờ không được để trống.").max(500),
+  /** Lời chào khách nhắn lần đầu. */
+  welcomeMessage: z.string().trim().min(1, "Lời chào không được để trống.").max(1000),
+  /** Từ khóa khách gõ là chuyển nhân viên ngay (mỗi dòng một từ hoặc cụm từ). */
+  handoffKeywords: z.string().trim().max(2000),
+  /** Các câu trả lời nhanh theo từ khóa. */
+  quickReplyList: z
+    .array(
+      z.object({
+        keywords: z.string().trim().min(1, "Mỗi câu trả lời nhanh cần ít nhất một từ khóa.").max(300),
+        reply: z.string().trim().min(1, "Mỗi câu trả lời nhanh cần nội dung trả lời.").max(1500),
+      }),
+    )
+    .max(30, "Tối đa 30 câu trả lời nhanh."),
+  /** Giờ làm việc: từ giờ, đến giờ (HH:MM, theo múi giờ APP_TIMEZONE), và các ngày trong tuần (0 = Chủ nhật). */
+  hoursStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Giờ bắt đầu phải dạng HH:MM, ví dụ 08:00."),
+  hoursEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Giờ kết thúc phải dạng HH:MM, ví dụ 17:30."),
+  hoursDays: z.array(z.number().int().min(0).max(6)).min(1, "Chọn ít nhất một ngày làm việc.").max(7),
+  /** Bot im ở hội thoại đã chuyển nhân viên; sau bao nhiêu giờ thì tự trả lời lại. 0 = không tự trả lại. */
+  botResumeHours: z.coerce.number().int("Phải là số nguyên.").min(0).max(720),
+  /** Lệnh gõ nhanh nào đang dùng được (ghép nối /ghepnoi bật riêng ở công tắc Ghép nối). */
+  enabledCommands: z.array(z.enum(["help", "status", "today", "waiting", "done", "reset", "human"])),
   /** Tối đa số lượt bot trả lời mỗi ngày (cả hệ thống), để không tốn token ngoài ý muốn. 0 = không trả lời. */
   botDailyLimit: z.coerce.number().int("Phải là số nguyên.").min(0).max(100000),
   /** Tối đa số lượt bot trả lời mỗi giờ cho một người, chống nhắn dồn dập. */
@@ -59,6 +84,14 @@ export const zaloSettingsSchema = z.object({
   careLongitude: z.coerce.number().min(-180, "Kinh độ từ -180 đến 180.").max(180, "Kinh độ từ -180 đến 180."),
   /** Lên kịch bản trước bao nhiêu ngày. */
   careHorizonDays: z.coerce.number().int("Phải là số nguyên.").min(1).max(3),
+
+  /**
+   * Chữ đi kèm mỗi ảnh gửi vào nhóm. Dùng {thuong_hieu} {khach} {nhan} {sale} {link}; dòng nào chỉ có chỗ trống (ví dụ {link} khi chưa có
+   * địa chỉ công khai) thì tự bỏ.
+   */
+  captionTemplate: z.string().trim().min(1, "Mẫu chữ đi kèm ảnh không được để trống.").max(1000),
+  /** Khoảng nghỉ giữa hai ảnh gửi vào nhóm (mili giây), để không dồn dập. */
+  sendGapMs: z.coerce.number().int("Phải là số nguyên.").min(200, "Tối thiểu 200 ms.").max(10000, "Tối đa 10000 ms."),
 });
 
 export type ZaloSettings = z.infer<typeof zaloSettingsSchema>;
@@ -66,14 +99,15 @@ export type ZaloSettings = z.infer<typeof zaloSettingsSchema>;
 export const ZALO_SETTING_DEFAULTS: ZaloSettings = {
   enabled: true,
   groupSend: true,
-  inbox: true,
   pairing: true,
   commands: true,
   chatbot: false,
   groupReply: false,
   vision: false,
-  aiDraft: true,
-  takeoverOnReply: true,
+  staffNotify: true,
+  quickReplies: false,
+  welcome: false,
+  hoursEnabled: false,
   chatModel: "gpt-5-2",
   botPrompt:
     "Bạn là trợ lý tư vấn của xưởng in logo lên nhiều chất liệu (in UV, in khắc). Xưng em, gọi khách là anh/chị. " +
@@ -83,6 +117,15 @@ export const ZALO_SETTING_DEFAULTS: ZaloSettings = {
   includeMaterials: true,
   unsupportedReply: "Em chưa đọc được loại tin này. Anh/chị nhắn chữ giúp em nhé, hoặc em sẽ nhờ nhân viên hỗ trợ ngay.",
   handoffReply: "Dạ em đã báo nhân viên, anh/chị chờ chút để được hỗ trợ trực tiếp nhé.",
+  afterHoursReply: "Hiện xưởng đang ngoài giờ làm việc. Em đã ghi nhận, nhân viên sẽ trả lời anh/chị ngay khi vào ca nhé.",
+  welcomeMessage: "Chào anh/chị ạ, em là trợ lý của xưởng. Anh/chị cần xem ảnh mẫu hay hỏi chất liệu, cứ nhắn em nhé.",
+  handoffKeywords: "gặp nhân viên\ngặp người\nnói chuyện với người\nkhiếu nại\nbáo giá",
+  quickReplyList: [],
+  hoursStart: "08:00",
+  hoursEnd: "17:30",
+  hoursDays: [1, 2, 3, 4, 5, 6],
+  botResumeHours: 12,
+  enabledCommands: ["help", "status", "today", "waiting", "done", "reset", "human"],
   botDailyLimit: 300,
   botHourlyLimitPerContact: 20,
   contextMessages: 12,
@@ -93,6 +136,8 @@ export const ZALO_SETTING_DEFAULTS: ZaloSettings = {
   careLatitude: 21.0285,
   careLongitude: 105.8542,
   careHorizonDays: 2,
+  captionTemplate: "{thuong_hieu} · {khach}\n{nhan}\nSale: {sale}\n{link}",
+  sendGapMs: 600,
 };
 
 const KEY_PREFIX = "zalo.";
@@ -121,6 +166,27 @@ export async function saveZaloSettings(values: ZaloSettings): Promise<void> {
       }),
     ),
   );
+}
+
+/**
+ * Cập nhật một phần cấu hình (mỗi trang cài đặt chỉ gửi phần của mình). Trộn với giá trị hiện tại, kiểm tra cả bộ rồi chỉ lưu phần được gửi.
+ * Trả về thông báo lỗi đầu tiên nếu không hợp lệ.
+ */
+export async function updateZaloSettings(patch: Partial<ZaloSettings>): Promise<{ ok: true } | { ok: false; error: string }> {
+  const current = await getZaloSettings();
+  const parsed = zaloSettingsSchema.safeParse({ ...current, ...patch });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const names = Object.keys(patch).filter((k) => k in ZALO_SETTING_DEFAULTS) as (keyof ZaloSettings)[];
+  await db.$transaction(
+    names.map((name) =>
+      db.setting.upsert({
+        where: { key: KEY_PREFIX + name },
+        create: { key: KEY_PREFIX + name, value: parsed.data[name] as never },
+        update: { value: parsed.data[name] as never },
+      }),
+    ),
+  );
+  return { ok: true };
 }
 
 /** Zalo chạy được = có token bot trong .env VÀ công tắc tổng đang bật. */

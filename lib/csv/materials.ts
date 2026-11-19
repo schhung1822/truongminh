@@ -44,18 +44,48 @@ export function parseCsv(text: string): string[][] {
   return rows.filter((r) => r.some((c) => c.trim() !== ""));
 }
 
-export type MaterialCsvRow = {
-  line: number; // số dòng trong file (dòng tiêu đề là 1)
-  code: string;
-  name: string;
-  groupName: string;
-  printTech: string;
-  descHuman: string;
-};
+/** Ô chứa đúng chữ này nghĩa là "xóa giá trị" (ô trống nghĩa là "giữ nguyên"). */
+export const CSV_CLEAR_TOKEN = "[xoa]";
 
-export type MaterialCsvParse = {
-  rows: MaterialCsvRow[];
-  errors: { line: number; message: string }[];
+/**
+ * Các cột của file CSV chất liệu. Một nơi duy nhất để cả nhập lẫn xuất dùng chung, nên file xuất ra nhập lại được ngay.
+ * Tên cột đọc không phân biệt hoa thường, dấu, khoảng trắng (có thêm các tên tiếng Việt cũ).
+ */
+export const MATERIAL_CSV_COLUMNS = [
+  "id", "code", "name", "thicknessMm", "groupName", "printTech", "baseMaterial", "technique", "surfaceFinish", "surfacePattern",
+  "colorCount", "frontColorName", "frontColorFamily", "frontColorConfidence", "backColorName", "backColorFamily", "backColorConfidence",
+  "seriesCode", "styleTags", "aiVisualNote", "descHuman", "photoIssue", "confidence", "needsReview", "reviewNote", "isActive", "sortOrder",
+] as const;
+export type MaterialCsvField = (typeof MATERIAL_CSV_COLUMNS)[number];
+
+const HEADER_ALIASES: Record<MaterialCsvField, string[]> = {
+  id: ["id"],
+  code: ["ma", "mavatlieu", "machatlieu", "code", "sku"],
+  name: ["ten", "tengoi", "tenchatlieu", "name"],
+  thicknessMm: ["doday", "dodaymm", "thickness", "thicknessmm"],
+  groupName: ["nhom", "nhomchatlieu", "group", "groupname"],
+  printTech: ["congnghein", "congnghe", "kythuatin", "printtech", "tech", "technology"],
+  baseMaterial: ["basematerial", "nhomchatlieuma"],
+  technique: ["technique"],
+  surfaceFinish: ["surfacefinish", "chatbemat"],
+  surfacePattern: ["surfacepattern", "hoatiet"],
+  colorCount: ["colorcount", "somau"],
+  frontColorName: ["frontcolorname", "tenmaumattruoc"],
+  frontColorFamily: ["frontcolorfamily", "homaumattruoc"],
+  frontColorConfidence: ["frontcolorconfidence"],
+  backColorName: ["backcolorname", "tenmaumatsau"],
+  backColorFamily: ["backcolorfamily", "homaumatsau"],
+  backColorConfidence: ["backcolorconfidence"],
+  seriesCode: ["seriescode", "dongnhacungcap"],
+  styleTags: ["styletags", "phongcach"],
+  aiVisualNote: ["aivisualnote"],
+  descHuman: ["mota", "motachonguoidoc", "description", "desc", "deschuman"],
+  photoIssue: ["photoissue", "vandeanh"],
+  confidence: ["confidence", "dotincay"],
+  needsReview: ["needsreview", "canxemlai"],
+  reviewNote: ["reviewnote", "ghichuxemlai"],
+  isActive: ["isactive", "dangbat"],
+  sortOrder: ["sortorder", "thutu"],
 };
 
 function normalizeHeader(h: string): string {
@@ -67,53 +97,59 @@ function normalizeHeader(h: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-const HEADER_ALIASES: Record<keyof Omit<MaterialCsvRow, "line">, string[]> = {
-  code: ["ma", "mavatlieu", "machatlieu", "code", "sku"],
-  name: ["ten", "tengoi", "tenchatlieu", "name"],
-  groupName: ["nhom", "nhomchatlieu", "group", "groupname"],
-  printTech: ["congnghein", "congnghe", "kythuatin", "printtech", "tech", "technology"],
-  descHuman: ["mota", "motachonguoidoc", "description", "desc"],
+/** undefined = giữ nguyên (cột không có hoặc ô trống), null = xóa ("[xoa]"), chuỗi = đặt giá trị. */
+export type CsvValue = string | null | undefined;
+
+export type MaterialCsvRow = {
+  line: number; // số dòng trong file (dòng tiêu đề là 1)
+  values: Partial<Record<MaterialCsvField, CsvValue>>;
 };
 
-/** Đọc file CSV chất liệu: cột mã, tên, nhóm, công nghệ in, mô tả (tên cột tiếng Việt hoặc tiếng Anh). */
+export type MaterialCsvParse = {
+  rows: MaterialCsvRow[];
+  errors: { line: number; message: string }[];
+  /** các cột đọc được (để báo cho người dùng) */
+  columns: MaterialCsvField[];
+};
+
+/** Đọc file CSV chất liệu (cả file xuất ra từ hệ thống lẫn file cũ chỉ có mã, tên, nhóm, công nghệ in, mô tả). */
 export function parseMaterialsCsv(text: string): MaterialCsvParse {
   const table = parseCsv(text);
   const errors: MaterialCsvParse["errors"] = [];
-  if (table.length === 0) return { rows: [], errors: [{ line: 1, message: "File rỗng." }] };
+  if (table.length === 0) return { rows: [], errors: [{ line: 1, message: "File rỗng." }], columns: [] };
 
   const header = table[0].map(normalizeHeader);
-  const index: Partial<Record<keyof typeof HEADER_ALIASES, number>> = {};
-  for (const [field, aliases] of Object.entries(HEADER_ALIASES) as [keyof typeof HEADER_ALIASES, string[]][]) {
+  const index: Partial<Record<MaterialCsvField, number>> = {};
+  for (const [field, aliases] of Object.entries(HEADER_ALIASES) as [MaterialCsvField, string[]][]) {
     const i = header.findIndex((h) => aliases.includes(h));
     if (i >= 0) index[field] = i;
   }
-  if (index.code === undefined || index.name === undefined) {
+  if (index.id === undefined && index.code === undefined) {
     return {
       rows: [],
-      errors: [{ line: 1, message: 'Dòng đầu tiên phải có tiêu đề cột, ít nhất gồm "mã" và "tên".' }],
+      errors: [{ line: 1, message: 'Dòng đầu tiên phải có tiêu đề cột, ít nhất gồm "mã" (code) hoặc "id".' }],
+      columns: [],
     };
   }
+  const columns = Object.keys(index) as MaterialCsvField[];
 
   const rows: MaterialCsvRow[] = [];
   const seen = new Set<string>();
   table.slice(1).forEach((cells, i) => {
     const line = i + 2;
-    const get = (f: keyof typeof HEADER_ALIASES) => (index[f] === undefined ? "" : (cells[index[f]!] ?? "").trim());
-    const row = {
-      line,
-      code: get("code"),
-      name: get("name"),
-      groupName: get("groupName"),
-      printTech: get("printTech"),
-      descHuman: get("descHuman"),
-    };
-    if (!row.code) return errors.push({ line, message: "Thiếu mã chất liệu." });
-    if (!row.name) return errors.push({ line, message: `Chất liệu ${row.code}: thiếu tên.` });
-    if (row.code.length > 50) return errors.push({ line, message: `Mã quá dài (tối đa 50 ký tự): ${row.code}` });
-    const key = row.code.toLowerCase();
-    if (seen.has(key)) return errors.push({ line, message: `Mã ${row.code} bị lặp trong file.` });
+    const values: MaterialCsvRow["values"] = {};
+    for (const field of columns) {
+      const raw = (cells[index[field]!] ?? "").trim();
+      if (raw === "") continue; // trống = giữ nguyên
+      values[field] = raw.toLowerCase() === CSV_CLEAR_TOKEN ? null : raw;
+    }
+    const id = values.id ?? "";
+    const code = values.code ?? "";
+    if (!id && !code) return errors.push({ line, message: "Thiếu cả id lẫn mã chất liệu." });
+    const key = id ? `id:${id}` : `code:${code.toLowerCase()}`;
+    if (seen.has(key)) return errors.push({ line, message: `${id ? `id ${id}` : `Mã ${code}`} bị lặp trong file.` });
     seen.add(key);
-    rows.push(row);
+    rows.push({ line, values });
   });
-  return { rows, errors };
+  return { rows, errors, columns };
 }

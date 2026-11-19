@@ -19,14 +19,14 @@ describe("prompt mặc định", () => {
   });
 
   it("sinh được prompt catalog đầy đủ cho trang 2x4 với 8 chất liệu", () => {
-    const mats = Array.from({ length: 8 }, (_, i) => ({ descAi: `front ${i}, back ${i}`, printTech: "UV" }));
+    const mats = Array.from({ length: 8 }, (_, i) => ({ printTech: `UV ${i}` }));
     const out = renderPrompt(DEFAULT_CATALOG_PROMPT, {
       cols: 2,
       rows: 4,
       materials_list: buildMaterialsList(mats, { cols: 2, rows: 4 }),
     });
     expect(out).toContain("grid of 2 columns and 4 rows");
-    expect(out).toContain("Cell 1 = reference image 2: front 0, back 0, technique: UV");
+    expect(out).toContain("Cell 1 = reference image 2: use the front and back materials shown in the two panels of the reference image, technique: UV 0");
     expect(out).toContain("Cell 8 = reference image 9:");
     expect(out).not.toContain("{{");
   });

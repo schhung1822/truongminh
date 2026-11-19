@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import { ASPECT_RATIOS, RESOLUTIONS } from "@/lib/image-options";
+import { ASPECT_RATIOS, MAX_MATERIALS_IN_SHEET, RESOLUTIONS } from "@/lib/image-options";
 import { validateSheetComposition } from "@/lib/sheets/validate";
 
 export type SheetSaveResult = { error?: string; id?: string };
@@ -18,7 +18,7 @@ const sheetSchema = z.object({
   resolution: z.enum(RESOLUTIONS),
   isActive: z.boolean(),
   isDefault: z.boolean().default(false),
-  materialIds: z.array(z.string()).max(50),
+  materialIds: z.array(z.string()).max(MAX_MATERIALS_IN_SHEET),
 });
 
 export type SheetInput = z.input<typeof sheetSchema>;

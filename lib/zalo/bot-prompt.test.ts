@@ -22,6 +22,21 @@ describe("buildSystemPrompt", () => {
     expect(s).toContain("Lan");
   });
 
+  it("có giờ làm việc thì báo cho AI đang trong hay ngoài giờ; không có thì bỏ mục", () => {
+    const hours = { description: "Thứ hai, từ 08:00 đến 17:30" };
+    expect(buildSystemPrompt({ ...base, hours: { ...hours, open: false } })).toContain("NGOÀI giờ làm việc");
+    expect(buildSystemPrompt({ ...base, hours: { ...hours, open: true } })).toContain("TRONG giờ làm việc");
+    expect(buildSystemPrompt(base)).not.toContain("Giờ làm việc của xưởng");
+  });
+
+  it("có độ dày thì ghi vào dòng chất liệu kèm quy ước cắt/khắc; không ai có độ dày thì bỏ quy ước", () => {
+    const withThickness = buildSystemPrompt({ ...base, materials: [{ ...base.materials[0], thicknessMm: 0.76 }] });
+    expect(withThickness).toContain("M1 | Mica trong | nhóm Nhựa | In UV | dày 0.76 mm (cao thành) | Trong suốt, bóng");
+    expect(withThickness).toContain("QUY ƯỚC ĐỘ DÀY");
+    expect(withThickness).toContain("Mỏng (0.2 - 0.4 mm): Chỉ cắt được, không khắc được.");
+    expect(buildSystemPrompt(base)).not.toContain("QUY ƯỚC ĐỘ DÀY");
+  });
+
   it("tắt includeMaterials thì không liệt kê chất liệu; thông tin trống thì bỏ mục", () => {
     const s = buildSystemPrompt({ ...base, includeMaterials: false, botKnowledge: "" });
     expect(s).not.toContain("Mica trong");

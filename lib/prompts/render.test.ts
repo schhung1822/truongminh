@@ -45,39 +45,38 @@ describe("extractVariables / validateTemplate", () => {
 });
 
 describe("buildMaterialsList", () => {
-  const m = (descAi: string, printTech: string) => ({ descAi, printTech });
+  const m = (printTech: string) => ({ printTech });
+  const FRONT_BACK = "use the front and back materials shown in the two panels of the reference image";
 
   it("ô 1 ứng với ảnh tham chiếu 2 (ảnh 1 là logo), đúng thứ tự", () => {
-    const list = buildMaterialsList([m("white canvas", "UV print"), m("black acrylic", "laser engraving")], {
+    const list = buildMaterialsList([m("UV print"), m("laser engraving")], {
       cols: 1,
       rows: 2,
     });
     expect(list).toBe(
       [
-        "Cell 1 = reference image 2: white canvas, technique: UV print",
-        "Cell 2 = reference image 3: black acrylic, technique: laser engraving",
+        `Cell 1 = reference image 2: ${FRONT_BACK}, technique: UV print`,
+        `Cell 2 = reference image 3: ${FRONT_BACK}, technique: laser engraving`,
       ].join("\n"),
     );
   });
 
   it("đủ 10 chất liệu thì không có dòng dặn để trống, ô cuối là ảnh 11", () => {
-    const list = buildMaterialsList(Array.from({ length: 10 }, () => m("x", "y")), { cols: 2, rows: 5 });
+    const list = buildMaterialsList(Array.from({ length: 10 }, () => m("y")), { cols: 2, rows: 5 });
     const lines = list.split("\n");
     expect(lines).toHaveLength(10);
     expect(lines[9]).toMatch(/^Cell 10 = reference image 11:/);
   });
 
   it("trang chưa đầy: dặn AI để trống các ô còn lại", () => {
-    const list = buildMaterialsList(Array.from({ length: 6 }, () => m("x", "y")), { cols: 2, rows: 5 });
+    const list = buildMaterialsList(Array.from({ length: 6 }, () => m("y")), { cols: 2, rows: 5 });
     expect(list.split("\n").at(-1)).toBe("Cells 7 to 10: leave completely empty (plain white).");
-    const one = buildMaterialsList(Array.from({ length: 9 }, () => m("x", "y")), { cols: 2, rows: 5 });
+    const one = buildMaterialsList(Array.from({ length: 9 }, () => m("y")), { cols: 2, rows: 5 });
     expect(one.split("\n").at(-1)).toBe("Cell 10: leave completely empty (plain white).");
   });
 
-  it("gộp xuống dòng trong mô tả và có mô tả dự phòng khi trống", () => {
-    const list = buildMaterialsList([m("line one\n  line two", "UV"), m("", "UV")], { cols: 2, rows: 1 });
-    const lines = list.split("\n");
-    expect(lines[0]).toBe("Cell 1 = reference image 2: line one line two, technique: UV");
-    expect(lines[1]).toMatch(/front and back materials shown/);
+  it("gộp khoảng trắng và xuống dòng trong tên công nghệ in", () => {
+    const list = buildMaterialsList([m("  UV\n  print ")], { cols: 1, rows: 1 });
+    expect(list).toBe(`Cell 1 = reference image 2: ${FRONT_BACK}, technique: UV print`);
   });
 });

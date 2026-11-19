@@ -1,6 +1,11 @@
-/** Lệnh gõ nhanh qua Zalo. Phần nhận dạng lệnh (thuần, có test); phần thực thi nằm ở inbox.ts. */
+/** Lệnh gõ nhanh qua Zalo. Phần nhận dạng lệnh (thuần, có test); phần thực thi nằm ở bot.ts. */
+import { fold } from "./text";
 
-export type CommandName = "help" | "status" | "today" | "inbox" | "reset" | "pair" | "human";
+export type CommandName = "help" | "status" | "today" | "waiting" | "done" | "reset" | "pair" | "human";
+
+/** Các lệnh bật/tắt riêng được trong cấu hình (lệnh ghép nối /ghepnoi bật bằng công tắc "Ghép nối nhân viên"). */
+export const TOGGLEABLE_COMMANDS = ["help", "status", "today", "waiting", "done", "reset", "human"] as const;
+export type ToggleableCommand = (typeof TOGGLEABLE_COMMANDS)[number];
 
 const ALIASES: Record<string, CommandName> = {
   help: "help",
@@ -13,9 +18,13 @@ const ALIASES: Record<string, CommandName> = {
   today: "today",
   homnay: "today",
   hom_nay: "today",
-  inbox: "inbox",
-  hopthu: "inbox",
-  hop_thu: "inbox",
+  waiting: "waiting",
+  cho: "waiting",
+  inbox: "waiting",
+  hopthu: "waiting",
+  hop_thu: "waiting",
+  done: "done",
+  xong: "done",
   reset: "reset",
   moi: "reset",
   pair: "pair",
@@ -25,16 +34,6 @@ const ALIASES: Record<string, CommandName> = {
   nhan_vien: "human",
   human: "human",
 };
-
-/** Bỏ dấu tiếng Việt để người dùng gõ /ghépnối hay /ghepnoi đều được. */
-function fold(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase();
-}
 
 /** "/status" hoặc "/status@TenBot abc" -> { name: "status", args: "abc" }. Không phải lệnh thì trả null. */
 export function parseCommand(text: string): { name: CommandName; args: string } | null {
@@ -47,16 +46,24 @@ export function parseCommand(text: string): { name: CommandName; args: string } 
 /** Lệnh nào ai cũng dùng được, lệnh nào chỉ nhân viên đã ghép nối. */
 export const PUBLIC_COMMANDS: ReadonlySet<CommandName> = new Set(["help", "reset", "pair", "human"]);
 
-export const HELP_STAFF = [
-  "Lệnh dành cho nhân viên:",
-  "/status - tình trạng hệ thống (token kie.ai, ảnh đang tạo)",
-  "/today - số lượt tạo ảnh hôm nay",
-  "/inbox - hội thoại chưa đọc và đang chờ người",
-  "/reset - xóa ngữ cảnh bot ở cuộc chat này",
-  "/nhanvien - gọi nhân viên (cho khách)",
-].join("\n");
+/** Mô tả từng lệnh (cho /help và trang hướng dẫn). */
+export const COMMAND_INFO: Record<ToggleableCommand, { usage: string; desc: string; staffOnly: boolean }> = {
+  help: { usage: "/help", desc: "xem danh sách lệnh", staffOnly: false },
+  status: { usage: "/status", desc: "tình trạng hệ thống (token kie.ai, ảnh đang tạo)", staffOnly: true },
+  today: { usage: "/today", desc: "số lượt tạo ảnh hôm nay theo từng người", staffOnly: true },
+  waiting: { usage: "/cho", desc: "các khách đang chờ nhân viên trả lời", staffOnly: true },
+  done: { usage: "/xong", desc: "đánh dấu đã xử lý xong các khách đang chờ, bot trả lời lại các khách đó", staffOnly: true },
+  reset: { usage: "/reset", desc: "xóa ngữ cảnh để bot quên cuộc trò chuyện trước đó và trả lời lại từ đầu", staffOnly: false },
+  human: { usage: "/nhanvien", desc: "gọi nhân viên", staffOnly: false },
+};
 
-export const HELP_CUSTOMER = [
-  "Em là trợ lý của xưởng. Anh/chị cứ nhắn câu hỏi, em trả lời ngay.",
-  "Gõ /nhanvien để gặp nhân viên, /reset để em quên cuộc trò chuyện trước đó.",
-].join("\n");
+/** Nội dung /help: nhân viên thấy mọi lệnh đang bật, khách chỉ thấy lệnh dành cho khách. */
+export function helpText(staff: boolean, enabled: readonly string[]): string {
+  const on = TOGGLEABLE_COMMANDS.filter((c) => enabled.includes(c) && c !== "help" && (staff || !COMMAND_INFO[c].staffOnly));
+  if (!staff) {
+    const lines = ["Em là trợ lý của xưởng. Anh/chị cứ nhắn câu hỏi, em trả lời ngay."];
+    if (on.length > 0) lines.push(on.map((c) => `${COMMAND_INFO[c].usage} - ${COMMAND_INFO[c].desc}`).join("\n"));
+    return lines.join("\n");
+  }
+  return ["Lệnh dành cho nhân viên:", ...on.map((c) => `${COMMAND_INFO[c].usage} - ${COMMAND_INFO[c].desc}`)].join("\n");
+}

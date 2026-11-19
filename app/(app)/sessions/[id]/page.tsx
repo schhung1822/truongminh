@@ -10,8 +10,8 @@ import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { loadSessionViews } from "@/lib/jobs/views";
 import { canEditOwned } from "@/lib/permissions";
+import { getSettings } from "@/lib/settings";
 import { fileUrl } from "@/lib/storage";
-import { groupSendEnabled } from "@/lib/zalo/settings";
 import { SessionResults } from "./session-results";
 
 export const metadata: Metadata = { title: "Kết quả phiên tư vấn" };
@@ -37,13 +37,8 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   });
   if (!session) notFound();
 
-  const images = await loadSessionViews(session.id, user);
-  // nút "Gửi lên nhóm Zalo" chỉ hiện khi bot đã cấu hình và người xem là người tạo phiên hoặc admin
-  const zaloGroups =
-    canEditOwned(user, session.createdById) && (await groupSendEnabled())
-      ? await db.zaloGroup.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } })
-      : [];
-  const { brand } = session.logo;
+  const [images, settings] = await Promise.all([loadSessionViews(session.id, user), getSettings()]);
+    const { brand } = session.logo;
   const fmt = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" });
   const isDesign = session.type === "DESIGN";
   const catalogId = isDesign ? session.parentId : session.id;
@@ -96,7 +91,8 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         canRefinish={canEditOwned(user, session.createdById)}
         designHref={catalogId ? `/sessions/${catalogId}/design` : undefined}
         isDesign={isDesign}
-        zaloGroups={zaloGroups}
+        labelMode={settings.labelMode}
+        defaultLabelPos={settings.labelPos}
       />
 
       {!isDesign && session.children.length > 0 && (

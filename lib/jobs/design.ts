@@ -204,7 +204,7 @@ export async function rebuildDesignImage(old: {
     return { error: e instanceof Error ? e.message : "Thiếu prompt." };
   }
   const snap = old.layoutSnapshot as LayoutSnapshot;
-  return buildDesignImage({
+  const built = buildDesignImage({
     material,
     style,
     variantIndex: old.variantIndex,
@@ -214,4 +214,12 @@ export async function rebuildDesignImage(old: {
     template,
     settings,
   });
+  if ("error" in built || (!snap.labelPos && !snap.labelStyle)) return built;
+  // giữ kiểu và vị trí nhãn người dùng đã chọn cho ảnh cũ
+  const next = {
+    ...(built.data.layoutSnapshot as object),
+    ...(snap.labelPos ? { labelPos: snap.labelPos } : {}),
+    ...(snap.labelStyle ? { labelStyle: snap.labelStyle } : {}),
+  };
+  return { data: { ...built.data, layoutSnapshot: next as Prisma.InputJsonValue } };
 }

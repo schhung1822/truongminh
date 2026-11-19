@@ -36,6 +36,17 @@ export async function loadSessionViews(sessionId: string, user: SessionUser): Pr
       expectedMs: expectedDurationMs(img.resolution),
       materialId: img.materialId,
       canRetry: (img.status === "SUCCESS" || img.status === "FAILED") && canEditOwned(user, img.createdById),
+      labelPos: snapshot.labelPos ?? null,
+      labelStyle: snapshot.labelStyle ?? null,
+      pick:
+        img.kind === "SHEET"
+          ? {
+              cols: snapshot.cols,
+              rows: snapshot.rows,
+              aspectRatio: img.aspectRatio,
+              cells: snapshot.cells.map((c, i) => ({ number: i + 1, materialId: c.materialId, code: c.code, name: c.name })),
+            }
+          : null,
     };
   });
 }

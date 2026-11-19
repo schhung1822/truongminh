@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
+import { countSheetImages, materialsPerImage } from "@/lib/sheets/split";
 import { SheetActiveToggle } from "./sheet-active-toggle";
 import { SheetDefaultToggle } from "./sheet-default-toggle";
 
@@ -34,7 +35,7 @@ export default async function SheetsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Trang mẫu</h1>
           <p className="text-muted-foreground">
-            Mỗi trang là một ảnh gồm tối đa 10 chất liệu. Trang đánh dấu <b>Mặc định</b> sẽ được dùng cho nút &quot;Tạo nhanh&quot;
+            Số cột x hàng là bố cục của một ảnh. Trang có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh (ví dụ 80 chất liệu, mỗi ảnh 8 ô: 10 ảnh). Trang đánh dấu <b>Mặc định</b> sẽ được dùng cho nút &quot;Tạo nhanh&quot;
             (sale không cần chọn trang mẫu). Có thể đặt nhiều trang mặc định.
           </p>
         </div>
@@ -89,7 +90,12 @@ export default async function SheetsPage() {
                     <TableCell>
                       {s.cols} x {s.rows}, {s.aspectRatio}, {s.resolution}
                     </TableCell>
-                    <TableCell>{s._count.materials}/10</TableCell>
+                    <TableCell>
+                      {s._count.materials}
+                      {s._count.materials > materialsPerImage(s.cols, s.rows) && (
+                        <span className="text-muted-foreground"> ({countSheetImages(s._count.materials, s.cols, s.rows)} ảnh)</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {s.isActive ? <Badge>Đang bật</Badge> : <Badge variant="secondary">Đã tắt</Badge>}
                     </TableCell>

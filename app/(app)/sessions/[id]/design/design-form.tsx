@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { CheckIcon, Loader2Icon, SparklesIcon } from "lucide-react";
+import { Loader2Icon, SparklesIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -18,19 +18,12 @@ import { estimateCost } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import type { QuotaInfo } from "../../new/sheets-steps";
 import { createDesignSessionAction } from "../../actions";
-
-export type DesignMaterial = {
-  id: string;
-  code: string;
-  name: string;
-  groupName: string;
-  printTech: string;
-  imageUrl: string | null;
-};
+import { ImagePicker, type CatalogImage } from "./image-picker";
 
 export function DesignForm({
   parentSessionId,
-  materials,
+  images,
+  initialSelected = [],
   styleNames,
   resolution,
   aspectRatio,
@@ -39,7 +32,10 @@ export function DesignForm({
   isAdmin,
 }: {
   parentSessionId: string;
-  materials: DesignMaterial[];
+  /** các ảnh catalog đã xong của phiên, chọn chất liệu ngay trên ảnh */
+  images: CatalogImage[];
+  /** chất liệu đã chọn sẵn từ trang kết quả */
+  initialSelected?: string[];
   styleNames: string[];
   resolution: string;
   aspectRatio: string;
@@ -48,7 +44,7 @@ export function DesignForm({
   isAdmin: boolean;
 }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(initialSelected);
   const [productType, setProductType] = useState("");
   const [variants, setVariants] = useState(DEFAULT_VARIANTS);
   const [note, setNote] = useState("");
@@ -65,10 +61,6 @@ export function DesignForm({
   const noStyles = styleNames.length === 0;
   const canStart =
     selected.length > 0 && productType.trim().length > 0 && !problem && !overQuota && !noStyles && !pending;
-
-  function toggle(id: string) {
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
 
   function start() {
     setError(null);
@@ -97,52 +89,12 @@ export function DesignForm({
         <CardHeader>
           <CardTitle>1. Chất liệu khách ưng ý</CardTitle>
           <CardDescription>
-            Đã chọn {selected.length}/{materials.length}. Mỗi chất liệu được chọn sẽ ra nhiều phương án thiết kế khác nhau.
+            Bấm vào một ảnh catalog, rồi bấm vào số của chất liệu khách chọn (một hoặc nhiều số, ở nhiều ảnh cũng được). Mỗi
+            chất liệu được chọn sẽ ra nhiều phương án thiết kế khác nhau.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setSelected(materials.map((m) => m.id))}>
-              Chọn tất cả
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setSelected([])} disabled={selected.length === 0}>
-              Bỏ chọn
-            </Button>
-          </div>
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {materials.map((m) => {
-              const on = selected.includes(m.id);
-              return (
-                <li key={m.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggle(m.id)}
-                    aria-pressed={on}
-                    className={cn(
-                      "relative flex h-full w-full flex-col overflow-hidden rounded-xl border bg-card text-left transition-all hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                      on && "border-primary ring-2 ring-primary",
-                    )}
-                  >
-                    <span className="flex aspect-11/5 items-center justify-center border-b bg-white p-1">
-                      {m.imageUrl && <img src={m.imageUrl} alt={m.name} className="max-h-full max-w-full object-contain" />}
-                    </span>
-                    <span className="flex flex-col gap-0.5 p-2">
-                      <span className="font-mono text-[11px] text-muted-foreground">{m.code}</span>
-                      <span className="line-clamp-2 text-sm leading-tight font-semibold">{m.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {m.groupName} · {m.printTech}
-                      </span>
-                    </span>
-                    {on && (
-                      <span className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
-                        <CheckIcon className="size-4" />
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+        <CardContent>
+          <ImagePicker images={images} selected={selected} onChange={setSelected} />
         </CardContent>
       </Card>
 

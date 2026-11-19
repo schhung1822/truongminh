@@ -87,7 +87,7 @@ Quy ước: khóa chính `String @id @default(cuid())`; `createdAt/updatedAt` �
 |---|---|---|
 | `users` | email (unique), name, passwordHash, role (`ADMIN`/`SALE`), isActive | Admin đầu tiên tạo bằng seed từ env |
 | `auth_sessions` | userId, tokenHash (unique), expiresAt | Cookie chứa token ngẫu nhiên, DB chỉ lưu bản băm. Khóa tài khoản là mất phiên ngay |
-| `materials` | code (unique), name, groupName, printTech, descHuman, descAi, layer1Path, layer2Path, productPhotoPath?, referencePath, referenceUpdatedAt, kieRefUrl?, kieRefExpiresAt?, isActive, sortOrder | `referencePath` là ảnh ghép lớp 1 + lớp 2, tạo lại mỗi khi sửa ảnh. `kieRef*` là bộ nhớ đệm URL đã upload lên kie.ai |
+| `materials` | code (unique), name, groupName, printTech, descHuman, thicknessMm? (mm; nhóm Mỏng/Cao thành/Dày tính từ đây), (descAi và productPhotoPath không còn dùng), layer1Path, layer2Path, referencePath, referenceUpdatedAt, kieRefUrl?, kieRefExpiresAt?, isActive, sortOrder | `referencePath` là ảnh ghép lớp 1 + lớp 2, tạo lại mỗi khi sửa ảnh. `kieRef*` là bộ nhớ đệm URL đã upload lên kie.ai |
 | `sheets` | name, groupName, cols, rows, aspectRatio, resolution, isActive, sortOrder | Mặc định 5 x 2, `16:9`, `2K` |
 | `sheet_materials` | sheetId, materialId, position | unique (sheetId, position) và (sheetId, materialId). Chặn cứng: tối đa 10 dòng/trang và không vượt cols x rows |
 | `prompt_templates` | kind (`CATALOG`/`DESIGN`), version, body, isActive, note, createdById | Mỗi lần lưu là một phiên bản mới, giữ lịch sử, đánh dấu bản đang dùng |
@@ -132,7 +132,7 @@ Index chính: `generated_images(status, lastPolledAt)`, `generated_images(sessio
 |---|---|
 | `GET /api/files/[...key]` | Phục vụ ảnh từ kho, **bắt buộc đã đăng nhập** |
 | `POST /api/uploads/logo` | Upload logo (PNG/JPG/WEBP/SVG, ≤ 10MB), chuẩn hóa bằng sharp |
-| `POST /api/uploads/material-image` | Upload ảnh lớp 1, lớp 2, ảnh sản phẩm của chất liệu (ADMIN) |
+| `POST /api/uploads/material-image` | Upload ảnh lớp 1 (mặt trước), lớp 2 (mặt sau) của chất liệu (ADMIN) |
 | `POST /api/sessions/[id]/sync` | Polling: tiến các ảnh chưa xong và trả trạng thái |
 | `GET /api/images/[id]/download` | Tải từng ảnh |
 | `GET /api/sessions/[id]/download?format=zip\|pdf` | Tải cả phiên dạng ZIP hoặc PDF (mỗi trang một ảnh) |

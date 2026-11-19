@@ -47,8 +47,10 @@ export async function renderFinal(
     cols: snapshot.cols,
     rows: snapshot.rows,
     cells,
-    labelMode: settings.labelMode,
+    labelMode: snapshot.labelStyle ?? settings.labelMode,
+    labelPos: snapshot.labelPos ?? settings.labelPos,
     workshopName: settings.workshopName,
     footerNote: settings.footerNote,
+    footerDisclaimer: settings.footerDisclaimer,
   });
 }

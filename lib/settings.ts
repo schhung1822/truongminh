@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { ASPECT_RATIOS, RESOLUTIONS } from "@/lib/image-options";
+import { LABEL_POSITIONS, LABEL_STYLES } from "@/lib/imaging/label-pos";
 
 export const settingsSchema = z.object({
   imageModel: z.string().trim().min(1, "Vui lòng nhập tên model.").max(100),
@@ -9,7 +10,11 @@ export const settingsSchema = z.object({
   dailyLimitPerSale: z.coerce.number().int("Phải là số nguyên.").min(0).max(100000),
   workshopName: z.string().trim().max(100),
   footerNote: z.string().trim().max(200),
-  labelMode: z.enum(["overlay", "legend"]),
+  /** dòng ghi chú ngay dưới tên xưởng ở chân ảnh */
+  footerDisclaimer: z.string().trim().max(100),
+  labelMode: z.enum(LABEL_STYLES.filter((x) => x !== "none") as ["overlay", "compact", "legend"]),
+  /** vị trí thẻ nhãn mặc định của ảnh mới (mỗi ảnh có thể chọn lại sau khi tạo) */
+  labelPos: z.enum(LABEL_POSITIONS),
   /** ảnh thiết kế (bước 2) là ảnh đơn nên có tỉ lệ và độ phân giải riêng */
   designAspectRatio: z.enum(ASPECT_RATIOS),
   designResolution: z.enum(RESOLUTIONS),
@@ -23,7 +28,9 @@ export const SETTING_DEFAULTS: Settings = {
   dailyLimitPerSale: 60,
   workshopName: "Xưởng in Trường Minh",
   footerNote: "",
+  footerDisclaimer: "Hình minh họa",
   labelMode: "overlay",
+  labelPos: "br",
   designAspectRatio: "1:1",
   designResolution: "2K",
 };

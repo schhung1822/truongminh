@@ -33,7 +33,7 @@ export async function addGroupAction(input: { name: string; chatId: string }): P
     return { error: "Mã nhóm này đã có trong danh sách." };
   }
   await db.zaloGroup.create({ data: parsed.data });
-  revalidatePath("/admin/zalo");
+  revalidatePath("/admin/zalo", "layout");
   return { ok: "Đã thêm nhóm." };
 }
 
@@ -60,7 +60,7 @@ export async function updateGroupAction(id: string, patch: z.input<typeof patchS
   } catch {
     return { error: "Không tìm thấy nhóm." };
   }
-  revalidatePath("/admin/zalo");
+  revalidatePath("/admin/zalo", "layout");
   return { ok: "Đã lưu." };
 }
 
@@ -71,7 +71,7 @@ export async function deleteGroupAction(id: string): Promise<ActionResult> {
   } catch {
     return { error: "Không tìm thấy nhóm." };
   }
-  revalidatePath("/admin/zalo");
+  revalidatePath("/admin/zalo", "layout");
   return { ok: "Đã xóa nhóm khỏi danh sách (bot vẫn còn trong nhóm Zalo nếu chưa bị mời ra)." };
 }
 

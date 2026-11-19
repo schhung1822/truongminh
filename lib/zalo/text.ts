@@ -57,6 +57,16 @@ export function prepareReply(text: string): string[] {
   return splitMessage(stripMarkdown(text));
 }
 
+/** Bỏ dấu tiếng Việt và đưa về chữ thường: "Gặp Nhân Viên" -> "gap nhan vien". Dùng để so khớp từ khóa và lệnh. */
+export function fold(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+}
+
 /** Tên hiển thị gọn cho danh sách (cắt bớt, bỏ xuống dòng). */
 export function preview(text: string | null | undefined, max = 120): string {
   const t = (text ?? "").replace(/\s+/g, " ").trim();

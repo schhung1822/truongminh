@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { after } from "next/server";
 import { getEnv } from "@/lib/env";
-import { processWebhook, type ZaloEvent } from "@/lib/zalo/inbox";
+import { processWebhook, type ZaloEvent } from "@/lib/zalo/bot";
 
 /** So sánh chuỗi bí mật không để lộ độ dài khớp qua thời gian xử lý. */
 function sameSecret(a: string, b: string): boolean {
@@ -11,8 +11,8 @@ function sameSecret(a: string, b: string): boolean {
 }
 
 /**
- * Webhook của bot Zalo: nhận tin khách nhắn bot và tin trong nhóm có @bot (xem lib/zalo/inbox.ts để biết cách xử lý:
- * lưu Hộp thư, ghép nối, lệnh gõ nhanh, bot AI trả lời, nhận ra nhóm để gửi ảnh).
+ * Webhook của bot Zalo: nhận tin khách nhắn bot và tin trong nhóm có @bot (xem lib/zalo/bot.ts để biết cách xử lý:
+ * ghép nối, lệnh gõ nhanh, bot AI trả lời, nhận ra nhóm để gửi ảnh).
  * Zalo gửi kèm header X-Bot-Api-Secret-Token = ZALO_WEBHOOK_SECRET, phải khớp mới nhận.
  * Đường dẫn /api/webhooks/* không cần đăng nhập (xem proxy.ts) nên việc kiểm tra bí mật là bắt buộc.
  * Trả 200 ngay, việc xử lý (có thể mất vài giây khi gọi AI) chạy nền bằng after().

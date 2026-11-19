@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { ASPECT_RATIOS, RESOLUTIONS } from "@/lib/image-options";
+import { LABEL_POSITIONS, LABEL_POS_TEXT } from "@/lib/imaging/label-pos";
 import type { Settings } from "@/lib/settings";
 import { saveSettingsAction, type SettingsResult } from "./actions";
 
@@ -58,9 +59,23 @@ export function SettingsForm({ settings }: { settings: Settings }) {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="labelMode">Cách ghi nhãn chất liệu trên ảnh</Label>
           <NativeSelect id="labelMode" name="labelMode" defaultValue={settings.labelMode}>
-            <option value="overlay">Ghi &quot;mã - tên&quot; ngay trên từng ô</option>
+            <option value="overlay">Thẻ đầy đủ: ghi &quot;mã - tên&quot; ngay trên từng ô</option>
+            <option value="compact">Thẻ gọn: thẻ hẹp, tên xuống dòng (ít che logo)</option>
             <option value="legend">Đánh số trên ô và có bảng chú giải bên dưới</option>
           </NativeSelect>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="labelPos">Vị trí nhãn chất liệu mặc định</Label>
+          <NativeSelect id="labelPos" name="labelPos" defaultValue={settings.labelPos}>
+            {LABEL_POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {LABEL_POS_TEXT[p]}
+              </option>
+            ))}
+          </NativeSelect>
+          <p className="text-xs text-muted-foreground">
+            Áp dụng cho ảnh mới khi dùng thẻ đầy đủ hoặc thẻ gọn. Mỗi ảnh vẫn chỉnh lại kiểu và vị trí được sau khi tạo, ngay ở trang kết quả.
+          </p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="designAspectRatio">Tỉ lệ ảnh thiết kế (bước 2)</Label>
@@ -86,6 +101,11 @@ export function SettingsForm({ settings }: { settings: Settings }) {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="workshopName">Tên xưởng (một dòng chữ nhỏ ở chân ảnh)</Label>
           <Input id="workshopName" name="workshopName" defaultValue={settings.workshopName} maxLength={100} className="h-10" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="footerDisclaimer">Dòng ghi chú dưới tên xưởng ở chân ảnh (để trống nếu không cần)</Label>
+          <Input id="footerDisclaimer" name="footerDisclaimer" defaultValue={settings.footerDisclaimer} maxLength={100} className="h-10" />
+          <p className="text-xs text-muted-foreground">Mặc định &quot;Hình minh họa&quot;. Ảnh đã tạo trước đó cần bấm &quot;Vẽ lại khung và nhãn&quot; để có dòng này.</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="footerNote">Dòng chú thích thêm dưới ảnh (để trống nếu không cần)</Label>

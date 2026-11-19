@@ -1,10 +1,18 @@
 import type { ChatMessage } from "@/lib/ai/chat";
+import { formatThickness, THICKNESS_CLASSES, thicknessClass } from "@/lib/materials/thickness";
 import { preview } from "./text";
 
 /** Dấu hiệu AI chèn vào câu trả lời khi cần chuyển cho nhân viên (hệ thống bỏ dấu này đi trước khi gửi khách). */
 export const HANDOFF_MARKER = "[[NHAN_VIEN]]";
 
-export type KnowledgeMaterial = { code: string; name: string; groupName: string; printTech: string; descHuman: string | null };
+export type KnowledgeMaterial = {
+  code: string;
+  name: string;
+  groupName: string;
+  printTech: string;
+  descHuman: string | null;
+  thicknessMm?: number | null;
+};
 
 const MAX_MATERIALS = 80;
 
@@ -16,11 +24,20 @@ export function buildSystemPrompt(input: {
   workshopName: string;
   contactName: string;
   isGroup: boolean;
+  /** giờ làm việc (nếu admin bật): mô tả và hiện đang trong giờ hay không */
+  hours?: { description: string; open: boolean };
 }): string {
   const parts: string[] = [input.botPrompt.trim()];
 
   parts.push(`Tên xưởng: ${input.workshopName}.`);
   parts.push(`Người đang nhắn: ${input.contactName || "khách"}${input.isGroup ? " (trong nhóm Zalo, nhiều người cùng nhắn)" : ""}.`);
+
+  if (input.hours) {
+    parts.push(
+      `Giờ làm việc của xưởng: ${input.hours.description}. Hiện tại xưởng đang ${input.hours.open ? "TRONG" : "NGOÀI"} giờ làm việc` +
+        (input.hours.open ? "." : ", nên nhân viên chưa trả lời ngay được: khi chuyển nhân viên hãy nói rõ nhân viên sẽ trả lời khi vào ca."),
+    );
+  }
 
   if (input.botKnowledge.trim()) {
     parts.push(`THÔNG TIN CỦA XƯỞNG (chỉ được nói những gì có ở đây hoặc ở danh sách chất liệu):\n${input.botKnowledge.trim()}`);
@@ -28,10 +45,19 @@ export function buildSystemPrompt(input: {
 
   if (input.includeMaterials && input.materials.length > 0) {
     const shown = input.materials.slice(0, MAX_MATERIALS);
-    const lines = shown.map((m) => `- ${m.code} | ${m.name} | nhóm ${m.groupName} | ${m.printTech}${m.descHuman ? ` | ${preview(m.descHuman, 120)}` : ""}`);
+    const lines = shown.map((m) => {
+      const cls = thicknessClass(m.thicknessMm);
+      const thick = cls ? ` | dày ${formatThickness(m.thicknessMm)} (${cls.label.toLowerCase()})` : "";
+      return `- ${m.code} | ${m.name} | nhóm ${m.groupName} | ${m.printTech}${thick}${m.descHuman ? ` | ${preview(m.descHuman, 120)}` : ""}`;
+    });
     parts.push(
       `CÁC CHẤT LIỆU XƯỞNG ĐANG CÓ (${shown.length}${input.materials.length > shown.length ? ` trên ${input.materials.length}` : ""} loại):\n${lines.join("\n")}`,
     );
+    if (shown.some((m) => thicknessClass(m.thicknessMm))) {
+      parts.push(
+        `QUY ƯỚC ĐỘ DÀY (nói đúng theo đây khi khách hỏi cắt hay khắc được không):\n${THICKNESS_CLASSES.map((c) => `- ${c.label} (${c.range}): ${c.rule}`).join("\n")}`,
+      );
+    }
   }
 
   parts.push(

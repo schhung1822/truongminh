@@ -66,6 +66,56 @@ describe("finishImage", () => {
     expect(await diffCount(withLabels, without, centre)).toBe(0);
   });
 
+  it("dòng ghi chú chân ảnh (Hình minh họa): thêm chiều cao chân trang và có chữ vẽ ở chân ảnh", async () => {
+    const orig = await original(800, 1200);
+    const base = { ...common, original: orig, labelMode: "none" as const };
+    const without = await finishImage({ ...base });
+    const withNote = await finishImage({ ...base, footerDisclaimer: "Hình minh họa" });
+    const m0 = layoutMetrics(800, { hasWorkshop: true, hasNote: false });
+    const m1 = layoutMetrics(800, { hasWorkshop: true, hasNote: false, hasDisclaimer: true });
+    expect(m1.footerH).toBeGreaterThan(m0.footerH);
+    const h0 = (await sharp(without).metadata()).height!;
+    const h1 = (await sharp(withNote).metadata()).height!;
+    expect(h1 - h0).toBe(m1.footerH - m0.footerH);
+    // phần chân trang của ảnh có ghi chú phải khác ảnh không ghi chú (có thêm chữ ở dòng dưới tên xưởng)
+    const tail = { left: 0, top: h1 - m1.footerH, width: 800, height: m1.footerH };
+    const blank = await sharp({ create: { width: 800, height: m1.footerH, channels: 3, background: "#ffffff" } }).png().toBuffer();
+    expect(await diffCount(withNote, await sharp(blank).extend({ top: h1 - m1.footerH, bottom: 0, background: "#ffffff" }).png().toBuffer(), tail)).toBeGreaterThan(100);
+  });
+
+  it("chọn vị trí nhãn: trên trái đặt nhãn ở góc trên trái ô, góc dưới phải trống", async () => {
+    const orig = await original(800, 1200);
+    const topLeft = await finishImage({ ...common, original: orig, labelMode: "overlay", labelPos: "tl" });
+    const without = await finishImage({ ...common, original: orig, labelMode: "none" });
+    const headerH = layoutMetrics(800, { hasWorkshop: true, hasNote: false }).headerH;
+    const topLeftArea = { left: 8, top: headerH + 8, width: 150, height: 30 };
+    const bottomRightArea = { left: 400 - 8 - 200, top: headerH + 600 - 50, width: 200, height: 40 };
+    expect(await diffCount(topLeft, without, topLeftArea)).toBeGreaterThan(200);
+    expect(await diffCount(topLeft, without, bottomRightArea)).toBe(0);
+  });
+
+  it("thẻ gọn: hẹp hơn thẻ đầy đủ (tối đa 40% bề rộng ô) và vẫn ở đúng vị trí; tên dài xuống dòng", async () => {
+    const orig = await original(800, 1200);
+    const longName = [{ code: "TRANG-GUONG-VANG-HT-10472-12", name: "Tráng gương vàng HT 10472-12 2 màu rất dài để thử xuống dòng", groupName: "Giả gương", printTech: "Cắt laser" }];
+    const base = { ...common, cols: 1, rows: 1, cells: longName, original: orig };
+    const full = await finishImage({ ...base, labelMode: "overlay", labelPos: "br" });
+    const compact = await finishImage({ ...base, labelMode: "compact", labelPos: "br" });
+    const without = await finishImage({ ...base, labelMode: "none" });
+    const headerH = layoutMetrics(800, { hasWorkshop: true, hasNote: false }).headerH;
+    // ô duy nhất rộng 800: thẻ gọn nằm trong 40% bề rộng bên phải (x >= 800 - 8 - 320), thẻ đầy đủ chiếm rộng hơn nhiều
+    const leftPart = { left: 0, top: headerH, width: 800 - 8 - 330, height: 1200 };
+    expect(await diffCount(compact, without, leftPart)).toBe(0);
+    expect(await diffCount(full, without, leftPart)).toBeGreaterThan(200);
+    expect(await diffCount(compact, without, { left: 800 - 330, top: headerH + 1200 - 140, width: 322, height: 132 })).toBeGreaterThan(300);
+  });
+
+  it("kiểu đánh số + chú giải: không có thẻ trong ô nên ảnh cao hơn; ẩn nhãn thì không vẽ gì", async () => {
+    const orig = await original(800, 1200);
+    const none = await finishImage({ ...common, original: orig, labelMode: "none" });
+    const legend = await sharp(await finishImage({ ...common, original: orig, labelMode: "legend" })).metadata();
+    expect(legend.height!).toBeGreaterThan((await sharp(none).metadata()).height!);
+  });
+
   it("chế độ legend thêm bảng chú giải nên cao hơn overlay", async () => {
     const ov = await sharp(await finishImage({ ...common, original: await original(800, 1200), labelMode: "overlay" })).metadata();
     const lg = await sharp(await finishImage({ ...common, original: await original(800, 1200), labelMode: "legend" })).metadata();

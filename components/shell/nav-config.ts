@@ -1,11 +1,11 @@
 import {
   BarChart3Icon,
+  BookOpenIcon,
   BoxesIcon,
   FolderTreeIcon,
   HistoryIcon,
   HomeIcon,
   CalendarHeartIcon,
-  InboxIcon,
   LayoutGridIcon,
   MessageCircleIcon,
   type LucideIcon,
@@ -49,8 +49,8 @@ export const navGroups: NavGroup[] = [
     id: "zalo",
     label: "Zalo",
     items: [
-      { href: "/zalo", label: "Hộp thư Zalo", icon: InboxIcon, ready: true },
       { href: "/zalo/care", label: "Kịch bản chăm sóc", icon: CalendarHeartIcon, ready: true },
+      { href: "/zalo/guide", label: "Hướng dẫn Zalo", icon: BookOpenIcon, ready: true },
       { href: "/admin/zalo", label: "Cài đặt Zalo", icon: MessageCircleIcon, ready: true, adminOnly: true },
     ],
   },

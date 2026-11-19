@@ -106,7 +106,7 @@ docker compose exec app npm run db:seed-styles
 
 Mở `https://tên-miền-của-bạn`, đăng nhập bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD` trong `.env`, **đổi mật khẩu ngay** ở trang Người dùng. Lần đầu Caddy cần vài chục giây để xin chứng chỉ HTTPS; nếu trình duyệt báo lỗi thì chờ một phút rồi tải lại.
 
-Sau đó: vào **Quản trị > Chất liệu** nhập chất liệu thật, **Trang mẫu** xếp chất liệu vào trang, **Cấu hình** kiểm tra model và số dư kie.ai.
+Sau đó: vào **Quản trị > Chất liệu** nhập chất liệu thật, **Trang mẫu** xếp chất liệu vào trang (số cột x hàng là bố cục một ảnh; trang có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh, ví dụ 80 chất liệu với 8 ô mỗi ảnh ra 10 ảnh), **Cấu hình** kiểm tra model và số dư kie.ai.
 
 ### Kiểm tra web đang chạy
 ```bash
@@ -142,10 +142,18 @@ tar -xzf backups/<bản>/storage.tar.gz -C data
 ### Bật callback của kie.ai (không bắt buộc)
 Mặc định web tự hỏi kie.ai kết quả mỗi vài giây, đã đủ dùng. Nếu muốn ảnh về nhanh hơn: ở https://kie.ai/settings tạo `webhookHmacKey`, dán vào `KIE_CALLBACK_SECRET`, đổi `KIE_CALLBACK_ENABLED="true"` trong `.env`, rồi `docker compose up -d` để áp dụng.
 
+### Phân loại chất liệu và chỉnh hàng loạt bằng Excel
+Mỗi chất liệu có nhóm, công nghệ in, chất bề mặt, họa tiết, số màu, họ màu hai mặt, phong cách, độ dày... Mọi trường này **chỉ chọn từ danh mục**; thêm, sửa nhãn, tắt giá trị ở **Quản trị > Chất liệu > Danh mục**. Bộ lọc ở đầu trang Chất liệu lọc theo các trường đó và theo "Cần xem lại".
+Chỉnh nhiều chất liệu cùng lúc: bấm **Xuất CSV** (trang Chất liệu), sửa bằng Excel (nếu Excel dồn mọi thứ vào một cột thì mở bằng Data > From Text/CSV, chọn UTF-8 và dấu phẩy), rồi vào **Nhập từ CSV**, chọn chế độ **Cập nhật** và để dấu tích "Chỉ kiểm tra" để xem trước. Ô để trống = giữ nguyên, muốn xóa giá trị thì ghi `[xoa]`. Cột `id` giúp đổi cả mã chất liệu mà không tạo bản mới.
+Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web khởi động lại, trên máy cá nhân chạy `npm run db:deploy`.
+
+### Cấu hình Zalo và hướng dẫn sử dụng
+Mọi chức năng Zalo (gửi ảnh vào nhóm, bot AI, lời chào, trả lời nhanh, giờ làm việc, ghép nối nhân viên, lệnh, chăm sóc nhóm) bật/tắt và chỉnh ở **Quản trị > Cài đặt Zalo**. Hướng dẫn từng bước (kết nối bot, mời bot vào nhóm, cách bot xử lý tin khách, xử lý sự cố) nằm ngay trong web ở menu **Zalo > Hướng dẫn Zalo**. Bản này thêm một cột vào CSDL: trên VPS tự áp dụng khi web khởi động lại, trên máy cá nhân chạy `npm run db:deploy`.
+
 ### Tự động đăng kịch bản chăm sóc Zalo (không bắt buộc)
 Trên máy cá nhân bạn bấm đăng bằng tay trong mục **Kịch bản chăm sóc**. Trên VPS có thể cho máy tự lên kịch bản và đăng đúng giờ:
 1. Trong `.env` đặt `ZALO_CARE_CRON_SECRET` là một chuỗi dài (16 ký tự trở lên), rồi `docker compose up -d`.
-2. Ở **Quản trị > Zalo** bật công tắc "Tự động lên kịch bản và đăng đúng giờ".
+2. Ở **Quản trị > Cài đặt Zalo > Chăm sóc nhóm** bật công tắc "Tự động lên kịch bản và đăng đúng giờ".
 3. Gõ `crontab -e` và thêm dòng chạy mỗi 10 phút (thay khóa và tên miền):
 ```
 */10 * * * * curl -fsS -X POST -H "x-cron-secret: KHÓA_CỦA_BẠN" https://tên-miền/api/jobs/zalo-care >> /root/truongminh/backups/care.log 2>&1

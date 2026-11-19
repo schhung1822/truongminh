@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { getQuotaInfo } from "@/lib/jobs/limits";
 import { canEditCustomer } from "@/lib/permissions";
+import { countSheetImages } from "@/lib/sheets/split";
 import { fileUrl } from "@/lib/storage";
 
 /** Danh sách thư mục khách hàng (mới nhất trước) kèm quyền sửa của người đang xem. */
@@ -58,23 +59,26 @@ export async function loadSheetOptions(user: SessionUser) {
     db.sheet.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      include: { materials: { include: { material: { select: { isActive: true, referencePath: true, descAi: true } } } } },
+      include: { materials: { include: { material: { select: { isActive: true, referencePath: true } } } } },
     }),
     getQuotaInfo(user),
   ]);
-  const sheets: SheetOption[] = sheetRows.map((s) => ({
-    id: s.id,
-    name: s.name,
-    groupName: s.groupName,
-    cols: s.cols,
-    rows: s.rows,
-    aspectRatio: s.aspectRatio,
-    resolution: s.resolution,
-    total: s.materials.length,
-    usable: s.materials.filter((m) => m.material.isActive && m.material.referencePath).length,
-    missingDesc: s.materials.filter((m) => m.material.isActive && m.material.referencePath && !m.material.descAi.trim()).length,
-    isDefault: s.isDefault,
-  }));
+  const sheets: SheetOption[] = sheetRows.map((s) => {
+    const usable = s.materials.filter((m) => m.material.isActive && m.material.referencePath).length;
+    return {
+      id: s.id,
+      name: s.name,
+      groupName: s.groupName,
+      cols: s.cols,
+      rows: s.rows,
+      aspectRatio: s.aspectRatio,
+      resolution: s.resolution,
+      total: s.materials.length,
+      usable,
+      images: countSheetImages(usable, s.cols, s.rows),
+      isDefault: s.isDefault,
+    };
+  });
   return { sheets, quota, showCost: getEnv().IMAGE_PROVIDER === "kie" };
 }
 

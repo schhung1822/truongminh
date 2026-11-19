@@ -6,11 +6,10 @@ import { requireUser } from "@/lib/auth/dal";
 import { createCatalogSession, retryImage } from "@/lib/jobs/create";
 import { createDesignSession } from "@/lib/jobs/design";
 import { kickSession } from "@/lib/jobs/process";
+import { isLabelPos, isLabelStyle, type LabelPos, type LabelStyle } from "@/lib/imaging/label-pos";
 import { refinishSession } from "@/lib/jobs/refinish";
 import { db } from "@/lib/db";
 import { canEditOwned } from "@/lib/permissions";
-import { groupSendEnabled } from "@/lib/zalo/settings";
-import { deliverImage, sendSessionImages } from "@/lib/zalo/send";
 
 export async function createCatalogSessionAction(
   logoId: string,
@@ -53,6 +52,36 @@ export async function refinishSessionAction(sessionId: string): Promise<{ error?
   return { count };
 }
 
+/**
+ * Đổi kiểu và vị trí nhãn chất liệu của một ảnh (hoặc mọi ảnh của phiên) rồi vẽ lại ảnh. Không gọi AI nên không tốn token.
+ * Vị trí được lưu cùng ảnh, nên lần vẽ lại và tạo lại sau này vẫn giữ.
+ */
+export async function setLabelPositionAction(input: {
+  sessionId: string;
+  imageId?: string;
+  labelPos?: string;
+  labelStyle?: string;
+}): Promise<{ error?: string; count?: number }> {
+  const user = await requireUser();
+  if (input.labelPos !== undefined && !isLabelPos(input.labelPos)) return { error: "Vị trí nhãn không hợp lệ." };
+  if (input.labelStyle !== undefined && !isLabelStyle(input.labelStyle)) return { error: "Kiểu nhãn không hợp lệ." };
+  if (!input.labelPos && !input.labelStyle) return { error: "Chưa chọn kiểu hoặc vị trí nhãn." };
+  const session = await db.consultSession.findUnique({
+    where: { id: input.sessionId },
+    select: { createdById: true, images: { where: { retries: { none: {} } }, select: { id: true } } },
+  });
+  if (!session) return { error: "Không tìm thấy phiên." };
+  if (!canEditOwned(user, session.createdById)) return { error: "Bạn chỉ chỉnh được nhãn của phiên do mình tạo." };
+  if (input.imageId && !session.images.some((i) => i.id === input.imageId)) return { error: "Ảnh không thuộc phiên này." };
+  const count = await refinishSession(input.sessionId, {
+    imageId: input.imageId,
+    labelPos: input.labelPos as LabelPos | undefined,
+    labelStyle: input.labelStyle as LabelStyle | undefined,
+  });
+  revalidatePath(`/sessions/${input.sessionId}`);
+  return { count };
+}
+
 export async function retryImageAction(imageId: string): Promise<{ error?: string; ok?: boolean }> {
   const user = await requireUser();
   const r = await retryImage(user, imageId);
@@ -61,42 +90,4 @@ export async function retryImageAction(imageId: string): Promise<{ error?: strin
   after(() => kickSession(id));
   revalidatePath(`/sessions/${id}`);
   return { ok: true };
-}
-
-/**
- * Gửi ảnh của phiên vào một nhóm Zalo. Có imageId = gửi đúng ảnh đó (nhanh, trả kết quả ngay);
- * không có = gửi mọi ảnh đã xong của phiên, chạy nền vì có thể mất cả phút (xem kết quả ở Quản trị > Zalo).
- * Ảnh đã gửi vào nhóm này rồi thì bỏ qua, không gửi trùng.
- */
-export async function sendToZaloAction(input: {
-  sessionId: string;
-  groupId: string;
-  imageId?: string;
-}): Promise<{ error?: string; ok?: string }> {
-  const user = await requireUser();
-  const session = await db.consultSession.findUnique({
-    where: { id: input.sessionId },
-    select: { createdById: true, images: { where: { status: "SUCCESS", retries: { none: {} } }, select: { id: true } } },
-  });
-  if (!session) return { error: "Không tìm thấy phiên." };
-  if (!canEditOwned(user, session.createdById)) return { error: "Bạn chỉ gửi được ảnh của phiên do mình tạo." };
-  if (!(await groupSendEnabled())) return { error: "Chức năng gửi ảnh vào nhóm Zalo đang tắt hoặc chưa cấu hình. Báo quản trị viên." };
-
-  const group = await db.zaloGroup.findUnique({ where: { id: input.groupId }, select: { id: true, chatId: true, name: true, isActive: true } });
-  if (!group || !group.isActive) return { error: "Nhóm Zalo không tồn tại hoặc đang tắt." };
-
-  if (input.imageId) {
-    if (!session.images.some((i) => i.id === input.imageId)) return { error: "Ảnh này chưa tạo xong hoặc không thuộc phiên." };
-    const r = await deliverImage(input.imageId, group);
-    if (r.outcome === "failed") return { error: `Gửi Zalo lỗi: ${r.error}` };
-    return { ok: r.outcome === "skipped" ? `Ảnh này đã gửi vào nhóm "${group.name}" trước đó.` : `Đã gửi ảnh vào nhóm "${group.name}".` };
-  }
-
-  if (session.images.length === 0) return { error: "Phiên chưa có ảnh nào tạo xong để gửi." };
-  const { sessionId, groupId } = input;
-  after(async () => {
-    const s = await sendSessionImages(sessionId, groupId);
-    if (s.failed > 0) console.error(`Zalo: gửi phiên ${sessionId} vào nhóm ${groupId}: ${s.sent} ảnh được, ${s.failed} lỗi (${s.error})`);
-  });
-  return { ok: `Đang gửi ${session.images.length} ảnh vào nhóm "${group.name}". Ảnh đã gửi trước đó sẽ được bỏ qua.` };
 }

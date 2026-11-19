@@ -9,7 +9,6 @@ export type ZaloStats = {
   customers: number;
   groups: number;
   staff: number;
-  unread: number;
   waiting: number;
   /** 7 ngày gần nhất (cũ → mới) */
   daily: { day: string; incoming: number; bot: number; human: number }[];
@@ -31,9 +30,8 @@ export async function loadZaloStats(): Promise<ZaloStats> {
   const start7 = zonedStartOfDay(days[0], tz) ?? new Date(Date.now() - 7 * 86400_000);
   const start30 = zonedStartOfDay(addDays(today, -29), tz) ?? new Date(Date.now() - 30 * 86400_000);
 
-  const [roles, unread, waiting, msgs, bot30, botFailed30, tokens, sent, failed] = await Promise.all([
+  const [roles, waiting, msgs, bot30, botFailed30, tokens, sent, failed] = await Promise.all([
     db.zaloContact.groupBy({ by: ["role", "chatType"], _count: { _all: true } }),
-    db.zaloContact.count({ where: { unreadCount: { gt: 0 }, role: "CUSTOMER" } }),
     db.zaloContact.count({ where: { needsHuman: true, role: "CUSTOMER" } }),
     db.zaloMessage.findMany({ where: { createdAt: { gte: start7 }, failed: false }, select: { createdAt: true, direction: true, author: true } }),
     db.zaloMessage.count({ where: { author: "BOT", direction: "OUT", failed: false, createdAt: { gte: start30 } } }),
@@ -58,7 +56,6 @@ export async function loadZaloStats(): Promise<ZaloStats> {
     customers: count((r) => r.role === "CUSTOMER" && r.chatType === "PRIVATE"),
     groups: count((r) => r.chatType === "GROUP"),
     staff: count((r) => r.role === "STAFF"),
-    unread,
     waiting,
     daily: days.map((d) => byDay.get(d)!),
     botReplies30: bot30,

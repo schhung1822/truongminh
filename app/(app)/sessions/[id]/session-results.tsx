@@ -11,6 +11,7 @@ import {
   Loader2Icon,
   PaletteIcon,
   RefreshCwIcon,
+  XIcon,
   ZoomInIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,8 +23,12 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { estimateProgress, formatElapsed, overallProgress } from "@/lib/jobs/progress";
 import { isFinished, type ImageView } from "@/lib/jobs/view";
 import { cn } from "@/lib/utils";
+import { CellSelectImage, type SelectableCell } from "@/components/cell-select-image";
+import { CopyImageIconButton, CopyImagesButton } from "@/components/copy-images";
+import { MAX_DESIGN_MATERIALS } from "@/lib/design/assign";
+import type { LabelPos, LabelStyle } from "@/lib/imaging/label-pos";
 import { refinishSessionAction, retryImageAction } from "../actions";
-import { ZaloSendButton, type ZaloGroupOption } from "./zalo-send";
+import { LabelPositionButton } from "./label-position";
 
 const POLL_MS = 3000;
 const TICK_MS = 500;
@@ -69,7 +74,8 @@ export function SessionResults({
   canRefinish,
   designHref,
   isDesign,
-  zaloGroups = [],
+  labelMode = "overlay",
+  defaultLabelPos = "br",
 }: {
   sessionId: string;
   initialImages: ImageView[];
@@ -79,11 +85,17 @@ export function SessionResults({
   designHref?: string;
   /** đang xem một lượt thiết kế (bước 2) */
   isDesign: boolean;
-  /** nhóm Zalo đang bật mà người xem được phép gửi vào (rỗng = ẩn nút gửi) */
-  zaloGroups?: ZaloGroupOption[];
+  /** kiểu nhãn mặc định trong Cấu hình (ảnh chưa chọn riêng) */
+  labelMode?: Exclude<LabelStyle, "none">;
+  /** vị trí nhãn mặc định trong Cấu hình (ảnh chưa chọn riêng) */
+  defaultLabelPos?: LabelPos;
 }) {
   const [images, setImages] = useState(initialImages);
   const [zoom, setZoom] = useState<ImageView | null>(null);
+  // chọn chất liệu khách ưng ý bằng cách bấm số trên ảnh catalog, rồi sang Bước 2
+  const canPick = !isDesign && !!designHref;
+  const [selected, setSelected] = useState<string[]>([]);
+  const [showNumbers, setShowNumbers] = useState(true);
   const [offline, setOffline] = useState(false);
   const [now, setNow] = useState(() => performance.now());
   const [receivedAt, setReceivedAt] = useState(() => performance.now());
@@ -93,6 +105,22 @@ export function SessionResults({
   const open = images.some((i) => !isFinished(i.status));
   const done = images.filter((i) => i.status === "SUCCESS").length;
   const failed = images.filter((i) => i.status === "FAILED").length;
+
+  // chất liệu đã chọn -> nơi xuất hiện đầu tiên (ảnh nào, số mấy)
+  const pickedInfo = selected.flatMap((id) => {
+    for (const img of images) {
+      const cell = img.pick?.cells.find((c) => c.materialId === id);
+      if (cell) return [{ id, cell, label: img.label }];
+    }
+    return [];
+  });
+  const designUrl = designHref && selected.length > 0 ? `${designHref}?m=${selected.join(",")}` : designHref;
+
+  function toggleCell(cell: SelectableCell) {
+    if (selected.includes(cell.materialId)) return setSelected(selected.filter((id) => id !== cell.materialId));
+    if (selected.length >= MAX_DESIGN_MATERIALS) return void toast.error(`Một lần thiết kế tối đa ${MAX_DESIGN_MATERIALS} chất liệu.`);
+    setSelected([...selected, cell.materialId]);
+  }
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
@@ -169,7 +197,7 @@ export function SessionResults({
     <div className="flex flex-col gap-4">
       {/* Tiến độ chung */}
       <Card>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="flex flex-col gap-2.5">
           {open ? (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -178,60 +206,97 @@ export function SessionResults({
                   Đang tạo ảnh: xong {done}/{images.length}
                   {failed > 0 && <span className="text-red-600"> · {failed} lỗi</span>}
                 </p>
-                <p className="text-sm tabular-nums text-muted-foreground">
+                <p
+                  className="text-sm tabular-nums text-muted-foreground"
+                  title="Tiến độ là ước tính theo thời gian chờ (kie.ai không báo phần trăm thật). Để trang này mở, trang tự cập nhật khi xong."
+                >
                   Ước tính {overall}% · đã chờ {formatElapsed(longest)}
                 </p>
               </div>
-              <ProgressBar percent={overall} label="Tiến độ tạo ảnh" />
-              <p className="text-xs text-muted-foreground">
-                Thanh tiến độ là ước tính theo thời gian chờ (kie.ai không báo phần trăm thật). Bạn có thể để trang này mở,
-                trang tự cập nhật khi xong.
-              </p>
+              <ProgressBar percent={overall} label="Tiến độ tạo ảnh" className="h-2" />
             </>
           ) : (
             <>
-              <p className={cn("flex items-center gap-2 font-medium", failed > 0 ? "text-amber-700" : "text-emerald-700")}>
-                {failed > 0 ? <AlertTriangleIcon className="size-5" /> : <CheckCircle2Icon className="size-5" />}
-                {failed > 0 ? `Hoàn tất: ${done} ảnh xong, ${failed} ảnh lỗi (bấm Tạo lại ở ảnh lỗi)` : `Hoàn thành: đã tạo xong ${done}/${images.length} ảnh`}
-              </p>
-              <ProgressBar percent={100} tone={failed > 0 ? "error" : "success"} label="Đã hoàn thành" />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <p className={cn("flex items-center gap-2 font-medium", failed > 0 ? "text-amber-700" : "text-emerald-700")}>
+                  {failed > 0 ? <AlertTriangleIcon className="size-5" /> : <CheckCircle2Icon className="size-5" />}
+                  {failed > 0 ? `${done} ảnh xong, ${failed} lỗi (bấm Tạo lại ở ảnh lỗi)` : `Hoàn thành ${done}/${images.length} ảnh`}
+                </p>
+                {done > 0 && (
+                  <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                    <a
+                      href={`/api/sessions/${sessionId}/download?format=zip`}
+                      className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8")}
+                      title="Tải tất cả ảnh (ZIP)"
+                    >
+                      <DownloadIcon /> ZIP
+                    </a>
+                    <a
+                      href={`/api/sessions/${sessionId}/download?format=pdf`}
+                      className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8")}
+                      title="Tải tất cả ảnh thành một file PDF"
+                    >
+                      <FileTextIcon /> PDF
+                    </a>
+                    <CopyImagesButton
+                      label="Copy"
+                      className="h-8"
+                      images={images
+                        .filter((i) => i.status === "SUCCESS" && i.finalUrl)
+                        .map((i) => ({ id: i.id, label: i.label, url: i.finalUrl! }))}
+                    />
+                    {canRefinish && (
+                      <LabelPositionButton
+                        sessionId={sessionId}
+                        title="Cả phiên"
+                        buttonLabel="Nhãn"
+                        buttonTitle="Chỉnh kiểu và vị trí nhãn của tất cả ảnh"
+                        currentStyle={labelMode}
+                        currentPos={defaultLabelPos}
+                        imageCount={done}
+                        onDone={refresh}
+                      />
+                    )}
+                    {canRefinish && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        onClick={refinish}
+                        disabled={refinishing}
+                        title="Vẽ lại khung và nhãn theo cấu hình mới nhất (tên xưởng, ghi chú chân ảnh...). Không gọi AI nên không tốn token."
+                      >
+                        {refinishing ? <Loader2Icon className="animate-spin" /> : <PaletteIcon />}
+                        Vẽ lại
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
               {done > 0 && designHref && (
-                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
-                  <Link href={designHref} className={cn(buttonVariants({ size: "lg" }), "h-11 px-5")}>
-                    <PaletteIcon /> {isDesign ? "Thiết kế thêm theo chất liệu khác" : "Bước 2: Thiết kế theo chất liệu khách chọn"}
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+                  <Link href={designUrl ?? designHref} className={cn(buttonVariants({ size: "default" }), "h-10 px-4")}>
+                    <PaletteIcon />{" "}
+                    {isDesign
+                      ? "Thiết kế thêm theo chất liệu khác"
+                      : selected.length > 0
+                        ? `Bước 2: Chọn kiểu thiết kế (${selected.length})`
+                        : "Bước 2: Thiết kế theo chất liệu khách chọn"}
                   </Link>
                   <span className="text-sm text-muted-foreground">
                     {isDesign
-                      ? "Chọn thêm chất liệu hoặc loại sản phẩm khác từ phiên catalog."
-                      : "Khách đã chọn được chất liệu ưng ý? Tạo ảnh thiết kế sản phẩm trên chất liệu đó."}
+                      ? "Chọn thêm chất liệu hoặc loại sản phẩm khác."
+                      : selected.length > 0
+                        ? "Chọn tiếp ở ảnh khác hoặc sang Bước 2 ngay."
+                        : "Bấm số dưới mỗi ảnh để chọn chất liệu khách ưng ý."}
                   </span>
-                </div>
-              )}
-              {done > 0 && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <a href={`/api/sessions/${sessionId}/download?format=zip`} className={cn(buttonVariants({ size: "sm" }), "h-9")}>
-                    <DownloadIcon /> Tải tất cả (ZIP)
-                  </a>
-                  <a
-                    href={`/api/sessions/${sessionId}/download?format=pdf`}
-                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9")}
-                  >
-                    <FileTextIcon /> Tải PDF
-                  </a>
-                  <ZaloSendButton sessionId={sessionId} groups={zaloGroups} count={done} label="Gửi tất cả lên nhóm Zalo" />
-                  {canRefinish && (
-                    <Button type="button" variant="outline" size="sm" className="h-9" onClick={refinish} disabled={refinishing}>
-                      {refinishing ? <Loader2Icon className="animate-spin" /> : <PaletteIcon />}
-                      Vẽ lại khung và nhãn
+                  {selected.length > 0 && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setSelected([])}>
+                      Bỏ chọn
                     </Button>
                   )}
                 </div>
-              )}
-              {canRefinish && done > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  &quot;Vẽ lại khung và nhãn&quot; áp dụng lại tên xưởng, nhãn chất liệu... theo cấu hình mới nhất. Không gọi AI nên không tốn token.
-                  Ảnh luôn được lưu lại, xem lại ở mục Lịch sử.
-                </p>
               )}
             </>
           )}
@@ -248,23 +313,108 @@ export function SessionResults({
               elapsedMs={img.ageMs + sinceReceived}
               onZoom={() => setZoom(img)}
               onRetried={refresh}
-              sessionId={sessionId}
-              zaloGroups={zaloGroups}
+              picker={canPick && img.pick ? { cells: img.pick.cells, selected, onToggle: toggleCell } : null}
             />
           </li>
         ))}
       </ul>
 
+      {canPick && done > 0 && selected.length > 0 && designUrl && (
+        <div className="sticky bottom-4 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-primary/40 bg-background/95 p-3 shadow-lg backdrop-blur">
+          <p className="text-sm font-medium">
+            Đã chọn <b>{selected.length}</b> chất liệu
+            <span className="hidden text-muted-foreground sm:inline">
+              {" "}
+              ({pickedInfo.map((p) => `${p.label.replace("Ảnh ", "")}·${p.cell.number}`).join(", ")})
+            </span>
+          </p>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setSelected([])}>
+            Bỏ chọn
+          </Button>
+          <Link href={designUrl} className={cn(buttonVariants({ size: "lg" }), "ml-auto h-11 px-5")}>
+            <PaletteIcon /> Bước 2: Chọn kiểu thiết kế ({selected.length})
+          </Link>
+        </div>
+      )}
+
       <Dialog open={!!zoom} onOpenChange={(o) => !o && setZoom(null)}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-4xl">
           <DialogTitle>{zoom?.label}</DialogTitle>
-          <DialogDescription className="sr-only">Ảnh phóng to</DialogDescription>
-          {zoom?.finalUrl && <img src={zoom.finalUrl} alt={zoom.label} className="w-full rounded-lg border" />}
-          {zoom?.downloadUrl && (
-            <a href={zoom.downloadUrl} className={buttonVariants({ className: "h-10 self-start" })}>
-              <DownloadIcon /> Tải ảnh về
-            </a>
+          <DialogDescription className={canPick && zoom?.pick ? undefined : "sr-only"}>
+            {canPick && zoom?.pick
+              ? `Bấm vào số để chọn chất liệu khách ưng ý (một hoặc nhiều số, tối đa ${MAX_DESIGN_MATERIALS}), rồi sang Bước 2.`
+              : "Ảnh phóng to"}
+          </DialogDescription>
+
+          {zoom?.finalUrl && canPick && zoom.pick ? (
+            <>
+              <CellSelectImage
+                key={zoom.id}
+                url={zoom.finalUrl}
+                alt={zoom.label}
+                aspectRatio={zoom.pick.aspectRatio}
+                cols={zoom.pick.cols}
+                rows={zoom.pick.rows}
+                cells={zoom.pick.cells}
+                selected={selected}
+                onToggle={toggleCell}
+                showNumbers={showNumbers}
+              />
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input type="checkbox" checked={showNumbers} onChange={(e) => setShowNumbers(e.target.checked)} className="size-4" />
+                Hiện số trên ảnh (bỏ tích để xem ảnh rõ hơn, vẫn bấm chọn được)
+              </label>
+            </>
+          ) : (
+            zoom?.finalUrl && <img src={zoom.finalUrl} alt={zoom.label} className="w-full rounded-lg border" />
           )}
+
+          {canPick && (
+            <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
+              <p className="text-sm font-medium">
+                Đã chọn {selected.length}/{MAX_DESIGN_MATERIALS} chất liệu
+              </p>
+              {pickedInfo.length > 0 && (
+                <ul className="flex flex-wrap gap-2">
+                  {pickedInfo.map((p) => (
+                    <li key={p.id} className="flex items-center gap-1.5 rounded-full border bg-card py-1 pr-1 pl-2 text-sm">
+                      <span className="rounded bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
+                        {p.label.replace("Ảnh ", "")}·{p.cell.number}
+                      </span>
+                      <span className="max-w-56 truncate">
+                        {p.cell.code} - {p.cell.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelected(selected.filter((x) => x !== p.id))}
+                        className="rounded-full p-1 text-muted-foreground hover:bg-muted"
+                        aria-label={`Bỏ ${p.cell.code}`}
+                      >
+                        <XIcon className="size-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {canPick && designUrl && (
+              <Link
+                href={designUrl}
+                aria-disabled={selected.length === 0}
+                className={cn(buttonVariants({ className: "h-10" }), selected.length === 0 && "pointer-events-none opacity-50")}
+              >
+                <PaletteIcon /> Bước 2: Chọn kiểu thiết kế{selected.length > 0 ? ` (${selected.length})` : ""}
+              </Link>
+            )}
+            {zoom?.downloadUrl && (
+              <a href={zoom.downloadUrl} className={buttonVariants({ variant: "outline", className: "h-10" })}>
+                <DownloadIcon /> Tải ảnh về
+              </a>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -282,11 +432,14 @@ function ImageCard({
   elapsedMs,
   onZoom,
   onRetried,
-  sessionId,
-  zaloGroups,
+  picker,
 }: {
-  sessionId: string;
-  zaloGroups: ZaloGroupOption[];
+  /** ảnh catalog: các nút số để chọn nhanh chất liệu (null = không chọn được) */
+  picker: {
+    cells: { number: number; materialId: string; code: string; name: string }[];
+    selected: string[];
+    onToggle: (cell: SelectableCell) => void;
+  } | null;
   img: ImageView;
   percent: number;
   elapsedMs: number;
@@ -294,6 +447,7 @@ function ImageCard({
   onRetried: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const pickedCount = picker ? picker.cells.filter((c) => picker.selected.includes(c.materialId)).length : 0;
 
   function retry() {
     startTransition(async () => {
@@ -306,10 +460,13 @@ function ImageCard({
 
   return (
     <Card className="overflow-hidden">
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 flex-1 font-medium">{img.label}</p>
-          <StatusBadge img={img} />
+      <CardContent className="flex flex-col gap-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 flex-1 truncate font-medium" title={img.label}>
+            {img.label}
+          </p>
+          {pickedCount > 0 && <Badge variant="outline" className="border-primary text-primary">Đã chọn {pickedCount}</Badge>}
+          {img.status !== "SUCCESS" && <StatusBadge img={img} />}
         </div>
 
         {img.status === "SUCCESS" && img.finalUrl && (
@@ -347,28 +504,59 @@ function ImageCard({
           </Alert>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {img.downloadUrl && (
-            <a href={img.downloadUrl} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-9")}>
-              <DownloadIcon /> Tải về
-            </a>
+        {/* một hàng: các số để chọn chất liệu (bên trái), các biểu tượng thao tác (bên phải) */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {img.status === "SUCCESS" && picker && (
+            <div className="flex flex-wrap gap-1" role="group" aria-label={`Chọn chất liệu khách ưng ý trong ${img.label}`}>
+              {picker.cells.map((cell) => {
+                const on = picker.selected.includes(cell.materialId);
+                return (
+                  <button
+                    key={cell.number}
+                    type="button"
+                    onClick={() => picker.onToggle(cell)}
+                    aria-pressed={on}
+                    title={`Chọn số ${cell.number}: ${cell.code} - ${cell.name}`}
+                    aria-label={`Số ${cell.number}: ${cell.code} - ${cell.name}`}
+                    className={cn(
+                      "flex size-8 items-center justify-center rounded-md border text-sm font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                      on ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:bg-muted",
+                    )}
+                  >
+                    {cell.number}
+                  </button>
+                );
+              })}
+            </div>
           )}
-          {img.status === "SUCCESS" && (
-            <ZaloSendButton sessionId={sessionId} imageId={img.id} groups={zaloGroups} count={1} label="Gửi Zalo" />
-          )}
-          {img.canRetry && (
-            <Button
-              type="button"
-              variant={img.status === "FAILED" ? "default" : "outline"}
-              size="sm"
-              className="h-9"
-              onClick={retry}
-              disabled={pending}
-            >
-              {pending ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}
-              Tạo lại trang này
-            </Button>
-          )}
+          <div className="ml-auto flex items-center gap-1.5">
+            {img.downloadUrl && (
+              <a
+                href={img.downloadUrl}
+                className={cn(buttonVariants({ variant: "outline", size: "icon" }), "size-8")}
+                title="Tải ảnh về"
+                aria-label={`Tải ${img.label} về`}
+              >
+                <DownloadIcon />
+              </a>
+            )}
+            {img.status === "SUCCESS" && img.finalUrl && <CopyImageIconButton url={img.finalUrl} label={img.label} />}
+            {img.canRetry && (
+              <Button
+                type="button"
+                variant={img.status === "FAILED" ? "default" : "outline"}
+                size={img.status === "FAILED" ? "sm" : "icon"}
+                className={img.status === "FAILED" ? "h-8" : "size-8"}
+                onClick={retry}
+                disabled={pending}
+                title="Tạo lại trang này (tốn một lượt)"
+                aria-label={`Tạo lại ${img.label}`}
+              >
+                {pending ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}
+                {img.status === "FAILED" && "Tạo lại"}
+              </Button>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -55,7 +55,7 @@ export function PairingBoard({ pending, staff, enabled }: { pending: PairRow[]; 
     <div className="flex flex-col gap-4">
       {!enabled && (
         <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-          Chức năng ghép nối đang tắt. Bật ở phần &quot;Bật/tắt chức năng Zalo&quot; để nhân viên xin ghép nối được.
+          Chức năng ghép nối đang tắt. Bật công tắc &quot;Ghép nối nhân viên&quot; ở phần trên để nhân viên xin ghép nối được.
         </p>
       )}
       <div className="flex flex-col gap-2">

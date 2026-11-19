@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { ASPECT_RATIOS, MAX_MATERIALS_PER_SHEET, RESOLUTIONS } from "@/lib/image-options";
+import { ASPECT_RATIOS, MAX_MATERIALS_IN_SHEET, RESOLUTIONS } from "@/lib/image-options";
+import { countSheetImages, materialsPerImage } from "@/lib/sheets/split";
 import { validateSheetComposition } from "@/lib/sheets/validate";
 
 export type EditorMaterial = {
@@ -64,7 +65,9 @@ export function SheetEditor({
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   const problem = validateSheetComposition({ cols, rows, materialCount: ids.length });
-  const full = ids.length >= MAX_MATERIALS_PER_SHEET;
+  const full = ids.length >= MAX_MATERIALS_IN_SHEET;
+  const perImage = materialsPerImage(cols, rows);
+  const imageCount = countSheetImages(ids.length, cols, rows);
 
   const candidates = materials.filter(
     (m) =>
@@ -200,15 +203,23 @@ export function SheetEditor({
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
-              Chất liệu trong trang ({ids.length}/{MAX_MATERIALS_PER_SHEET})
+              Chất liệu trong trang ({ids.length})
             </h2>
             <span className="text-sm text-muted-foreground">
-              {cols * rows} ô ({cols} x {rows})
+              {cols * rows} ô mỗi ảnh ({cols} x {rows})
             </span>
           </div>
           {problem && (
             <Alert variant="destructive">
               <AlertDescription>{problem}</AlertDescription>
+            </Alert>
+          )}
+          {!problem && imageCount > 1 && (
+            <Alert>
+              <AlertDescription>
+                Mỗi ảnh chứa {perImage} chất liệu theo thứ tự bên dưới, nên trang này sẽ tạo <b>{imageCount} ảnh</b> khi dùng
+                (mỗi ảnh tính một lượt).
+              </AlertDescription>
             </Alert>
           )}
           {ids.length === 0 ? (
@@ -222,6 +233,11 @@ export function SheetEditor({
                 return (
                   <li key={id} className="flex items-center gap-2 rounded-lg border p-2">
                     <span className="w-6 shrink-0 text-center text-sm font-semibold">{i + 1}</span>
+                    {imageCount > 1 && (
+                      <Badge variant="secondary" className="shrink-0">
+                        Ảnh {Math.floor(i / perImage) + 1}
+                      </Badge>
+                    )}
                     {m?.imageUrl ? (
                       <img src={m.imageUrl} alt="" className="h-10 w-16 shrink-0 rounded border object-contain" />
                     ) : (
@@ -287,7 +303,7 @@ export function SheetEditor({
               ))}
             </NativeSelect>
           </div>
-          {full && <p className="text-sm text-amber-700">Đã đủ {MAX_MATERIALS_PER_SHEET} chất liệu, không thêm được nữa.</p>}
+          {full && <p className="text-sm text-amber-700">Đã đủ {MAX_MATERIALS_IN_SHEET} chất liệu, không thêm được nữa.</p>}
           <ul className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto pr-1">
             {candidates.length === 0 && (
               <li className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">

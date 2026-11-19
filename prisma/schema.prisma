@@ -35,6 +35,23 @@ enum ZaloDeliveryStatus {
   FAILED
 }
 
+// Các "trục" phân loại chất liệu. Giá trị bên trong từng trục do admin quản lý ở bảng material_options.
+enum MaterialOptionType {
+  BASE_MATERIAL
+  TECHNIQUE
+  SURFACE_FINISH
+  SURFACE_PATTERN
+  COLOR_FAMILY
+  STYLE_TAG
+  SERIES
+}
+
+// Số lớp màu: ONE = một màu cho cả hai mặt, TWO = hai mặt khác màu
+enum ColorCount {
+  ONE
+  TWO
+}
+
 enum ImageStatus {
   PENDING
   PROCESSING
@@ -86,7 +103,8 @@ model Material {
   groupName          String
   printTech          String
   descHuman          String    @db.Text
-  descAi             String    @db.Text
+  descAi             String?   @db.Text // đã bỏ khỏi giao diện, không còn dùng; giữ cột để không mất dữ liệu cũ
+  thicknessMm        Float? // độ dày thật (mm); nhóm Mỏng / Cao thành / Dày tính từ số này, xem lib/materials/thickness.ts
   layer1Path         String?   @db.VarChar(500)
   layer2Path         String?   @db.VarChar(500)
   productPhotoPath   String?   @db.VarChar(500)
@@ -96,15 +114,71 @@ model Material {
   kieRefExpiresAt    DateTime?
   isActive           Boolean   @default(true)
   sortOrder          Int       @default(0)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+
+  // Phân loại (xem docs/DECISIONS.md D73). Các cột *value* lưu "value" của bảng material_options, không dùng khóa ngoại.
+  // groupName và printTech vẫn là nguồn mà code cũ đọc: khi lưu, hệ thống ghi song song nhãn của baseMaterial và technique vào hai cột đó.
+  baseMaterial         String?            @db.VarChar(60)
+  technique            String?            @db.VarChar(60)
+  surfaceFinish        String?            @db.VarChar(60) // chất bề mặt: mờ, bóng, gương, nhũ...
+  surfacePattern       String?            @db.VarChar(60) // họa tiết: trơn, caro, hoa văn...
+  colorCount           ColorCount?
+  frontColorName       String?            @db.VarChar(100) // chữ tự do, tả đúng cái nhìn thấy
+  frontColorFamily     String?            @db.VarChar(60)
+  frontColorConfidence String?            @db.VarChar(20) // CAO | TRUNG_BINH | THAP
+  backColorName        String?            @db.VarChar(100)
+  backColorFamily      String?            @db.VarChar(60)
+  backColorConfidence  String?            @db.VarChar(20)
+  seriesCode           String?            @db.VarChar(60) // dòng nhà cung cấp: ZY, HT, H...
+  aiVisualNote         String?            @db.Text // 1 câu tiếng Anh tả bề mặt hai mặt cho AI (chưa đưa vào prompt)
+  photoIssue           String?            @db.VarChar(200) // vấn đề ảnh mẫu, nối bằng "|": CO_THUOC, CO_TAY, NEN_LAN, MAU_LECH, MO, KHONG_THAY_CHAT_LIEU
+  classifyConfidence   String?            @db.VarChar(20) // độ tin cậy của lần phân loại: CAO | TRUNG_BINH | THAP
+  needsReview          Boolean            @default(false)
+  reviewNote           String?            @db.Text
+  styleTags            MaterialStyleTag[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   sheetMaterials  SheetMaterial[]
   selectedIn      SessionSelectedMaterial[]
   generatedImages GeneratedImage[]
 
   @@index([groupName, isActive])
+  @@index([baseMaterial])
+  @@index([technique])
+  @@index([surfaceFinish])
+  @@index([surfacePattern])
+  @@index([colorCount])
+  @@index([needsReview])
   @@map("materials")
+}
+
+// Danh mục giá trị cho các trường phân loại chất liệu (admin thêm/sửa nhãn/tắt). "value" là mã không dấu, không đổi sau khi tạo.
+model MaterialOption {
+  id        String             @id @default(cuid())
+  type      MaterialOptionType
+  value     String             @db.VarChar(60)
+  label     String             @db.VarChar(100)
+  sortOrder Int                @default(0)
+  isActive  Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@unique([type, value])
+  @@unique([type, label])
+  @@index([type, isActive, sortOrder])
+  @@map("material_options")
+}
+
+// Tag phong cách của chất liệu (nhiều-nhiều). value là value của MaterialOption loại STYLE_TAG.
+model MaterialStyleTag {
+  materialId String
+  value      String   @db.VarChar(60)
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@id([materialId, value])
+  @@index([value])
+  @@map("material_style_tags")
 }
 
 model Sheet {
@@ -342,17 +416,17 @@ model UsageLog {
 
 // Nhóm Zalo mà bot được mời vào. chatId là "chat.id" bot nhận được từ webhook (hoặc admin nhập tay).
 model ZaloGroup {
-  id         String    @id @default(cuid())
-  chatId     String    @unique @db.VarChar(100)
-  name       String    @db.VarChar(100)
-  isActive   Boolean   @default(true)
-  autoSend   Boolean   @default(false) // true = mỗi ảnh tạo xong tự gửi vào nhóm này
-  lastSeenAt DateTime? // lần cuối bot nhận được tin từ nhóm này
-  insight    String?   @db.Text // mô tả nhóm (khách là ai, quan tâm gì...) để AI lên kịch bản chăm sóc phù hợp
-  careEnabled Boolean  @default(false) // true = AI lên kịch bản chăm sóc cho nhóm này
-  postsPerDay Int      @default(2) // số lượt đăng mỗi ngày (2-3)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  chatId      String    @unique @db.VarChar(100)
+  name        String    @db.VarChar(100)
+  isActive    Boolean   @default(true)
+  autoSend    Boolean   @default(false) // true = mỗi ảnh tạo xong tự gửi vào nhóm này
+  lastSeenAt  DateTime? // lần cuối bot nhận được tin từ nhóm này
+  insight     String?   @db.Text // mô tả nhóm (khách là ai, quan tâm gì...) để AI lên kịch bản chăm sóc phù hợp
+  careEnabled Boolean   @default(false) // true = AI lên kịch bản chăm sóc cho nhóm này
+  postsPerDay Int       @default(2) // số lượt đăng mỗi ngày (2-3)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   deliveries ZaloDelivery[]
   posts      ZaloPost[]
@@ -393,7 +467,7 @@ enum ZaloMessageDirection {
 enum ZaloMessageAuthor {
   CONTACT // người nhắn tới bot
   BOT // bot AI tự trả lời
-  HUMAN // nhân viên trả lời từ web
+  HUMAN // nhân viên (tin cũ từ Hộp thư đã bỏ)
   SYSTEM // tin lệnh/ghép nối do hệ thống trả
 }
 
@@ -406,23 +480,24 @@ enum ZaloMessageKind {
   OTHER
 }
 
-// Mỗi người (hoặc nhóm) đã nhắn cho bot Zalo là một "hội thoại" trong Hộp thư.
+// Mỗi người (hoặc nhóm) đã nhắn cho bot Zalo là một "hội thoại" (lưu để bot đọc ngữ cảnh, ghép nối nhân viên, thống kê).
 model ZaloContact {
-  id               String          @id @default(cuid())
-  chatId           String          @unique @db.VarChar(100)
-  chatType         String          @default("PRIVATE") @db.VarChar(20) // PRIVATE | GROUP
-  displayName      String          @db.VarChar(150)
-  role             ZaloContactRole @default(CUSTOMER)
-  pairCode         String?         @db.VarChar(10) // mã ghép nối 4 số đang chờ admin cho phép
-  pairRequestedAt  DateTime?
-  botPaused        Boolean         @default(false) // true = người thật đang tiếp quản, bot im
-  needsHuman       Boolean         @default(false) // bot bí hoặc khách đòi gặp nhân viên
-  unreadCount      Int             @default(0)
-  lastMessageAt    DateTime?
-  lastMessageText  String?         @db.VarChar(200)
-  contextResetAt   DateTime? // lệnh /reset: bot không đọc tin cũ hơn mốc này
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id              String          @id @default(cuid())
+  chatId          String          @unique @db.VarChar(100)
+  chatType        String          @default("PRIVATE") @db.VarChar(20) // PRIVATE | GROUP
+  displayName     String          @db.VarChar(150)
+  role            ZaloContactRole @default(CUSTOMER)
+  pairCode        String?         @db.VarChar(10) // mã ghép nối 4 số đang chờ admin cho phép
+  pairRequestedAt DateTime?
+  botPaused       Boolean         @default(false) // true = bot im ở hội thoại này (đã chuyển nhân viên hoặc khách gõ /nhanvien)
+  botPausedAt     DateTime? // lúc bot bắt đầu im; quá "botResumeHours" thì bot tự trả lời lại
+  needsHuman      Boolean         @default(false) // bot bí hoặc khách đòi gặp nhân viên
+  unreadCount     Int             @default(0)
+  lastMessageAt   DateTime?
+  lastMessageText String?         @db.VarChar(200)
+  contextResetAt  DateTime? // lệnh /reset: bot không đọc tin cũ hơn mốc này
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   messages ZaloMessage[]
 
@@ -488,22 +563,22 @@ model ZaloAsset {
 
 // Một lượt đăng trong kịch bản chăm sóc nhóm Zalo: AI lên sẵn nội dung và giờ, người dùng chỉnh được, rồi đăng.
 model ZaloPost {
-  id               String         @id @default(cuid())
-  groupId          String
-  scheduledAt      DateTime
-  kind             ZaloPostKind
-  text             String         @db.Text
-  assetId          String?
-  imageId          String? // ảnh đã tạo trong hệ thống (mẫu mã mới)
-  status           ZaloPostStatus @default(PLANNED)
-  reason           String?        @db.VarChar(300) // vì sao AI chọn nội dung này (trời rét, dịp lễ...)
-  error            String?        @db.Text
-  sentAt           DateTime?
-  aiGenerated      Boolean        @default(true)
-  editedAt         DateTime?
-  editedByUserId   String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  groupId        String
+  scheduledAt    DateTime
+  kind           ZaloPostKind
+  text           String         @db.Text
+  assetId        String?
+  imageId        String? // ảnh đã tạo trong hệ thống (mẫu mã mới)
+  status         ZaloPostStatus @default(PLANNED)
+  reason         String?        @db.VarChar(300) // vì sao AI chọn nội dung này (trời rét, dịp lễ...)
+  error          String?        @db.Text
+  sentAt         DateTime?
+  aiGenerated    Boolean        @default(true)
+  editedAt       DateTime?
+  editedByUserId String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   group ZaloGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
   asset ZaloAsset?      @relation(fields: [assetId], references: [id], onDelete: SetNull)

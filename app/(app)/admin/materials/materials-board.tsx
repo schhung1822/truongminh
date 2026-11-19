@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatThickness, thicknessClass } from "@/lib/materials/thickness";
 import { cn } from "@/lib/utils";
 import { ActiveToggle } from "./active-toggle";
 import { deleteMaterialsAction } from "./actions";
@@ -35,14 +36,38 @@ export type BoardItem = {
   groupName: string;
   printTech: string;
   descHuman: string;
-  descAi: string;
+  thicknessMm: number | null;
   isActive: boolean;
   refUrl: string | null;
   /** tên các trang mẫu đang chứa chất liệu này */
   sheets: string[];
   /** đã từng dùng để tạo ảnh: không xóa được, chỉ tắt */
   used: boolean;
+  // phân loại (nhãn tiếng Việt đã tra từ danh mục)
+  baseLabel: string;
+  techLabel: string;
+  finishLabel: string;
+  patternLabel: string;
+  colorCount: "ONE" | "TWO" | null;
+  frontColor: { name: string; family: string };
+  backColor: { name: string; family: string };
+  seriesLabel: string;
+  styleTagLabels: string[];
+  aiVisualNote: string;
+  photoIssueLabels: string[];
+  needsReview: boolean;
+  reviewNote: string;
 };
+
+const COLOR_COUNT_LABEL = { ONE: "1 màu", TWO: "2 màu" } as const;
+
+/** "Đen" hoặc "Đen → Trắng" (mặt trước → mặt sau) từ họ màu. */
+function colorsText(m: Pick<BoardItem, "frontColor" | "backColor">): string {
+  const f = m.frontColor.family;
+  const b = m.backColor.family;
+  if (f && b) return f === b ? f : `${f} → ${b}`;
+  return f || b;
+}
 
 export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "grid" | "list" }) {
   const router = useRouter();
@@ -112,13 +137,31 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
           Thiếu ảnh
         </Badge>
       )}
-      {!m.descAi && (
-        <Badge variant="secondary" className="bg-amber-100 text-amber-800">
-          Thiếu mô tả AI
+    </>
+  );
+
+  const classification = (m: BoardItem) => (
+    <>
+      {m.finishLabel && <Badge variant="secondary">{m.finishLabel}</Badge>}
+      {m.patternLabel && <Badge variant="secondary">{m.patternLabel}</Badge>}
+      {m.colorCount && <Badge variant="secondary">{COLOR_COUNT_LABEL[m.colorCount]}</Badge>}
+      {colorsText(m) && <Badge variant="outline">{colorsText(m)}</Badge>}
+      {m.needsReview && (
+        <Badge variant="secondary" className="bg-amber-100 text-amber-800" title={m.reviewNote || "Cần xem lại"}>
+          Cần xem lại
         </Badge>
       )}
     </>
   );
+
+  const thickness = (m: BoardItem) => {
+    const c = thicknessClass(m.thicknessMm);
+    return c ? (
+      <Badge variant="outline" title={`${c.label} (${c.range}): ${c.rule}`}>
+        {c.label} · {formatThickness(m.thicknessMm)}
+      </Badge>
+    ) : null;
+  };
 
   const usage = (m: BoardItem) =>
     m.sheets.length > 0
@@ -183,10 +226,12 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <Badge variant="outline">{m.groupName}</Badge>
-                  <Badge variant="outline">{m.printTech}</Badge>
+                  <Badge variant="outline">{m.baseLabel}</Badge>
+                  <Badge variant="outline">{m.techLabel}</Badge>
+                  {thickness(m)}
                   {warnings(m)}
                 </div>
+                <div className="flex flex-wrap gap-1.5">{classification(m)}</div>
                 <p className="line-clamp-2 text-xs text-muted-foreground" title={usage(m)}>
                   {usage(m)}
                 </p>
@@ -230,9 +275,11 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
                   {m.name}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <Badge variant="outline">{m.groupName}</Badge>
-                  <Badge variant="outline">{m.printTech}</Badge>
+                  <Badge variant="outline">{m.baseLabel}</Badge>
+                  <Badge variant="outline">{m.techLabel}</Badge>
+                  {thickness(m)}
                   {warnings(m)}
+                  {classification(m)}
                 </div>
                 <p className="mt-1 truncate text-xs text-muted-foreground">{usage(m)}</p>
               </div>
@@ -311,7 +358,8 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
                   {zoom.name}
                 </DialogTitle>
                 <DialogDescription>
-                  {zoom.groupName} · {zoom.printTech}
+                  {zoom.baseLabel} · {zoom.techLabel}
+                  {zoom.seriesLabel ? ` · dòng ${zoom.seriesLabel}` : ""}
                 </DialogDescription>
               </DialogHeader>
               <div className="flex items-center justify-center rounded-lg border bg-white p-2">
@@ -323,13 +371,57 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
               </div>
               <dl className="grid gap-2 text-sm">
                 <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Mô tả cho người đọc</dt>
-                  <dd>{zoom.descHuman || "—"}</dd>
+                  <dt className="text-xs font-medium text-muted-foreground">Độ dày</dt>
+                  <dd>
+                    {thicknessClass(zoom.thicknessMm) ? (
+                      <>
+                        <span className="font-medium">
+                          {thicknessClass(zoom.thicknessMm)!.label} · {formatThickness(zoom.thicknessMm)}.
+                        </span>{" "}
+                        {thicknessClass(zoom.thicknessMm)!.rule}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Mô tả cho AI</dt>
-                  <dd>{zoom.descAi || "—"}</dd>
+                  <dt className="text-xs font-medium text-muted-foreground">Bề mặt và màu</dt>
+                  <dd>
+                    {[zoom.finishLabel, zoom.patternLabel, zoom.colorCount ? COLOR_COUNT_LABEL[zoom.colorCount] : ""].filter(Boolean).join(" · ") || "—"}
+                    <br />
+                    Mặt trước: {zoom.frontColor.name || "—"}
+                    {zoom.frontColor.family ? ` (${zoom.frontColor.family})` : ""}
+                    <br />
+                    Mặt sau: {zoom.backColor.name || "—"}
+                    {zoom.backColor.family ? ` (${zoom.backColor.family})` : ""}
+                  </dd>
                 </div>
+                {zoom.styleTagLabels.length > 0 && (
+                  <div>
+                    <dt className="text-xs font-medium text-muted-foreground">Phong cách</dt>
+                    <dd>{zoom.styleTagLabels.join(", ")}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Mô tả</dt>
+                  <dd>{zoom.descHuman || "—"}</dd>
+                </div>
+                {zoom.aiVisualNote && (
+                  <div>
+                    <dt className="text-xs font-medium text-muted-foreground">Mô tả cho AI (tiếng Anh)</dt>
+                    <dd className="text-muted-foreground">{zoom.aiVisualNote}</dd>
+                  </div>
+                )}
+                {(zoom.needsReview || zoom.photoIssueLabels.length > 0) && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-amber-900">
+                    <dt className="text-xs font-medium">{zoom.needsReview ? "Cần xem lại" : "Ảnh mẫu"}</dt>
+                    <dd>
+                      {zoom.reviewNote || (zoom.needsReview ? "Chưa có ghi chú." : "")}
+                      {zoom.photoIssueLabels.length > 0 && <span className="block text-xs">Ảnh: {zoom.photoIssueLabels.join(", ")}</span>}
+                    </dd>
+                  </div>
+                )}
               </dl>
               <Link href={`/admin/materials/${zoom.id}`} className={buttonVariants({ className: "h-10 self-start" })}>
                 <PencilIcon /> Sửa chất liệu này

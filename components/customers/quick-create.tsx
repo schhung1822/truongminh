@@ -38,9 +38,9 @@ export function QuickCreate({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const { defaultSheets, quota, showCost } = data;
-  const count = defaultSheets.length;
+  const count = defaultSheets.reduce((n, s) => n + s.images, 0); // số ảnh (trang dài chia nhiều ảnh)
   const overQuota = quota !== null && count > quota.left;
-  const cost = estimateCost(defaultSheets.map((s) => s.resolution));
+  const cost = estimateCost(defaultSheets.flatMap((s) => Array<string>(s.images).fill(s.resolution)));
 
   function start() {
     setError(null);
@@ -69,7 +69,7 @@ export function QuickCreate({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        {count > 0 ? (
+        {defaultSheets.length > 0 ? (
           <Button type="button" className="h-12 px-6 text-base" onClick={start} disabled={pending || overQuota}>
             {pending ? <Loader2Icon className="animate-spin" /> : <ZapIcon />}
             {pending ? "Đang bắt đầu..." : "Tạo nhanh"}
@@ -95,7 +95,7 @@ export function QuickCreate({
         {children}
       </div>
 
-      {count > 0 && (
+      {defaultSheets.length > 0 && (
         <p className="text-sm text-muted-foreground">
           Tạo nhanh với trang mẫu mặc định: <b>{defaultSheets.map((s) => s.name).join(", ")}</b> ({count} ảnh)
           {showCost && <> · khoảng {cost.credits} token (${cost.usd.toFixed(2)})</>}

@@ -1,6 +1,8 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { badgeRect, computeCells, computeLegend } from "@/lib/grid/layout";
-import { renderText, renderTextFit, type TextImage } from "./text";
+import { HEADER_RATIO } from "./geometry";
+import { DEFAULT_LABEL_POS, labelCardOrigin, type LabelPos, type LabelStyle } from "./label-pos";
+import { renderText, renderTextFit, renderTextWrap, type TextImage } from "./text";
 
 export type FinishCell = {
   code: string;
@@ -20,26 +22,32 @@ export type FinishInput = {
   cols: number;
   rows: number;
   cells: FinishCell[];
-  labelMode: "overlay" | "legend" | "none";
+  /** kiểu nhãn: thẻ đầy đủ, thẻ gọn, đánh số + chú giải dưới ảnh, hoặc không nhãn */
+  labelMode: LabelStyle;
+  /** vị trí thẻ nhãn trong mỗi ô khi labelMode là "overlay" hoặc "compact" (mặc định góc dưới phải) */
+  labelPos?: LabelPos;
   /** dòng chữ nhỏ ở chân ảnh, ví dụ "Xưởng in Trường Minh" */
   workshopName: string;
   /** dòng chú thích thêm dưới chân ảnh (để trống nếu không cần) */
   footerNote: string;
+  /** dòng ghi chú ngay dưới tên xưởng, ví dụ "Hình minh họa" (để trống nếu không cần) */
+  footerDisclaimer?: string;
 };
 
 type Overlay = OverlayOptions;
 
 /** Kích thước đầu/chân trang theo chiều rộng ảnh (px). Dùng chung với test. */
-export function layoutMetrics(W: number, opts: { hasWorkshop: boolean; hasNote: boolean }) {
-  const footerH = Math.round(W * (opts.hasNote ? 0.065 : opts.hasWorkshop ? 0.04 : 0.015));
-  return { pad: Math.round(W * 0.04), headerH: Math.round(W * 0.075), footerH };
+export function layoutMetrics(W: number, opts: { hasWorkshop: boolean; hasNote: boolean; hasDisclaimer?: boolean }) {
+  // mỗi dòng chữ ở chân trang thêm một phần chiều cao
+  const footerH = Math.round(W * (0.015 + (opts.hasWorkshop ? 0.025 : 0) + (opts.hasDisclaimer ? 0.025 : 0) + (opts.hasNote ? 0.025 : 0)));
+  return { pad: Math.round(W * 0.04), headerH: Math.round(W * HEADER_RATIO), footerH };
 }
 
 const svg = (w: number, h: number, body: string) =>
   Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${body}</svg>`);
 
 /**
- * Thẻ nhãn nhỏ gọn đặt ở góc dưới PHẢI mỗi ô: [MÃ] Tên chất liệu / Loại · Công nghệ in.
+ * Thẻ nhãn nhỏ gọn đặt ở một vị trí trong mỗi ô (mặc định góc dưới PHẢI): [MÃ] Tên chất liệu / Loại · Công nghệ in.
  * Nền trắng mờ, viền mảnh, không có vạch nhấn; che rất ít phần sản phẩm.
  */
 async function buildLabelCard(
@@ -47,6 +55,7 @@ async function buildLabelCard(
   f: FinishCell,
   W: number,
   top: number,
+  pos: LabelPos,
 ): Promise<Overlay[]> {
   const m = Math.round(W * 0.008); // lề so với mép ô
   const padX = Math.round(W * 0.0065);
@@ -76,8 +85,9 @@ async function buildLabelCard(
   const innerW = Math.max(line1W, meta?.width ?? 0);
   const cardW = accent + padX + innerW + padX;
   const cardH = padY * 2 + line1H + (meta ? Math.round(gap * 0.7) + meta.height : 0);
-  const x = cell.x + cell.w - cardW - m; // sát mép phải của ô
-  const y = top + cell.y + cell.h - cardH - m;
+  const origin = labelCardOrigin(pos, cell, { w: cardW, h: cardH }, m);
+  const x = origin.x;
+  const y = top + origin.y;
   const r = Math.round(W * 0.0045);
 
   const out: Overlay[] = [
@@ -105,6 +115,62 @@ async function buildLabelCard(
 }
 
 /**
+ * Thẻ nhãn GỌN: hẹp (tối đa 40% bề rộng ô), xếp dọc: chip mã / tên xuống tối đa 2 dòng / loại · công nghệ in.
+ * Dùng khi nhãn dài che mất logo trong ô.
+ */
+async function buildCompactLabelCard(
+  cell: { x: number; y: number; w: number; h: number },
+  f: FinishCell,
+  W: number,
+  top: number,
+  pos: LabelPos,
+): Promise<Overlay[]> {
+  const m = Math.round(W * 0.008);
+  const padX = Math.round(W * 0.0058);
+  const padY = Math.round(W * 0.0038);
+  const gap = Math.round(W * 0.0036);
+  const nameSize = Math.max(9, W * 0.0108);
+  const smallSize = Math.max(7, W * 0.0082);
+  const maxInner = Math.max(40, Math.round(cell.w * 0.4) - 2 * padX);
+
+  const chipPadX = Math.round(smallSize * 0.55);
+  const chipPadY = Math.round(smallSize * 0.28);
+  const codeImg = await renderTextFit({ text: f.code, size: smallSize, weight: "semibold", color: "#ffffff", maxWidth: maxInner - 2 * chipPadX });
+  const chipW = codeImg.width + 2 * chipPadX;
+  const chipH = codeImg.height + 2 * chipPadY;
+  const nameImg = await renderTextWrap({ text: f.name, size: nameSize, weight: "semibold", color: "#141414", maxWidth: maxInner, maxLines: 2 });
+  const metaText = [f.groupName, f.printTech].filter((t): t is string => !!t && !!t.trim()).join("  ·  ");
+  const meta: TextImage | null = metaText
+    ? await renderTextFit({ text: metaText, size: smallSize, weight: "regular", color: "#5c5c5c", maxWidth: maxInner })
+    : null;
+
+  const innerW = Math.max(chipW, nameImg.width, meta?.width ?? 0);
+  const cardW = padX * 2 + innerW;
+  const cardH = padY * 2 + chipH + gap + nameImg.height + (meta ? gap + meta.height : 0);
+  const origin = labelCardOrigin(pos, cell, { w: cardW, h: cardH }, m);
+  const x = origin.x;
+  const y = top + origin.y;
+  const r = Math.round(W * 0.0045);
+
+  const out: Overlay[] = [
+    {
+      input: svg(
+        cardW,
+        cardH,
+        `<rect x="0.5" y="0.5" width="${cardW - 1}" height="${cardH - 1}" rx="${r}" fill="#ffffff" fill-opacity="0.93" stroke="#000000" stroke-opacity="0.14"/>`,
+      ),
+      left: x,
+      top: y,
+    },
+    { input: svg(chipW, chipH, `<rect width="${chipW}" height="${chipH}" rx="${Math.round(chipH * 0.28)}" fill="#1f1f1f"/>`), left: x + padX, top: y + padY },
+    { input: codeImg.input, left: x + padX + chipPadX, top: y + padY + chipPadY },
+    { input: nameImg.input, left: x + padX, top: y + padY + chipH + gap },
+  ];
+  if (meta) out.push({ input: meta.input, left: x + padX, top: y + padY + chipH + gap + nameImg.height + gap });
+  return out;
+}
+
+/**
  * Hoàn thiện ảnh kết quả: đầu trang "Thương hiệu • Ảnh N", nhãn chất liệu (overlay hoặc legend),
  * chân trang một dòng chữ nhỏ. Xuất JPEG. Mọi kích thước tính theo chiều rộng ảnh.
  * Phần chữ này do HỆ THỐNG vẽ lên, không phải do AI vẽ.
@@ -118,7 +184,8 @@ export async function finishImage(input: FinishInput): Promise<Buffer> {
 
   const hasWorkshop = !!input.workshopName.trim();
   const hasNote = !!input.footerNote.trim();
-  const { pad, headerH, footerH } = layoutMetrics(W, { hasWorkshop, hasNote });
+  const hasDisclaimer = !!input.footerDisclaimer?.trim();
+  const { pad, headerH, footerH } = layoutMetrics(W, { hasWorkshop, hasNote, hasDisclaimer });
 
   const overlays: Overlay[] = [];
   const cells = computeCells({ width: W, height: H, cols: input.cols, rows: input.rows, count: input.cells.length });
@@ -150,9 +217,11 @@ export async function finishImage(input: FinishInput): Promise<Buffer> {
 
   // ---- Nhãn trên ảnh
   const imageTop = headerH;
-  if (input.labelMode === "overlay") {
+  const labelPos = input.labelPos ?? DEFAULT_LABEL_POS;
+  if (input.labelMode === "overlay" || input.labelMode === "compact") {
+    const build = input.labelMode === "compact" ? buildCompactLabelCard : buildLabelCard;
     for (const cell of cells) {
-      overlays.push(...(await buildLabelCard(cell, input.cells[cell.index], W, imageTop)));
+      overlays.push(...(await build(cell, input.cells[cell.index], W, imageTop, labelPos)));
     }
   }
 
@@ -177,7 +246,7 @@ export async function finishImage(input: FinishInput): Promise<Buffer> {
   // ---- Bảng chú giải dưới ảnh (legend)
   let legendH = 0;
   if (input.labelMode === "legend" && input.cells.length > 0) {
-    const rowHeight = Math.round(W * 0.042);
+    const rowHeight = Math.round(W * 0.052); // đủ chỗ cho tên dài xuống tối đa 2 dòng
     const legend = computeLegend({
       width: W,
       count: input.cells.length,
@@ -187,16 +256,18 @@ export async function finishImage(input: FinishInput): Promise<Buffer> {
     });
     legendH = legend.height;
     const legendTop = imageTop + H;
-    const size = W * 0.02;
+    const size = W * 0.0172;
     for (const e of legend.entries) {
       const f = input.cells[e.index];
-      const num = await renderText({ text: `${e.index + 1}.`, size, weight: "bold", color: "#1a1a1a" });
-      const txt = await renderTextFit({
+      const num = await renderText({ text: `${e.index + 1}.`, size: W * 0.02, weight: "bold", color: "#1a1a1a" });
+      // mã và tên dài thì xuống dòng (tối đa 2 dòng) thay vì cắt mất tên
+      const txt = await renderTextWrap({
         text: `${f.code} - ${f.name}${f.groupName ? ` (${f.groupName})` : ""}`,
         size,
         weight: "regular",
         color: "#333333",
         maxWidth: e.w - Math.round(W * 0.06),
+        maxLines: 2,
       });
       overlays.push({ input: num.input, left: e.x, top: legendTop + e.y + Math.round((e.h - num.height) / 2) });
       overlays.push({ input: txt.input, left: e.x + Math.round(W * 0.05), top: legendTop + e.y + Math.round((e.h - txt.height) / 2) });
@@ -209,17 +280,21 @@ export async function finishImage(input: FinishInput): Promise<Buffer> {
   const workshop = hasWorkshop
     ? await renderTextFit({ text: input.workshopName, size: W * 0.0155, weight: "regular", color: "#8a8a8a", maxWidth: W - pad * 2 })
     : null;
+  const disclaimer = hasDisclaimer
+    ? await renderTextFit({ text: input.footerDisclaimer!, size: W * 0.0135, weight: "regular", color: "#9a9a9a", maxWidth: W - pad * 2 })
+    : null;
   const note = hasNote
     ? await renderTextFit({ text: input.footerNote, size: W * 0.0135, weight: "regular", color: "#9a9a9a", maxWidth: W - pad * 2 })
     : null;
-  const noteGap = Math.round(W * 0.006);
-  const block = (workshop?.height ?? 0) + (workshop && note ? noteGap : 0) + (note?.height ?? 0);
+  // các dòng chân trang từ trên xuống: tên xưởng, ghi chú "Hình minh họa", chú thích thêm
+  const lines = [workshop, disclaimer, note].filter((l): l is TextImage => l !== null);
+  const lineGap = Math.round(W * 0.006);
+  const block = lines.reduce((h, l) => h + l.height, 0) + lineGap * Math.max(0, lines.length - 1);
   let fy = footerTop + Math.round((footerH - block) / 2);
-  if (workshop) {
-    overlays.push({ input: workshop.input, left: Math.round((W - workshop.width) / 2), top: fy });
-    fy += workshop.height + noteGap;
+  for (const l of lines) {
+    overlays.push({ input: l.input, left: Math.round((W - l.width) / 2), top: fy });
+    fy += l.height + lineGap;
   }
-  if (note) overlays.push({ input: note.input, left: Math.round((W - note.width) / 2), top: fy });
 
   // đường kẻ mảnh dưới đầu trang
   const line = (top: number) => ({ input: svg(W, 2, `<rect width="${W}" height="2" fill="#ececec"/>`), left: 0, top });

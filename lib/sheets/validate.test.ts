@@ -11,12 +11,13 @@ describe("validateSheetComposition", () => {
     expect(validateSheetComposition({ cols: 2, rows: 5, materialCount: 0 })).toBeNull();
   });
 
-  it("chặn quá 10 chất liệu", () => {
-    expect(validateSheetComposition({ cols: 4, rows: 4, materialCount: 11 })).toMatch(/tối đa 10/);
+  it("chấp nhận trang nhiều chất liệu hơn số ô (sẽ tự chia thành nhiều ảnh)", () => {
+    expect(validateSheetComposition({ cols: 2, rows: 4, materialCount: 80 })).toBeNull();
+    expect(validateSheetComposition({ cols: 2, rows: 2, materialCount: 5 })).toBeNull();
   });
 
-  it("chặn số chất liệu vượt số ô", () => {
-    expect(validateSheetComposition({ cols: 2, rows: 2, materialCount: 5 })).toMatch(/4 ô/);
+  it("chặn quá số chất liệu tối đa của một trang", () => {
+    expect(validateSheetComposition({ cols: 2, rows: 4, materialCount: 201 })).toMatch(/tối đa 200/);
   });
 
   it("chặn số cột/hàng không hợp lệ", () => {

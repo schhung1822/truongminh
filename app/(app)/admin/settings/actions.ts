@@ -14,7 +14,9 @@ export async function saveSettingsAction(_prev: SettingsResult, formData: FormDa
     dailyLimitPerSale: formData.get("dailyLimitPerSale"),
     workshopName: formData.get("workshopName") ?? "",
     footerNote: formData.get("footerNote") ?? "",
+    footerDisclaimer: formData.get("footerDisclaimer") ?? "",
     labelMode: formData.get("labelMode"),
+    labelPos: formData.get("labelPos"),
     designAspectRatio: formData.get("designAspectRatio"),
     designResolution: formData.get("designResolution"),
   });

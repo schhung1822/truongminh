@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CopyImagesButton } from "@/components/copy-images";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { requireUser } from "@/lib/auth/dal";
@@ -193,12 +194,22 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
                                 <span className="text-sm text-muted-foreground">
                                   Logo {l.logo.width}x{l.logo.height}px · {l.sessions.length} phiên
                                 </span>
-                                <Link
-                                  href={`/?logoId=${encodeURIComponent(l.logo.id)}`}
-                                  className={buttonVariants({ variant: "outline", size: "sm", className: "ml-auto" })}
-                                >
-                                  <SparklesIcon /> Tạo phiên mới với logo này
-                                </Link>
+                                <div className="ml-auto flex flex-wrap gap-2">
+                                  <CopyImagesButton
+                                    label="Copy ảnh của logo này"
+                                    images={l.sessions.flatMap((s) =>
+                                      s.images
+                                        .filter((i) => i.status === "SUCCESS" && i.finalPath)
+                                        .map((i, n) => ({ id: i.id, label: `${fmt.format(s.createdAt)} · Ảnh ${n + 1}`, url: fileUrl(i.finalPath)! })),
+                                    )}
+                                  />
+                                  <Link
+                                    href={`/?logoId=${encodeURIComponent(l.logo.id)}`}
+                                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                                  >
+                                    <SparklesIcon /> Tạo phiên mới với logo này
+                                  </Link>
+                                </div>
                               </div>
 
                               <ul className="flex flex-col gap-2">
