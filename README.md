@@ -111,6 +111,61 @@ Mở `https://tên-miền-của-bạn`, đăng nhập bằng `ADMIN_EMAIL` / `AD
 
 Sau đó: vào **Quản trị > Chất liệu** nhập chất liệu thật, **Trang mẫu** xếp chất liệu vào trang (số cột x hàng là bố cục một ảnh; trang có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh, ví dụ 80 chất liệu với 8 ô mỗi ảnh ra 10 ảnh), **Cấu hình** kiểm tra model và số dư kie.ai.
 
+### Triển khai bằng PM2 (AlmaLinux 9, không dùng Docker)
+Dành cho VPS đã chạy PM2. Web chạy bằng PM2 (đúng **một** tiến trình), MySQL cài thẳng trên máy, nginx đứng trước lo HTTPS. Đã kiểm thử với MySQL 8.0 (bản có sẵn trong kho AlmaLinux 9) và 8.4; **chưa kiểm thử với MariaDB**, nên nếu máy đang chạy MariaDB cho ứng dụng khác thì đừng dùng chung, hãy hỏi lại người làm dự án.
+
+**Cần chuẩn bị:** Node **22.12 trở lên (khuyến nghị 24)**, RAM từ 2 GB (build cần nhiều RAM; thiếu thì tạo thêm swap), tên miền đã trỏ bản ghi A về IP VPS, cổng 80 và 443 mở.
+
+```bash
+# 1. Kiểm tra Node (cũ hơn 22.12 thì cài Node 24)
+node -v
+# curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash - && sudo dnf install -y nodejs
+
+# 2. Cài MySQL 8.0 từ kho AlmaLinux, tạo CSDL và tài khoản riêng (đặt mật khẩu chỉ gồm chữ và số)
+sudo dnf install -y mysql-server
+sudo systemctl enable --now mysqld
+sudo mysql -e "CREATE DATABASE truongminh CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE USER 'truongminh'@'localhost' IDENTIFIED BY 'DAT_MAT_KHAU_O_DAY';
+GRANT ALL PRIVILEGES ON truongminh.* TO 'truongminh'@'localhost';"
+
+# 3. Lấy mã nguồn (đặt ở thư mục bạn muốn, dưới user chạy PM2)
+git clone https://github.com/schhung1822/truongminh.git
+cd truongminh
+cp .env.example .env
+nano .env
+```
+Trong `.env` điền: `DATABASE_URL="mysql://truongminh:MAT_KHAU@127.0.0.1:3306/truongminh"`, `APP_URL` (địa chỉ https của web), `APP_TIMEZONE`, `IMAGE_PROVIDER="kie"` và `KIE_API_KEY`, `ZALO_BOT_TOKEN`, `ZALO_WEBHOOK_SECRET`; `ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NAME` nếu chạy tạo admin mới. Ảnh lưu ở thư mục `storage/` ngay trong thư mục dự án (giữ nguyên `STORAGE_DIR`).
+
+**Cài mới, bắt đầu trống:**
+```bash
+npm ci --include=dev
+npx prisma migrate deploy
+npm run build
+npm run db:seed && npm run db:seed-styles     # tạo admin và dữ liệu mặc định (chạy lại cũng an toàn)
+pm2 start deploy/ecosystem.config.cjs
+pm2 save
+```
+**Hoặc mang dữ liệu từ máy khác sang** (CSDL + ảnh, thay cho lệnh `db:seed`): chép hai file lên VPS rồi
+```bash
+mysql -u truongminh -p truongminh < ~/ten-file-csdl.sql
+tar -xzf ~/ten-file-anh.tar.gz -C .            # tạo thư mục storage/ trong thư mục dự án (có cả khóa .secret-key)
+npm ci --include=dev && npx prisma migrate deploy && npm run build
+pm2 start deploy/ecosystem.config.cjs && pm2 save
+```
+Kiểm tra: `pm2 status` (online), `curl -s http://127.0.0.1:3000/api/healthz`, `pm2 logs truongminh`. Cổng 3000 đã có ứng dụng khác dùng thì đặt `APP_PORT=3100` khi `pm2 start` và sửa cổng trong nginx.
+
+**HTTPS bằng nginx** (đã có nginx thì chỉ thêm khối `server` mẫu):
+```bash
+sudo dnf install -y epel-release && sudo dnf install -y nginx certbot python3-certbot-nginx
+sudo cp deploy/nginx.conf.example /etc/nginx/conf.d/truongminh.conf    # sửa tên miền trong file này
+sudo setsebool -P httpd_can_network_connect 1                         # SELinux cho phép nginx gọi web ở 127.0.0.1
+sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload
+sudo systemctl enable --now nginx
+sudo certbot --nginx -d tên-miền-của-bạn
+```
+**Cập nhật bản mới:** `bash deploy/update-pm2.sh` (sao lưu, lấy mã, build, nạp lại PM2). **Sao lưu:** `bash deploy/backup-pm2.sh` (cần lệnh `mysqldump`, có sẵn trong gói `mysql`), đặt lịch như mục "Sao lưu" bên dưới nhưng dùng `backup-pm2.sh`. Phần "Thử bot Zalo trên VPS" bên dưới dùng được y như vậy.
+**Lưu ý:** không chạy PM2 ở chế độ cluster hay nhiều bản (`instances` phải là 1), vì tiến trình giữ kết nối Zalo và theo dõi việc bot đang làm.
+
 ### Thử bot Zalo trên VPS
 Bot Zalo chính thức cần một địa chỉ https công khai để Zalo đẩy tin về, nên VPS có tên miền là chỗ thử bot đúng nhất. Làm sau khi web đã chạy và đăng nhập được:
 1. Trong `.env` điền `ZALO_BOT_TOKEN` (lấy ở mini app Zalo Bot Creator) và `ZALO_WEBHOOK_SECRET` (tự đặt, 8 đến 256 ký tự), rồi `docker compose up -d` để web nhận cấu hình mới. `APP_URL` phải là địa chỉ https của web.

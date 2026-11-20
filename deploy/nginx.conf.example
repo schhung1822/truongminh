@@ -1,0 +1,21 @@
+# Mẫu cấu hình nginx đứng trước web (PM2). Sao chép thành /etc/nginx/conf.d/truongminh.conf, đổi tên miền (và cổng nếu không dùng 3000),
+# rồi chạy:  sudo certbot --nginx -d tên-miền   để xin chứng chỉ HTTPS (certbot tự thêm phần 443 và chuyển hướng 80 sang 443).
+server {
+    listen 80;
+    server_name anh-mau.ten-mien-cua-ban.com;
+
+    # Cho phép tải logo 10MB và video kịch bản chăm sóc Zalo tới 50MB (chừa dư cho phần đóng gói).
+    client_max_body_size 60m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Không đệm phản hồi để các màn hình tải dần hiển thị đúng.
+        proxy_buffering off;
+        proxy_read_timeout 120s;
+    }
+}
