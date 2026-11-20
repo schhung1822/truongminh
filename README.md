@@ -96,10 +96,13 @@ cd truongminh
 cp .env.production.example .env
 nano .env          # sửa xong bấm Ctrl+O, Enter, Ctrl+X để lưu
 
-# 4. Build và chạy (lần đầu mất vài phút). Cấu trúc CSDL tự tạo khi web khởi động.
+# 4. Tạo thư mục lưu ảnh và cấp quyền cho user trong container (uid 1000), nếu không web không ghi được ảnh
+mkdir -p data/storage && chown -R 1000:1000 data/storage
+
+# 5. Build và chạy (lần đầu mất vài phút). Cấu trúc CSDL tự tạo khi web khởi động.
 docker compose up -d --build
 
-# 5. Tạo tài khoản admin và dữ liệu mặc định (chạy một lần, chạy lại cũng an toàn)
+# 6. Tạo tài khoản admin và dữ liệu mặc định (chạy một lần, chạy lại cũng an toàn)
 docker compose exec app npm run db:seed
 docker compose exec app npm run db:seed-styles
 ```
@@ -142,10 +145,11 @@ bash deploy/backup.sh             # tạo thư mục backups/<ngày-giờ>/ gồ
 ```
 **Nhớ tải thư mục `backups/` về máy khác định kỳ** (ví dụ dùng WinSCP/FileZilla hoặc `scp`), đừng chỉ để trên chính VPS.
 
-Khôi phục (khi chuyển VPS hoặc hỏng dữ liệu): cài lại như "Cài lần đầu" đến bước 4, rồi:
+Khôi phục (khi chuyển VPS hoặc hỏng dữ liệu): cài lại như "Cài lần đầu" đến bước 3, rồi:
 ```bash
 gunzip -c backups/<bản>/db.sql.gz | docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" truongminh'
 tar -xzf backups/<bản>/storage.tar.gz -C data
+chown -R 1000:1000 data/storage   # cấp quyền ghi cho user trong container
 ```
 
 ### Bật callback của kie.ai (không bắt buộc)
