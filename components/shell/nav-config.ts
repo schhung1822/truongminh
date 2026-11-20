@@ -2,9 +2,13 @@ import {
   BarChart3Icon,
   BookOpenIcon,
   BoxesIcon,
+  BrainIcon,
+  BuildingIcon,
+  CalculatorIcon,
   FolderTreeIcon,
   HistoryIcon,
   HomeIcon,
+  InboxIcon,
   CalendarHeartIcon,
   LayoutGridIcon,
   MessageCircleIcon,
@@ -12,6 +16,7 @@ import {
   PaletteIcon,
   ScrollTextIcon,
   SettingsIcon,
+  SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
 
@@ -49,9 +54,26 @@ export const navGroups: NavGroup[] = [
     id: "zalo",
     label: "Zalo",
     items: [
+      { href: "/zalo", label: "Hộp thư Zalo", icon: InboxIcon, ready: true },
       { href: "/zalo/care", label: "Kịch bản chăm sóc", icon: CalendarHeartIcon, ready: true },
       { href: "/zalo/guide", label: "Hướng dẫn Zalo", icon: BookOpenIcon, ready: true },
       { href: "/admin/zalo", label: "Cài đặt Zalo", icon: MessageCircleIcon, ready: true, adminOnly: true },
+    ],
+  },
+  {
+    id: "knowledge",
+    label: "Kiến thức",
+    items: [
+      { href: "/business", label: "Kiến thức xưởng", icon: BrainIcon, ready: true },
+      { href: "/admin/business", label: "Thông tin doanh nghiệp", icon: BuildingIcon, ready: true, adminOnly: true },
+    ],
+  },
+  {
+    id: "quote",
+    label: "Báo giá",
+    items: [
+      { href: "/quote", label: "Báo giá sản xuất", icon: CalculatorIcon, ready: true },
+      { href: "/admin/quoting", label: "Thiết lập báo giá", icon: SlidersHorizontalIcon, ready: true, adminOnly: true },
     ],
   },
   {

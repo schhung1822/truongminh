@@ -11,7 +11,10 @@ export default async function NewMaterialPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Thêm chất liệu</h1>
+      <div>
+        <h1 className="text-2xl font-semibold">Thêm chất liệu</h1>
+        <p className="text-sm text-muted-foreground">Sau khi tạo, vào trang sửa để nhập thông số tấm (dùng để báo giá).</p>
+      </div>
       <MaterialForm options={options} />
     </div>
   );

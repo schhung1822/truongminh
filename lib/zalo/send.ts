@@ -106,20 +106,6 @@ export async function deliverImage(imageId: string, group: GroupRef, opts?: { fo
   });
 }
 
-/** Ảnh vừa tạo xong: tự gửi vào các nhóm đang bật "Tự động gửi". Không bao giờ ném lỗi (không được ảnh hưởng việc tạo ảnh). */
-export async function autoSendImage(imageId: string): Promise<void> {
-  try {
-    if (!getZaloClient() || !(await groupSendEnabled())) return;
-    const groups = await db.zaloGroup.findMany({ where: { isActive: true, autoSend: true }, select: { id: true, chatId: true } });
-    for (const g of groups) {
-      const r = await deliverImage(imageId, g);
-      if (r.outcome === "failed") console.error(`Zalo: gửi ảnh ${imageId} vào nhóm ${g.id} lỗi:`, r.error);
-    }
-  } catch (e) {
-    console.error(`Zalo: autoSendImage ${imageId} lỗi:`, errText(e));
-  }
-}
-
 export type SessionSendSummary = { total: number; sent: number; skipped: number; failed: number; error?: string };
 
 /** Gửi mọi ảnh đã xong của một phiên vào một nhóm (theo thứ tự hiển thị). Ảnh đã gửi vào nhóm này thì bỏ qua. */

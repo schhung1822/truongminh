@@ -10,7 +10,6 @@ import { renderFinal } from "./finish";
 import { ensureLogoUrl, ensureMaterialUrl, NoReferenceError } from "./references";
 import { MAX_ATTEMPTS, type LayoutSnapshot } from "./snapshot";
 import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
-import { autoSendImage } from "@/lib/zalo/send";
 import {
   ACTIVE_CAP_WAIT_MS,
   MAX_ACTIVE_TASKS,
@@ -234,8 +233,6 @@ async function finalizeImage(imageId: string, resultUrl: string, credits?: numbe
       },
     });
     finalizeFailures.delete(imageId);
-    // Tự gửi vào các nhóm Zalo đang bật "Tự động gửi". Chạy nền, không chờ và không bao giờ làm hỏng việc tạo ảnh.
-    void autoSendImage(imageId);
   } catch (e) {
     const n = (finalizeFailures.get(imageId) ?? 0) + 1;
     console.error(`finalizeImage ${imageId} lỗi lần ${n}:`, errorText(e));

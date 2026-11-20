@@ -108,6 +108,15 @@ Mở `https://tên-miền-của-bạn`, đăng nhập bằng `ADMIN_EMAIL` / `AD
 
 Sau đó: vào **Quản trị > Chất liệu** nhập chất liệu thật, **Trang mẫu** xếp chất liệu vào trang (số cột x hàng là bố cục một ảnh; trang có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh, ví dụ 80 chất liệu với 8 ô mỗi ảnh ra 10 ảnh), **Cấu hình** kiểm tra model và số dư kie.ai.
 
+### Thử bot Zalo trên VPS
+Bot Zalo chính thức cần một địa chỉ https công khai để Zalo đẩy tin về, nên VPS có tên miền là chỗ thử bot đúng nhất. Làm sau khi web đã chạy và đăng nhập được:
+1. Trong `.env` điền `ZALO_BOT_TOKEN` (lấy ở mini app Zalo Bot Creator) và `ZALO_WEBHOOK_SECRET` (tự đặt, 8 đến 256 ký tự), rồi `docker compose up -d` để web nhận cấu hình mới. `APP_URL` phải là địa chỉ https của web.
+2. Vào **Quản trị > Cài đặt Zalo > Tổng quan**: bấm **Kiểm tra token**, rồi **Đăng ký webhook với Zalo**, rồi gạt **Bật Zalo**.
+3. Nhân viên mở chat với bot trên Zalo, gõ `/ghepnoi`; admin vào **Nhân viên và lệnh**, nhập mã 4 số, chọn tài khoản web cho nhân viên đó rồi bấm **Cho phép**.
+4. Vào **Trợ lý AI**, bật **Trợ lý nhận lệnh**, điền tên bot (đúng tên hiển thị trên Zalo) rồi lưu. Cần `IMAGE_PROVIDER="kie"` và khóa kie.ai vì trợ lý dùng model chat của kie.ai.
+5. Mời bot vào nhóm khách (link bot ở Zalo Bot Creator), tag bot trong nhóm để ra lệnh. Xem mục "Tag bot ra lệnh trong nhóm" ở **Zalo > Hướng dẫn Zalo**.
+Bot không tự nói chuyện với khách: chỉ nhân viên đã ghép nối gọi được. Mỗi lệnh tốn một ít token kie.ai.
+
 ### Kiểm tra web đang chạy
 ```bash
 docker compose ps                 # 3 dòng đều "running", app có chữ "healthy"
@@ -148,7 +157,11 @@ Chỉnh nhiều chất liệu cùng lúc: bấm **Xuất CSV** (trang Chất li�
 Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web khởi động lại, trên máy cá nhân chạy `npm run db:deploy`.
 
 ### Cấu hình Zalo và hướng dẫn sử dụng
-Mọi chức năng Zalo (gửi ảnh vào nhóm, bot AI, lời chào, trả lời nhanh, giờ làm việc, ghép nối nhân viên, lệnh, chăm sóc nhóm) bật/tắt và chỉnh ở **Quản trị > Cài đặt Zalo**. Hướng dẫn từng bước (kết nối bot, mời bot vào nhóm, cách bot xử lý tin khách, xử lý sự cố) nằm ngay trong web ở menu **Zalo > Hướng dẫn Zalo**. Bản này thêm một cột vào CSDL: trên VPS tự áp dụng khi web khởi động lại, trên máy cá nhân chạy `npm run db:deploy`.
+Bot Zalo **không tự nói chuyện với khách**: nhân viên nói với khách, bot chỉ làm việc khi nhân viên đã ghép nối tag bot (làm ảnh, hỏi kỹ thuật) hoặc bấm "AI soạn" trong Hộp thư. Các chức năng (gửi ảnh vào nhóm, trợ lý nhận lệnh, Hộp thư, ghép nối nhân viên, lệnh, chăm sóc nhóm) bật/tắt và chỉnh ở **Quản trị > Cài đặt Zalo**. Thông tin xưởng cho AI (hồ sơ, bài kiến thức, mức hiển thị Công khai/Nội bộ/Chỉ admin, ngân sách từng AI, trang Thử AI) nằm ở **Quản trị > Thông tin doanh nghiệp**. Hướng dẫn từng bước (kết nối bot, mời bot vào nhóm, tag bot ra lệnh, xử lý sự cố) nằm ngay trong web ở menu **Zalo > Hướng dẫn Zalo**. Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web khởi động lại, trên máy cá nhân chạy `npm run db:deploy`.
+
+### Nhiều tài khoản Zalo cá nhân trong một Hộp thư (thử nghiệm)
+Ở **Quản trị > Cài đặt Zalo > Tài khoản cá nhân** bấm **Thêm tài khoản (quét QR)**, quét bằng Zalo trên điện thoại của số cần thêm; làm lại cho từng số. Tin nhắn của mọi tài khoản (cả bot) gom về **Zalo > Hộp thư Zalo**, có bộ lọc theo tài khoản; trả lời và gửi ảnh mẫu đi qua đúng số của hội thoại. Máy chủ giữ kết nối nghe tin và tự nối lại sau khi khởi động (cookie lưu mã hóa; khóa ở `ZALO_ACCOUNT_KEY` hoặc file `storage/.secret-key`, nên giữ thư mục storage).
+Đây là cách **không chính thức** (thư viện `zca-js` mô phỏng Zalo Web), có nguy cơ khóa tài khoản và có thể hỏng khi Zalo đổi giao thức; mỗi tài khoản chỉ có một kết nối nghe tin (mở Zalo Web cùng tài khoản thì kết nối ở đây bị ngắt). Chỉ chạy một bản web duy nhất (không nhân bản container), vì mỗi tài khoản chỉ nghe được ở một nơi.
 
 ### Tự động đăng kịch bản chăm sóc Zalo (không bắt buộc)
 Trên máy cá nhân bạn bấm đăng bằng tay trong mục **Kịch bản chăm sóc**. Trên VPS có thể cho máy tự lên kịch bản và đăng đúng giờ:

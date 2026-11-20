@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { todayKey } from "@/lib/jobs/limits";
 import { shared } from "@/lib/jobs/throttle";
-import { getSettings } from "@/lib/settings";
+import { getKnowledgeForAI, getMaterialsText, recordKnowledgeUse } from "@/lib/knowledge";
 import { addDays } from "@/lib/stats/range";
 import { getStorage } from "@/lib/storage";
 import { zonedStartOfDay } from "@/lib/time";
@@ -88,12 +88,12 @@ export async function generateCarePlan(groupId: string, opts?: { includeToday?: 
   const days = Array.from({ length: horizon }, (_, i) => addDays(start, i));
   const postsPerDay = Math.min(3, Math.max(2, group.postsPerDay));
 
-  const [workshop, media, recent, weather, materials, groupChat] = await Promise.all([
-    getSettings(),
+  const [knowledge, media, recent, weather, materials, groupChat] = await Promise.all([
+    getKnowledgeForAI({ role: "CARE_PLANNER", question: group.insight ?? "" }),
     loadMediaOptions(),
     db.zaloPost.findMany({ where: { groupId, status: { in: ["SENT", "PLANNED"] } }, orderBy: { createdAt: "desc" }, take: 12, select: { text: true } }),
     s.careWeather ? fetchWeather(s.careLatitude, s.careLongitude, tz) : Promise.resolve([]),
-    db.material.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, take: 60, select: { name: true } }),
+    getMaterialsText("CARE_PLANNER", group.insight ?? ""),
     db.zaloContact.findUnique({ where: { chatId: group.chatId }, select: { id: true } }),
   ]);
   const groupMessages = groupChat
@@ -107,16 +107,17 @@ export async function generateCarePlan(groupId: string, opts?: { includeToday?: 
     postsPerDay,
     groupName: group.name,
     insight: group.insight ?? "",
-    workshopName: workshop.workshopName,
+    workshopName: knowledge.workshopName,
     location: s.careLocationName,
     weather: weather.filter((w) => days.includes(w.date)),
     holidays: upcomingHolidays(today, horizon + 4),
     recentPosts: recent.map((r) => r.text),
     recentGroupMessages: groupMessages.map((m) => m.text ?? "").filter(Boolean),
-    materials: materials.map((m) => m.name),
+    materials,
     media: choices,
-    botKnowledge: s.botKnowledge,
+    knowledge: knowledge.text,
   });
+  void recordKnowledgeUse({ role: "CARE_PLANNER", question: `Kịch bản chăm sóc nhóm ${group.name}`, usedIds: knowledge.usedIds, droppedIds: knowledge.droppedIds, unknown: false });
 
   let raw: string;
   try {

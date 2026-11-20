@@ -69,11 +69,17 @@ export function ImportForm() {
         <Alert>
           <AlertTitle>
             {report.dryRun ? "Kiểm tra xong, CHƯA ghi gì" : "Đã nhập xong"}: thêm mới {report.summary.created}, cập nhật {report.summary.updated}, không đổi{" "}
-            {report.summary.unchanged}, bỏ qua {report.summary.skipped}, lỗi {report.summary.errors}
+            {report.summary.unchanged}, bỏ qua {report.summary.skipped}, lỗi {report.summary.errors}, đổi thông số tấm {report.stockChanged}
           </AlertTitle>
           <AlertDescription>
             {report.dryRun && report.summary.errors === 0 && <p>Không có lỗi. Bỏ dấu tích &quot;Chỉ kiểm tra&quot; rồi chạy lại để nhập thật.</p>}
             {report.dryRun && report.summary.errors > 0 && <p>Còn dòng lỗi (xem bên dưới). Dòng lỗi sẽ bị bỏ qua, các dòng tốt vẫn được nhập.</p>}
+            {report.stockChanged > 0 && (
+              <p className="mt-1">
+                {report.stockChanged} chất liệu {report.dryRun ? "sẽ đổi" : "đã đổi"} thông số tấm
+                {report.dryRun ? "" : " (đã ghi ở Quản trị > Thiết lập báo giá > Lịch sử thay đổi)"}.
+              </p>
+            )}
             <p className="mt-1 text-xs">Cột đọc được: {report.columns.join(", ")}</p>
             {!report.dryRun && (
               <Link href="/admin/materials" className={buttonVariants({ variant: "outline", size: "sm", className: "mt-2" })}>

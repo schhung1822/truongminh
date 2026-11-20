@@ -6,13 +6,29 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { approvePairAction, rejectPairAction, revokeStaffAction } from "./feature-actions";
+import { NativeSelect } from "@/components/ui/native-select";
+import { approvePairAction, linkStaffUserAction, rejectPairAction, revokeStaffAction } from "./feature-actions";
 
 export type PairRow = { id: string; name: string; requestedAt: string | null };
-export type StaffRow = { id: string; name: string };
+export type StaffRow = { id: string; name: string; userId: string | null };
+export type WebUser = { id: string; name: string };
 
-function PendingRow({ row }: { row: PairRow }) {
+function UserSelect({ users, value, onChange, label, disabled }: { users: WebUser[]; value: string; onChange: (v: string) => void; label: string; disabled?: boolean }) {
+  return (
+    <NativeSelect value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} disabled={disabled} className="h-9 w-48">
+      <option value="">Chưa gắn tài khoản web</option>
+      {users.map((u) => (
+        <option key={u.id} value={u.id}>
+          {u.name}
+        </option>
+      ))}
+    </NativeSelect>
+  );
+}
+
+function PendingRow({ row, users }: { row: PairRow; users: WebUser[] }) {
   const [code, setCode] = useState("");
+  const [userId, setUserId] = useState("");
   const [pending, startTransition] = useTransition();
 
   function run(fn: () => Promise<{ error?: string; ok?: string }>) {
@@ -37,7 +53,8 @@ function PendingRow({ row }: { row: PairRow }) {
         aria-label={`Mã ghép nối của ${row.name}`}
         className="h-9 w-28 text-center tracking-widest"
       />
-      <Button type="button" size="sm" disabled={pending || code.length !== 4} onClick={() => run(() => approvePairAction(row.id, code))}>
+      <UserSelect users={users} value={userId} onChange={setUserId} label={`Tài khoản web của ${row.name}`} disabled={pending} />
+      <Button type="button" size="sm" disabled={pending || code.length !== 4} onClick={() => run(() => approvePairAction(row.id, code, userId || undefined))}>
         {pending ? <Loader2Icon className="animate-spin" /> : <CheckIcon />}
         Cho phép
       </Button>
@@ -48,7 +65,7 @@ function PendingRow({ row }: { row: PairRow }) {
   );
 }
 
-export function PairingBoard({ pending, staff, enabled }: { pending: PairRow[]; staff: StaffRow[]; enabled: boolean }) {
+export function PairingBoard({ pending, staff, enabled, users }: { pending: PairRow[]; staff: StaffRow[]; enabled: boolean; users: WebUser[] }) {
   const [busy, startTransition] = useTransition();
 
   return (
@@ -65,13 +82,14 @@ export function PairingBoard({ pending, staff, enabled }: { pending: PairRow[]; 
         ) : (
           <ul className="flex flex-col gap-2">
             {pending.map((p) => (
-              <PendingRow key={p.id} row={p} />
+              <PendingRow key={p.id} row={p} users={users} />
             ))}
           </ul>
         )}
       </div>
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold text-muted-foreground">Nhân viên đã ghép nối</h3>
+        <p className="text-xs text-muted-foreground">Gắn tài khoản web để nhân viên ra lệnh cho bot trong nhóm: ảnh bot tạo thuộc về tài khoản đó và tính vào hạn mức ngày của người đó.</p>
         {staff.length === 0 ? (
           <p className="text-sm text-muted-foreground">Chưa có ai.</p>
         ) : (
@@ -79,6 +97,20 @@ export function PairingBoard({ pending, staff, enabled }: { pending: PairRow[]; 
             {staff.map((s) => (
               <li key={s.id} className="flex items-center gap-3 rounded-lg border p-3">
                 <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+                <UserSelect
+                  users={users}
+                  value={s.userId ?? ""}
+                  label={`Tài khoản web của ${s.name}`}
+                  disabled={busy}
+                  onChange={(v) =>
+                    startTransition(async () => {
+                      const r = await linkStaffUserAction(s.id, v || null);
+                      if (r.error) toast.error(r.error);
+                      else toast.success(r.ok ?? "Đã lưu.");
+                    })
+                  }
+                />
+                {!s.userId && <Badge variant="outline">Chưa ra lệnh được cho bot</Badge>}
                 <Badge variant="secondary">Nhân viên</Badge>
                 <Button
                   type="button"

@@ -1,8 +1,8 @@
 import { apiUser, isResponse, jsonError } from "@/lib/api";
 import { db } from "@/lib/db";
-import { normalizeLogo } from "@/lib/imaging/normalize-logo";
+import { createLogoFromBuffer, LogoError } from "@/lib/logos/create";
 import { canEditCustomer } from "@/lib/permissions";
-import { fileUrl, getStorage } from "@/lib/storage";
+import { fileUrl } from "@/lib/storage";
 
 // Upload logo cho một thương hiệu. Form nhiều phần: brandId, note (không bắt buộc), file.
 export async function POST(request: Request) {
@@ -27,43 +27,19 @@ export async function POST(request: Request) {
     return jsonError(403, "Khách hàng này do người khác phụ trách, bạn không thêm logo được.");
   }
 
-  let normalized;
+  let created;
   try {
-    normalized = await normalizeLogo(Buffer.from(await file.arrayBuffer()));
+    created = await createLogoFromBuffer({ userId: user.id, brandId, file: Buffer.from(await file.arrayBuffer()), note });
   } catch (e) {
-    return jsonError(400, e instanceof Error ? e.message : "Không xử lý được logo.");
+    if (e instanceof LogoError) return jsonError(e.userFault ? 400 : 500, e.message);
+    throw e;
   }
-
-  const storage = getStorage();
-  const logo = await db.logo.create({
-    data: {
-      brandId,
-      note: note || null,
-      originalPath: "pending",
-      normalizedPath: "pending",
-      width: normalized.width,
-      height: normalized.height,
-      createdById: user.id,
-    },
-  });
-
-  const originalKey = `logos/${logo.id}/original.${normalized.originalExt}`;
-  const normalizedKey = `logos/${logo.id}/normalized.png`;
-  try {
-    await storage.put(originalKey, Buffer.from(await file.arrayBuffer()));
-    await storage.put(normalizedKey, normalized.png);
-    await db.logo.update({ where: { id: logo.id }, data: { originalPath: originalKey, normalizedPath: normalizedKey } });
-  } catch (e) {
-    console.error("upload logo lỗi:", e);
-    await Promise.all([storage.delete(originalKey), storage.delete(normalizedKey)]).catch(() => {});
-    await db.logo.delete({ where: { id: logo.id } }).catch(() => {});
-    return jsonError(500, "Không lưu được logo. Vui lòng thử lại.");
-  }
+  const { logo, normalized } = created;
 
   return Response.json({
     logo: {
       id: logo.id,
-      url: fileUrl(normalizedKey),
+      url: fileUrl(logo.normalizedPath),
       width: normalized.width,
       height: normalized.height,
       note: logo.note,

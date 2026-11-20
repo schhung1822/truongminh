@@ -6,7 +6,7 @@ export default function ZaloAdminLayout({ children }: { children: React.ReactNod
       <div>
         <h1 className="text-2xl font-semibold">Cài đặt Zalo</h1>
         <p className="text-muted-foreground">
-          Bật/tắt và cấu hình từng chức năng của bot Zalo: gửi ảnh mẫu vào nhóm, bot AI trả lời khách, nhân viên ghép nối và lệnh gõ nhanh, kịch bản chăm sóc nhóm.
+          Bật/tắt và cấu hình từng chức năng của bot Zalo: gửi ảnh mẫu vào nhóm, trợ lý AI cho nhân viên (bot không tự nói chuyện với khách), nhân viên ghép nối và lệnh gõ nhanh, kịch bản chăm sóc nhóm.
         </p>
       </div>
       <ZaloTabs />

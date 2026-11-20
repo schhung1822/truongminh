@@ -1,4 +1,5 @@
 import type { CsvValue, MaterialCsvRow } from "@/lib/csv/materials";
+import { materialStockSchema, type MaterialStockInput } from "@/lib/quoting/schemas";
 import { normalizeClassification, parseBoolean, type ClassifyPatch } from "./classify";
 import type { OptionRow } from "./option-types";
 import { parseThickness } from "./thickness";
@@ -6,6 +7,9 @@ import { parseThickness } from "./thickness";
 /**
  * Lập kế hoạch nhập CSV chất liệu (thuần, không đụng CSDL): quyết định mỗi dòng sẽ thêm mới, cập nhật, bỏ qua hay lỗi.
  * Quy tắc: ô trống = giữ nguyên; "[xoa]" = xóa; khớp theo id trước rồi mới theo mã.
+ *
+ * Thông số tấm (stockWidthMm, stockHeightMm, stockPrice, edgeMarginMm, gapMm, allowRotate; mm và đồng) KHÔNG nằm trong `data` để ghi thẳng:
+ * kế hoạch chỉ mang giá trị đã gộp trong `stock`, nơi ghi phải gọi saveMaterialStock để có lịch sử thay đổi và tăng phiên bản thông số.
  */
 export type ExistingMaterial = {
   id: string;
@@ -35,13 +39,23 @@ export type ExistingMaterial = {
   needsReview: boolean;
   reviewNote: string | null;
   styleTags: string[];
+  // thông số tấm (mm, đồng); trống = chưa có dữ liệu
+  stockWidthMm: number | null;
+  stockHeightMm: number | null;
+  stockPrice: number | null;
+  edgeMarginMm: number | null;
+  gapMm: number | null;
+  allowRotate: boolean;
 };
 
 export type ImportMode = "create-only" | "upsert";
 
+/** Thông số tấm sau khi gộp (cột CSV để trống thì giữ giá trị hiện có), chỉ có khi có ít nhất một trường đổi. */
+export type StockPlan = { input: MaterialStockInput; changed: string[] };
+
 export type PlanItem =
-  | { kind: "create"; line: number; code: string; data: Record<string, string | number | boolean | null>; styleTags: string[]; warnings: string[] }
-  | { kind: "update"; line: number; id: string; code: string; data: Record<string, string | number | boolean | null>; styleTags?: string[]; changed: string[] }
+  | { kind: "create"; line: number; code: string; data: Record<string, string | number | boolean | null>; styleTags: string[]; warnings: string[]; stock?: StockPlan }
+  | { kind: "update"; line: number; id: string; code: string; data: Record<string, string | number | boolean | null>; styleTags?: string[]; changed: string[]; stock?: StockPlan }
   | { kind: "unchanged"; line: number; code: string }
   | { kind: "skip"; line: number; code: string; reason: string }
   | { kind: "error"; line: number; code: string; message: string };
@@ -49,6 +63,49 @@ export type PlanItem =
 const CODE_BAD = /[/\\]/;
 
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+
+const STOCK_FIELDS = ["stockWidthMm", "stockHeightMm", "stockPrice", "edgeMarginMm", "gapMm", "allowRotate"] as const;
+const STOCK_NUMBER_FIELDS = ["stockWidthMm", "stockHeightMm", "stockPrice", "edgeMarginMm", "gapMm"] as const;
+
+/**
+ * Gộp các cột thông số tấm của một dòng CSV với giá trị hiện có rồi kiểm tra bằng materialStockSchema (số hợp lệ; > 0 với kích thước và giá, >= 0 với lề và khoảng cách).
+ * Dòng không có cột tấm nào: không làm gì. Chất liệu mới: phần không có trong CSV là "chưa có dữ liệu" (allowRotate theo mặc định của CSDL là TRUE).
+ */
+function planStock(values: MaterialCsvRow["values"], target: ExistingMaterial | undefined): { stock?: StockPlan; problems: string[] } {
+  if (!STOCK_FIELDS.some((f) => values[f] !== undefined)) return { problems: [] };
+
+  const current: MaterialStockInput = {
+    stockWidthMm: target?.stockWidthMm ?? null,
+    stockHeightMm: target?.stockHeightMm ?? null,
+    stockPrice: target?.stockPrice ?? null,
+    edgeMarginMm: target?.edgeMarginMm ?? null,
+    gapMm: target?.gapMm ?? null,
+    allowRotate: target?.allowRotate ?? true,
+  };
+  const raw: Record<string, unknown> = { ...current };
+  const problems: string[] = [];
+  for (const f of STOCK_NUMBER_FIELDS) if (values[f] !== undefined) raw[f] = values[f]; // chuỗi = đặt, null ([xoa]) = xóa
+  if (values.allowRotate !== undefined) {
+    const b = values.allowRotate === null ? null : parseBoolean(values.allowRotate);
+    if (b === null) problems.push(`Cho phép xoay (allowRotate): "${values.allowRotate ?? "[xoa]"}" không hợp lệ (TRUE hoặc FALSE, không dùng [xoa]).`);
+    else raw.allowRotate = b;
+  }
+
+  const parsed = materialStockSchema.safeParse(raw);
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) problems.push(`${issue.message.replace(/\.$/, "")} (cột ${String(issue.path[0] ?? "")}).`);
+    return { problems };
+  }
+  const input = { ...parsed.data };
+  if (input.stockPrice !== null) {
+    input.stockPrice = Math.round(input.stockPrice * 100) / 100; // cột giá trong CSDL có 2 chữ số thập phân
+    if (!(input.stockPrice > 0)) problems.push("Giá một tấm: phải lớn hơn 0 (cột stockPrice).");
+  }
+  if (problems.length) return { problems };
+
+  const changed = STOCK_FIELDS.filter((f) => input[f] !== current[f]);
+  return { stock: changed.length ? { input, changed: [...changed] } : undefined, problems };
+}
 
 export function planMaterialsImport(
   rows: MaterialCsvRow[],
@@ -145,6 +202,10 @@ export function planMaterialsImport(
     problems.push(...cls.errors);
     Object.assign(data, cls.scalar);
 
+    // 3b) thông số tấm: không đưa vào `data` (không ghi thẳng), chỉ mang giá trị đã gộp để nơi ghi gọi saveMaterialStock
+    const st = planStock(v, target);
+    problems.push(...st.problems);
+
     if (problems.length) {
       err(problems.join(" "));
       continue;
@@ -186,7 +247,7 @@ export function planMaterialsImport(
       if (typeof data.descHuman !== "string") data.descHuman = ""; // cột bắt buộc ở CSDL
       data.sortOrder = typeof data.sortOrder === "number" ? data.sortOrder : nextOrder++;
       claimed.set(v.code.toLowerCase(), String(line));
-      plan.push({ kind: "create", line, code: v.code, data, styleTags: cls.styleTags ?? [], warnings });
+      plan.push({ kind: "create", line, code: v.code, data, styleTags: cls.styleTags ?? [], warnings, stock: st.stock });
       continue;
     }
 
@@ -204,11 +265,12 @@ export function planMaterialsImport(
     }
     const tagsChanged = cls.styleTags !== undefined && !sameSet(cls.styleTags, target.styleTags);
     if (tagsChanged) changed.push("styleTags");
+    if (st.stock) changed.push(...st.stock.changed);
     if (changed.length === 0) {
       plan.push({ kind: "unchanged", line, code: target.code });
       continue;
     }
-    plan.push({ kind: "update", line, id: target.id, code: target.code, data: delta, styleTags: tagsChanged ? cls.styleTags : undefined, changed });
+    plan.push({ kind: "update", line, id: target.id, code: target.code, data: delta, styleTags: tagsChanged ? cls.styleTags : undefined, changed, stock: st.stock });
   }
   return plan;
 }
@@ -225,6 +287,11 @@ export function summarizePlan(plan: PlanItem[]): PlanSummary {
     else s.errors++;
   }
   return s;
+}
+
+/** Số dòng (thêm mới hoặc cập nhật) có đổi thông số tấm. */
+export function countStockChanges(plan: PlanItem[]): number {
+  return plan.filter((p) => (p.kind === "create" || p.kind === "update") && p.stock !== undefined).length;
 }
 
 export type { CsvValue };

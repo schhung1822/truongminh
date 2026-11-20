@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { StockStatus } from "@/lib/materials/stock";
 import { formatThickness, thicknessClass } from "@/lib/materials/thickness";
 import { cn } from "@/lib/utils";
 import { ActiveToggle } from "./active-toggle";
@@ -57,6 +58,8 @@ export type BoardItem = {
   photoIssueLabels: string[];
   needsReview: boolean;
   reviewNote: string;
+  /** tình trạng thông số tấm để báo giá (đủ khi có rộng, cao, giá tấm, lề) */
+  stock: StockStatus;
 };
 
 const COLOR_COUNT_LABEL = { ONE: "1 màu", TWO: "2 màu" } as const;
@@ -137,6 +140,16 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
           Thiếu ảnh
         </Badge>
       )}
+      {m.stock.complete ? (
+        <Badge variant="secondary" className="bg-emerald-100 text-emerald-800" title="Có đủ rộng, cao, giá tấm và lề: dùng được để báo giá">
+          Đủ thông số tấm
+        </Badge>
+      ) : (
+        <Badge variant="secondary" className="bg-orange-100 text-orange-800" title={`Chưa có: ${m.stock.missing.join(", ")}. Chưa báo giá được chất liệu này.`}>
+          Thiếu thông số tấm
+        </Badge>
+      )}
+      {m.stock.sizeText && <Badge variant="outline">{m.stock.sizeText}</Badge>}
     </>
   );
 
@@ -403,6 +416,14 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
                     <dd>{zoom.styleTagLabels.join(", ")}</dd>
                   </div>
                 )}
+                <div>
+                  <dt className="text-xs font-medium text-muted-foreground">Tấm vật liệu (dùng để báo giá)</dt>
+                  <dd>
+                    {zoom.stock.sizeText ?? "Chưa có kích thước tấm"}
+                    {" · "}
+                    {zoom.stock.complete ? "Đủ thông số tấm" : `Thiếu thông số tấm (chưa có: ${zoom.stock.missing.join(", ")})`}
+                  </dd>
+                </div>
                 <div>
                   <dt className="text-xs font-medium text-muted-foreground">Mô tả</dt>
                   <dd>{zoom.descHuman || "—"}</dd>

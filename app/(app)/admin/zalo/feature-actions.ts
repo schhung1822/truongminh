@@ -42,17 +42,28 @@ export async function testChatAction(model: string): Promise<Result> {
 }
 
 /** Cho phép một tài khoản Zalo đã xin ghép nối trở thành nhân viên. Phải đối chiếu đúng mã 4 số. */
-export async function approvePairAction(contactId: string, code: string): Promise<Result> {
+export async function approvePairAction(contactId: string, code: string, userId?: string): Promise<Result> {
   await requireAdmin();
   const c = await db.zaloContact.findUnique({ where: { id: contactId } });
   if (!c || !c.pairCode) return { error: "Không còn yêu cầu ghép nối này." };
   if (c.pairCode !== code.trim()) return { error: "Mã không khớp. Hãy nhập đúng mã 4 số mà người đó nhận được từ bot." };
+  if (userId && !(await db.user.findFirst({ where: { id: userId, isActive: true }, select: { id: true } }))) return { error: "Không tìm thấy tài khoản web này." };
   await db.zaloContact.update({
     where: { id: contactId },
-    data: { role: "STAFF", pairCode: null, pairRequestedAt: null, needsHuman: false, botPaused: false, botPausedAt: null },
+    data: { role: "STAFF", userId: userId || null, pairCode: null, pairRequestedAt: null, needsHuman: false, botPaused: false, botPausedAt: null },
   });
   refresh();
   return { ok: `Đã cho phép ${c.displayName}. Người đó gõ /help trong Zalo để xem lệnh.` };
+}
+
+/** Gắn (hoặc gỡ) tài khoản web cho một nhân viên đã ghép nối: lệnh người đó ra cho bot chạy dưới tên và hạn mức của tài khoản này. */
+export async function linkStaffUserAction(contactId: string, userId: string | null): Promise<Result> {
+  await requireAdmin();
+  if (userId && !(await db.user.findFirst({ where: { id: userId, isActive: true }, select: { id: true } }))) return { error: "Không tìm thấy tài khoản web này." };
+  const r = await db.zaloContact.updateMany({ where: { id: contactId, role: "STAFF" }, data: { userId } });
+  if (r.count === 0) return { error: "Không tìm thấy nhân viên này." };
+  refresh();
+  return { ok: userId ? "Đã gắn tài khoản web." : "Đã gỡ tài khoản web." };
 }
 
 export async function rejectPairAction(contactId: string): Promise<Result> {
@@ -65,23 +76,12 @@ export async function rejectPairAction(contactId: string): Promise<Result> {
 /** Thu hồi quyền nhân viên (trở lại là khách). */
 export async function revokeStaffAction(contactId: string): Promise<Result> {
   await requireAdmin();
-  await db.zaloContact.updateMany({ where: { id: contactId, role: "STAFF" }, data: { role: "CUSTOMER" } });
+  await db.zaloContact.updateMany({ where: { id: contactId, role: "STAFF" }, data: { role: "CUSTOMER", userId: null } });
   refresh();
   return { ok: "Đã thu hồi quyền nhân viên." };
 }
 
-/** Đánh dấu một khách đã được xử lý xong: bỏ cờ "chờ nhân viên" và cho bot trả lời lại. */
-export async function resolveWaitingAction(contactId: string): Promise<Result> {
-  await requireAdmin();
-  await db.zaloContact.updateMany({
-    where: { id: contactId, role: "CUSTOMER" },
-    data: { needsHuman: false, botPaused: false, botPausedAt: null },
-  });
-  refresh();
-  return { ok: "Đã đánh dấu xử lý xong, bot sẽ trả lời lại khách này." };
-}
-
-/** Xóa tin nhắn Zalo đã lưu cũ hơn N ngày (nội dung hội thoại bot dùng làm ngữ cảnh). Không đụng tới ảnh đã gửi nhóm hay kịch bản chăm sóc. */
+/** Xóa tin nhắn Zalo đã lưu cũ hơn N ngày (nội dung hội thoại trong Hộp thư). Không đụng tới ảnh đã gửi nhóm hay kịch bản chăm sóc. */
 export async function clearOldMessagesAction(days: number): Promise<Result> {
   await requireAdmin();
   if (!Number.isInteger(days) || days < 1 || days > 3650) return { error: "Số ngày phải từ 1 đến 3650." };

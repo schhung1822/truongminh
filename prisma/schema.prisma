@@ -78,6 +78,9 @@ model User {
   generatedImages  GeneratedImage[]
   usageLogs        UsageLog[]
   promptTemplates  PromptTemplate[]
+  zaloStaff        ZaloContact[]
+  zaloBotTasks     ZaloBotTask[]
+  quotes           Quote[]
 
   @@map("users")
 }
@@ -136,12 +139,21 @@ model Material {
   reviewNote           String?            @db.Text
   styleTags            MaterialStyleTag[]
 
+  // Tấm vật liệu để xếp logo và báo giá (xem docs/DECISIONS.md D88). Đơn vị mm; trống = chưa có dữ liệu, chưa tính được giá.
+  stockWidthMm  Float?
+  stockHeightMm Float?
+  stockPrice    Decimal? @db.Decimal(14, 2) // giá một tấm
+  edgeMarginMm  Float? // lề tấm
+  gapMm         Float? // khoảng cách giữa logo; trống = dùng mặc định chung
+  allowRotate   Boolean  @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   sheetMaterials  SheetMaterial[]
   selectedIn      SessionSelectedMaterial[]
   generatedImages GeneratedImage[]
+  quotes          Quote[]
 
   @@index([groupName, isActive])
   @@index([baseMaterial])
@@ -310,6 +322,8 @@ model Logo {
   brand     Brand            @relation(fields: [brandId], references: [id])
   createdBy User             @relation(fields: [createdById], references: [id])
   sessions  ConsultSession[]
+  geometry  LogoGeometry?
+  quotes    Quote[]
 
   @@index([brandId])
   @@map("logos")
@@ -333,6 +347,8 @@ model ConsultSession {
   createdBy         User                      @relation(fields: [createdById], references: [id])
   selectedMaterials SessionSelectedMaterial[]
   images            GeneratedImage[]
+  zaloBotTasks      ZaloBotTask[]
+  quotes            Quote[]
 
   @@index([logoId])
   @@index([parentId])
@@ -420,7 +436,7 @@ model ZaloGroup {
   chatId      String    @unique @db.VarChar(100)
   name        String    @db.VarChar(100)
   isActive    Boolean   @default(true)
-  autoSend    Boolean   @default(false) // true = mỗi ảnh tạo xong tự gửi vào nhóm này
+  autoSend    Boolean   @default(false) // không còn dùng (đã bỏ tự động gửi ảnh vào nhóm khi tạo xong, D86); giữ cột để khỏi phải đổi cấu trúc dữ liệu
   lastSeenAt  DateTime? // lần cuối bot nhận được tin từ nhóm này
   insight     String?   @db.Text // mô tả nhóm (khách là ai, quan tâm gì...) để AI lên kịch bản chăm sóc phù hợp
   careEnabled Boolean   @default(false) // true = AI lên kịch bản chăm sóc cho nhóm này
@@ -451,6 +467,34 @@ model ZaloDelivery {
   @@unique([imageId, groupId])
   @@index([groupId, createdAt])
   @@map("zalo_deliveries")
+}
+
+enum ZaloAccountStatus {
+  CONNECTED // đang nghe tin
+  CONNECTING // đang kết nối (vừa đăng nhập hoặc vừa khởi động máy chủ)
+  DISCONNECTED // đã ngắt (bị ngắt tay, mở nơi khác, mất mạng...)
+  LOGGED_OUT // phiên đăng nhập hết hạn: cần quét QR lại
+}
+
+// Tài khoản Zalo CÁ NHÂN đăng nhập bằng QR (thư viện không chính thức zca-js). Mỗi tài khoản có một kết nối nghe tin riêng
+// và mọi hội thoại của nó gom về Hộp thư chung. Thông tin đăng nhập (cookie, imei) được mã hóa trước khi lưu.
+model ZaloAccount {
+  id              String            @id @default(cuid())
+  uid             String?           @unique @db.VarChar(40) // mã người dùng Zalo, để đăng nhập lại cùng một số thì cập nhật chứ không tạo mới
+  name            String            @db.VarChar(150)
+  phone           String?           @db.VarChar(30)
+  avatarUrl       String?           @db.VarChar(500)
+  credentials     String?           @db.Text // JSON đã mã hóa (lib/crypto/secret-box.ts)
+  status          ZaloAccountStatus @default(DISCONNECTED)
+  lastError       String?           @db.Text
+  lastConnectedAt DateTime?
+  autoConnect     Boolean           @default(true) // true = máy chủ tự kết nối lại khi khởi động
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  contacts ZaloContact[]
+
+  @@map("zalo_accounts")
 }
 
 enum ZaloContactRole {
@@ -496,11 +540,19 @@ model ZaloContact {
   lastMessageAt   DateTime?
   lastMessageText String?         @db.VarChar(200)
   contextResetAt  DateTime? // lệnh /reset: bot không đọc tin cũ hơn mốc này
+  accountId       String? // có giá trị = hội thoại của một tài khoản Zalo cá nhân (chatId lúc đó là "p:<accountId>:<threadId>"); trống = của bot
+  threadId        String?         @db.VarChar(100) // mã cuộc chat thật trên Zalo cá nhân (người hoặc nhóm)
+  avatarUrl       String?         @db.VarChar(500)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  userId String? // nhân viên (role STAFF) gắn với tài khoản web nào: lệnh trong nhóm chạy dưới tên và hạn mức của người này
+
+  account  ZaloAccount?  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user     User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   messages ZaloMessage[]
 
+  @@index([accountId, lastMessageAt])
   @@index([lastMessageAt])
   @@index([role])
   @@map("zalo_contacts")
@@ -587,4 +639,315 @@ model ZaloPost {
   @@index([groupId, scheduledAt])
   @@index([status, scheduledAt])
   @@map("zalo_posts")
+}
+
+enum ZaloBotTaskKind {
+  CATALOG
+  DESIGN
+}
+
+enum ZaloBotTaskStatus {
+  RUNNING // đang tạo ảnh
+  DELIVERING // ảnh xong, đang gửi lại vào cuộc chat
+  DONE
+  FAILED
+}
+
+// Việc nhân viên giao cho bot trong nhóm Zalo (tag bot): tạo phiên ảnh rồi gửi kết quả lại đúng cuộc chat đó.
+model ZaloBotTask {
+  id             String            @id @default(cuid())
+  chatId         String            @db.VarChar(100) // cuộc chat nhận kết quả (nhóm hoặc chat riêng với bot)
+  chatType       String            @default("GROUP") @db.VarChar(20)
+  kind           ZaloBotTaskKind
+  sessionId      String
+  userId         String // tài khoản web chịu trách nhiệm (người ra lệnh)
+  logoId         String?
+  imageMessageId String?           @db.VarChar(40) // tin ảnh (ZaloMessage.id) đã dùng làm logo, để lệnh sau dùng lại logo thay vì tạo trùng
+  status         ZaloBotTaskStatus @default(RUNNING)
+  summary        String?           @db.Text
+  error          String?           @db.Text
+  createdAt      DateTime          @default(now())
+  finishedAt     DateTime?
+
+  session ConsultSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id])
+
+  @@index([chatId, createdAt])
+  @@index([status])
+  @@map("zalo_bot_tasks")
+}
+
+// ---------- Kho kiến thức cho AI (xem docs/DECISIONS.md D87) ----------
+
+enum KnowledgeVisibility {
+  PUBLIC // được nói với khách
+  INTERNAL // chỉ sale và AI hỗ trợ sale
+  ADMIN_ONLY // chỉ quản trị viên, không AI trò chuyện nào được đọc
+}
+
+enum KnowledgeStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum KnowledgeGapStatus {
+  OPEN
+  RESOLVED
+}
+
+// Hồ sơ doanh nghiệp: đúng một bản ghi (id = "main"). Tên xưởng nằm ở bảng settings (khóa workshopName) để chân ảnh và AI dùng chung một nguồn.
+model BusinessProfile {
+  id           String   @id
+  tradeName    String?  @db.VarChar(200)
+  intro        String?  @db.Text
+  address      String?  @db.Text
+  hours        String?  @db.Text
+  hotline      String?  @db.VarChar(100)
+  zalo         String?  @db.VarChar(200)
+  fanpage      String?  @db.VarChar(300)
+  website      String?  @db.VarChar(300)
+  deliveryArea String?  @db.Text
+  payment      String?  @db.Text
+  // mức hiển thị của từng trường: { "address": "PUBLIC", ... }; thiếu = INTERNAL (kín hơn)
+  visibility   Json
+  updatedById  String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("business_profile")
+}
+
+model KnowledgeArticle {
+  id            String              @id @default(cuid())
+  title         String              @db.VarChar(200)
+  category      String              @db.VarChar(40)
+  body          String              @db.Text
+  visibility    KnowledgeVisibility @default(INTERNAL)
+  tags          Json // mảng chữ
+  status        KnowledgeStatus     @default(DRAFT)
+  priority      Int                 @default(0) // lớn hơn = ưu tiên hơn khi phải chọn bài
+  alwaysInclude Boolean             @default(false) // luôn đưa vào (nếu còn chỗ trong ngân sách của vai AI)
+  effectiveFrom DateTime?
+  updatedById   String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  roles KnowledgeArticleRole[]
+
+  @@index([status, visibility])
+  @@index([category])
+  @@map("knowledge_articles")
+}
+
+// Vai AI nào được dùng bài này (một dòng mỗi vai). Lọc ngay trong câu truy vấn.
+model KnowledgeArticleRole {
+  articleId String
+  role      String           @db.VarChar(30)
+  article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, role])
+  @@index([role])
+  @@map("knowledge_article_roles")
+}
+
+// Thông số tính giá, CHỈ ADMIN. Không hàm nào của AI trò chuyện đọc bảng này.
+model PricingParam {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(60)
+  label       String   @db.VarChar(200)
+  value       Decimal? @db.Decimal(18, 4) // trống = chưa có dữ liệu
+  unit        String?  @db.VarChar(40)
+  note        String?  @db.Text
+  sortOrder   Int      @default(0)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("pricing_params")
+}
+
+// Mỗi lượt AI trả lời dùng kiến thức nào, để admin kiểm tra khi AI trả lời sai.
+model KnowledgeUse {
+  id         String   @id @default(cuid())
+  role       String   @db.VarChar(30)
+  question   String   @db.VarChar(500)
+  usedIds    Json
+  droppedIds Json
+  unknown    Boolean  @default(false) // AI báo chưa có thông tin
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([role, createdAt])
+  @@map("knowledge_uses")
+}
+
+// Câu hỏi AI chưa trả lời được, gom theo nội dung để admin bổ sung kiến thức dần.
+model KnowledgeGap {
+  id                  String             @id @default(cuid())
+  key                 String             @unique @db.VarChar(64) // băm của câu hỏi đã chuẩn hóa
+  role                String             @db.VarChar(30)
+  question            String             @db.VarChar(500)
+  count               Int                @default(1)
+  status              KnowledgeGapStatus @default(OPEN)
+  resolvedByArticleId String?
+  firstAskedAt        DateTime           @default(now())
+  lastAskedAt         DateTime           @default(now())
+
+  @@index([status, lastAskedAt])
+  @@map("knowledge_gaps")
+}
+
+// ---------- Xếp logo trên tấm và báo giá sản xuất (xem docs/DECISIONS.md D88) ----------
+
+enum QuoteStatus {
+  DRAFT
+  SENT // đã gửi khách
+  WON // khách chốt
+}
+
+enum LastSheetPolicy {
+  WHOLE_SHEET // tính cả tấm cuối
+  PRO_RATA // tính theo phần dùng
+}
+
+// Thông số máy theo công nghệ (khóa theo giá trị technique của chất liệu). Mọi cột trống = chưa có dữ liệu. CHỈ ADMIN.
+model MachineProfile {
+  id                    String   @id @default(cuid())
+  technique             String   @unique @db.VarChar(60)
+  cutSpeedMmPerSec      Float?
+  engraveSpeedMm2PerSec Float?
+  setupMinutesPerJob    Float?
+  sheetChangeMinutes    Float?
+  machineCostPerHour    Decimal? @db.Decimal(14, 2)
+  laborSecondsPerPiece  Float?
+  laborCostPerHour      Decimal? @db.Decimal(14, 2)
+  consumableCostPerM2   Decimal? @db.Decimal(14, 2) // vật tư theo diện tích logo (mực UV...), tùy chọn
+  updatedById           String?
+  updatedAt             DateTime @updatedAt
+
+  @@map("machine_profiles")
+}
+
+// Cấu hình báo giá chung: đúng một bản ghi (id = "main"). CHỈ ADMIN.
+model QuoteSettings {
+  id                String           @id
+  defaultGapMm      Float?
+  lastSheetPolicy   LastSheetPolicy?
+  marginTiers       Json // [{fromQty, toQty|null, markupPct}]: lãi cộng thêm trên giá vốn theo bậc số lượng
+  displayQuantities Json // các mốc số lượng hiển thị, ví dụ [50,100,200,500,1000]
+  roundTo           Int? // làm tròn đơn giá tới bội số này (đồng)
+  engraveLevels     Json // {IT, VUA, NHIEU}: % diện tích logo được khắc
+  configVersion     Int              @default(0) // tăng mỗi lần có thay đổi giá trị ảnh hưởng báo giá
+  updatedById       String?
+  updatedAt         DateTime         @updatedAt
+
+  @@map("quote_settings")
+}
+
+// Lịch sử thay đổi thông số (tấm, máy, cấu hình giá).
+model ConfigChangeLog {
+  id          String   @id @default(cuid())
+  entity      String   @db.VarChar(40) // MATERIAL_STOCK | MACHINE_PROFILE | QUOTE_SETTINGS
+  entityId    String   @db.VarChar(60)
+  entityLabel String   @db.VarChar(200)
+  before      Json?
+  after       Json
+  userId      String
+  createdAt   DateTime @default(now())
+
+  @@index([entity, createdAt])
+  @@index([createdAt])
+  @@map("config_change_logs")
+}
+
+// Hình học logo (khung bao thật, đường viền, diện tích) tính một lần cho mỗi logo.
+model LogoGeometry {
+  logoId      String   @id
+  geometry    Json
+  algoVersion Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  logo Logo @relation(fields: [logoId], references: [id], onDelete: Cascade)
+
+  @@map("logo_geometry")
+}
+
+model Quote {
+  id              String      @id @default(cuid())
+  sessionId       String?
+  logoId          String
+  materialId      String
+  logoWidthMm     Float
+  logoHeightMm    Float
+  engraveLevel    String      @db.VarChar(20)
+  perSheet        Int
+  efficiencyPct   Float
+  nestingStrategy String      @db.VarChar(40)
+  nestingLabel    String      @db.VarChar(300)
+  placements      Json // bố cục đã chọn (vị trí từng logo trên tấm)
+  status          QuoteStatus @default(DRAFT)
+  configVersion   Int // phiên bản thông số lúc tính
+  note            String?     @db.Text
+  createdById     String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  sentAt          DateTime?
+  wonAt           DateTime?
+
+  session   ConsultSession?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  logo      Logo               @relation(fields: [logoId], references: [id])
+  material  Material           @relation(fields: [materialId], references: [id])
+  createdBy User               @relation(fields: [createdById], references: [id])
+  lines     QuoteLine[]
+  cost      QuoteCostSnapshot?
+
+  @@index([logoId])
+  @@index([sessionId])
+  @@index([createdById, createdAt])
+  @@index([status])
+  @@map("quotes")
+}
+
+// Giá bán theo từng mốc số lượng (sale được xem).
+model QuoteLine {
+  id             String @id @default(cuid())
+  quoteId        String
+  quantity       Int
+  sheetsNeeded   Int
+  machineMinutes Float
+  unitPrice      Int
+  totalPrice     Int
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteId, quantity])
+  @@map("quote_lines")
+}
+
+// Giá vốn và thông số lúc tính. CHỈ ADMIN: không được tải lên trình duyệt của sale.
+model QuoteCostSnapshot {
+  quoteId        String @id
+  paramsSnapshot Json
+  costDetail     Json
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@map("quote_cost_snapshots")
+}
+
+// Thời gian máy thực tế của các đơn đã làm, để hiệu chỉnh tốc độ cắt/khắc. CHỈ ADMIN.
+model MachineTimeLog {
+  id             String   @id @default(cuid())
+  quoteId        String?
+  description    String   @db.VarChar(300)
+  technique      String   @db.VarChar(60)
+  totalCutMm     Float
+  engraveAreaMm2 Float
+  sheets         Int
+  actualMinutes  Float
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@index([technique, createdAt])
+  @@map("machine_time_logs")
 }

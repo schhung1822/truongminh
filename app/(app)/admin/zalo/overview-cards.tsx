@@ -55,7 +55,7 @@ export function CleanupCard({ messages }: { messages: number }) {
       <CardHeader>
         <CardTitle>Dọn dữ liệu</CardTitle>
         <CardDescription>
-          Hiện đang lưu {messages.toLocaleString("vi-VN")} tin nhắn hội thoại (chỉ lưu khi bật Bot AI). Xóa tin cũ không ảnh hưởng ảnh đã gửi nhóm,
+          Hiện đang lưu {messages.toLocaleString("vi-VN")} tin nhắn hội thoại (lưu khi bật Hộp thư hoặc Trợ lý nhận lệnh). Xóa tin cũ không ảnh hưởng ảnh đã gửi nhóm,
           kịch bản chăm sóc hay danh sách nhân viên.
         </CardDescription>
       </CardHeader>

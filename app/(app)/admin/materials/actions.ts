@@ -44,7 +44,7 @@ const MAX_CSV_BYTES = 2 * 1024 * 1024;
  * Có đánh dấu "chỉ kiểm tra" thì không ghi gì, chỉ báo trước sẽ làm gì.
  */
 export async function importMaterialsCsvAction(_prev: ImportState, formData: FormData): Promise<ImportState> {
-  await requireAdmin();
+  const user = await requireAdmin();
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Vui lòng chọn file CSV." };
   if (file.size > MAX_CSV_BYTES) return { error: "File CSV quá lớn (tối đa 2MB)." };
@@ -53,7 +53,8 @@ export async function importMaterialsCsvAction(_prev: ImportState, formData: For
 
   let result;
   try {
-    result = await runMaterialsImport(await file.text(), mode, dryRun);
+    // user.id để ghi lịch sử thay đổi khi CSV đổi thông số tấm (qua saveMaterialStock)
+    result = await runMaterialsImport(await file.text(), mode, dryRun, user.id);
   } catch (e) {
     console.error("importMaterialsCsvAction lỗi:", e);
     return { error: "Không nhập được, chưa có thay đổi nào được ghi. Vui lòng kiểm tra file và thử lại." };
@@ -62,6 +63,7 @@ export async function importMaterialsCsvAction(_prev: ImportState, formData: For
   if (!dryRun) {
     revalidatePath("/admin/materials");
     revalidatePath("/admin/sheets");
+    if (result.stockChanged > 0) revalidatePath("/admin/quoting/materials");
   }
   return { report: result };
 }

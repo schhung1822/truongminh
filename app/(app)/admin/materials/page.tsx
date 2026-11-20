@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   BoxesIcon,
+  CalculatorIcon,
   CircleCheckIcon,
   CirclePauseIcon,
   DownloadIcon,
@@ -9,6 +10,7 @@ import {
   LayoutGridIcon,
   ListIcon,
   PlusIcon,
+  RulerIcon,
   SearchIcon,
   TagsIcon,
   TriangleAlertIcon,
@@ -21,6 +23,7 @@ import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { loadOptions } from "@/lib/materials/options";
 import { optionLabel, PHOTO_ISSUES } from "@/lib/materials/option-types";
+import { decimalToNumber, describeStock } from "@/lib/materials/stock";
 import { getUsedMaterialIds } from "@/lib/materials/usage";
 import { fileUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
@@ -63,7 +66,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
   await requireAdmin();
   const params = await searchParams;
   const q = (params.q ?? "").trim();
-  const status = ["active", "inactive", "todo", "review"].includes(params.status ?? "") ? (params.status as string) : "";
+  const status = ["active", "inactive", "todo", "review", "stock"].includes(params.status ?? "") ? (params.status as string) : "";
   const view = params.view === "list" ? "list" : "grid";
   const page = Math.max(1, Number(params.page) || 1);
   const base = params.base ?? "";
@@ -77,10 +80,13 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
   const classifyFilters = !!(base || tech || finish || pattern || colors || color || tag);
 
   // "Cần bổ sung" = thiếu ảnh tham chiếu; "Cần xem lại" = đánh dấu needsReview
+  // "Thiếu thông số tấm" = thiếu một trong rộng, cao, giá tấm, lề (khoảng cách trống thì dùng mặc định chung nên không tính)
   const todoWhere: Prisma.MaterialWhereInput = { referencePath: null };
   const reviewWhere: Prisma.MaterialWhereInput = { needsReview: true };
+  const stockWhere: Prisma.MaterialWhereInput = { OR: [{ stockWidthMm: null }, { stockHeightMm: null }, { stockPrice: null }, { edgeMarginMm: null }] };
   const and: Prisma.MaterialWhereInput[] = [];
   if (q) and.push({ OR: [{ code: { contains: q } }, { name: { contains: q } }, { printTech: { contains: q } }, { groupName: { contains: q } }] });
+  if (status === "stock") and.push(stockWhere);
   if (color) and.push({ OR: [{ frontColorFamily: color }, { backColorFamily: color }] });
   if (tag) and.push({ styleTags: { some: { value: tag } } });
   const where: Prisma.MaterialWhereInput = {
@@ -95,7 +101,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
     ...(status === "review" ? reviewWhere : {}),
   };
 
-  const [rows, filteredTotal, total, active, todo, review, used, options] = await Promise.all([
+  const [rows, filteredTotal, total, active, todo, review, stockMissing, used, options] = await Promise.all([
     db.material.findMany({
       where,
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
@@ -111,6 +117,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
     db.material.count({ where: { isActive: true } }),
     db.material.count({ where: todoWhere }),
     db.material.count({ where: reviewWhere }),
+    db.material.count({ where: stockWhere }),
     getUsedMaterialIds(),
     loadOptions(),
   ]);
@@ -143,6 +150,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
       .map((p) => PHOTO_ISSUES.find((x) => x.value === p)?.label ?? p),
     needsReview: m.needsReview,
     reviewNote: m.reviewNote ?? "",
+    stock: describeStock({ stockWidthMm: m.stockWidthMm, stockHeightMm: m.stockHeightMm, stockPrice: decimalToNumber(m.stockPrice), edgeMarginMm: m.edgeMarginMm }),
   }));
 
   const pages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
@@ -152,6 +160,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
     { key: "inactive", label: "Đã tắt", value: total - active, icon: <CirclePauseIcon />, tone: "text-zinc-500" },
     { key: "review", label: "Cần xem lại", value: review, icon: <EyeIcon />, tone: "text-amber-600" },
     { key: "todo", label: "Thiếu ảnh", value: todo, icon: <TriangleAlertIcon />, tone: "text-rose-600" },
+    { key: "stock", label: "Thiếu thông số tấm", value: stockMissing, icon: <RulerIcon />, tone: "text-orange-600" },
   ];
 
   return (
@@ -162,6 +171,9 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
           <p className="text-muted-foreground">Thư viện chất liệu của xưởng. Bấm vào ảnh để xem lớn.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/admin/quoting/materials" className={buttonVariants({ variant: "outline", className: "h-10" })}>
+            <CalculatorIcon /> Thiết lập báo giá
+          </Link>
           <Link href="/admin/materials/options" className={buttonVariants({ variant: "outline", className: "h-10" })}>
             <TagsIcon /> Danh mục
           </Link>
@@ -178,7 +190,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
       </div>
 
       {/* Thống kê nhanh, bấm để lọc */}
-      <ul className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {stats.map((s) => (
           <li key={s.label}>
             <Link

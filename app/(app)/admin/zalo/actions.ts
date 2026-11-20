@@ -40,23 +40,14 @@ export async function addGroupAction(input: { name: string; chatId: string }): P
 const patchSchema = z.object({
   name: z.string().trim().min(1, "Tên nhóm không được để trống.").max(100).optional(),
   isActive: z.boolean().optional(),
-  autoSend: z.boolean().optional(),
 });
 
 export async function updateGroupAction(id: string, patch: z.input<typeof patchSchema>): Promise<ActionResult> {
   await requireAdmin();
   const parsed = patchSchema.safeParse(patch);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  const data = { ...parsed.data };
-  // nhóm bị tắt thì không còn tự động gửi
-  if (data.isActive === false) data.autoSend = false;
-  if (data.autoSend === true && data.isActive === undefined) {
-    const g = await db.zaloGroup.findUnique({ where: { id }, select: { isActive: true } });
-    if (!g) return { error: "Không tìm thấy nhóm." };
-    if (!g.isActive) return { error: "Nhóm đang tắt, hãy bật nhóm trước khi bật tự động gửi." };
-  }
   try {
-    await db.zaloGroup.update({ where: { id }, data });
+    await db.zaloGroup.update({ where: { id }, data: parsed.data });
   } catch {
     return { error: "Không tìm thấy nhóm." };
   }

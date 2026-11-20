@@ -20,6 +20,8 @@ const schema = z.object({
   ZALO_API_BASE: z.url().default("https://bot-api.zaloplatforms.com"),
   // Chuỗi bí mật (8-256 ký tự) Zalo gửi kèm mỗi webhook trong header X-Bot-Api-Secret-Token.
   ZALO_WEBHOOK_SECRET: z.string().min(8).max(256).optional(),
+  // Khóa mã hóa cookie đăng nhập các tài khoản Zalo cá nhân (>= 16 ký tự). Bỏ trống = tự sinh file khóa trong STORAGE_DIR.
+  ZALO_ACCOUNT_KEY: z.string().min(16).optional(),
   // Khóa để máy chủ (cron) gọi /api/jobs/zalo-care chạy kịch bản chăm sóc tự động. Bỏ trống = tắt đường gọi này.
   ZALO_CARE_CRON_SECRET: z.string().min(16).max(256).optional(),
 });

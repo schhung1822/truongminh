@@ -103,16 +103,18 @@ export type PlanPromptInput = {
   holidays: { date: string; name: string; inDays: number }[];
   recentPosts: string[]; // nội dung đã đăng gần đây, để không lặp
   recentGroupMessages: string[]; // tin gần đây trong nhóm (nếu có)
-  materials: string[]; // tên các chất liệu xưởng đang có
+  /** khối chất liệu đã định dạng (getMaterialsText, vai CARE_PLANNER) */
+  materials: string;
   media: MediaChoice[];
-  botKnowledge: string;
+  /** khối kiến thức CÔNG KHAI đã chọn cho vai CARE_PLANNER (getKnowledgeForAI) */
+  knowledge: string;
 };
 
 export const PLAN_MARKER = "[[KICH_BAN_CHAM_SOC]]";
 
 export function buildPlanPrompt(i: PlanPromptInput): { system: string; user: string } {
   const sys: string[] = [
-    `${PLAN_MARKER} Bạn là chuyên viên chăm sóc khách hàng của ${i.workshopName}, xưởng in logo lên nhiều chất liệu (in UV, in khắc). Nhiệm vụ: lên KỊCH BẢN đăng bài vào nhóm Zalo khách hàng.`,
+    `${PLAN_MARKER} Bạn là chuyên viên chăm sóc khách hàng của ${i.workshopName}. Nhiệm vụ: lên KỊCH BẢN đăng bài vào nhóm Zalo khách hàng.`,
     "",
     "NGUYÊN TẮC:",
     `- Mỗi ngày đăng ${i.postsPerDay} lượt, chọn khung giờ dễ thu hút nhất với nhóm này (thường 7:30-9:00 sáng, 11:30-13:00 trưa, 19:00-21:30 tối; điều chỉnh theo insight nhóm). Các lượt trong cùng ngày cách nhau ít nhất 3 tiếng, trong khoảng 07:00 đến 21:30.`,
@@ -123,12 +125,12 @@ export function buildPlanPrompt(i: PlanPromptInput): { system: string; user: str
     "- Chỉ trả về MỘT khối JSON đúng định dạng dưới đây, không giải thích thêm:",
     '{"posts":[{"date":"YYYY-MM-DD","time":"HH:MM","kind":"TEXT|IMAGE|VIDEO","text":"nội dung bài","media":"mã tư liệu hoặc null","reason":"một câu ngắn vì sao chọn bài này vào giờ này"}]}',
   ];
-  if (i.botKnowledge.trim()) sys.push("", `THÔNG TIN CỦA XƯỞNG:\n${i.botKnowledge.trim()}`);
+  sys.push("", i.knowledge.trim() || "KIẾN THỨC CỦA XƯỞNG: chưa có dữ liệu. Chỉ viết những ý chung, không nêu giá, khuyến mãi hay cam kết nào.");
 
   const user: string[] = [
     `Bây giờ là: ${i.now}.`,
     `Nhóm: ${i.groupName}`,
-    `Insight về nhóm: ${i.insight.trim() || "(chưa có mô tả, hãy viết chung cho khách hàng của xưởng in)"}`,
+    `Insight về nhóm: ${i.insight.trim() || "(chưa có mô tả, hãy viết chung cho khách hàng của xưởng)"}`,
     `NGÀY CẦN LÊN KỊCH BẢN: ${i.days.join(", ")}`,
     `Địa điểm: ${i.location}`,
   ];
@@ -142,7 +144,7 @@ export function buildPlanPrompt(i: PlanPromptInput): { system: string; user: str
       ? "Ngày lễ sắp tới:\n" + i.holidays.map((h) => `- ${h.date} (${h.inDays === 0 ? "hôm nay" : `còn ${h.inDays} ngày`}): ${h.name}`).join("\n")
       : "Ngày lễ sắp tới: không có trong vài ngày tới.",
   );
-  if (i.materials.length) user.push(`Chất liệu xưởng có: ${i.materials.slice(0, 60).join(", ")}`);
+  if (i.materials.trim()) user.push(i.materials.trim());
   user.push(
     i.media.length
       ? "Tư liệu có thể đính kèm:\n" + i.media.map((m) => `- ${m.code} (${m.kind === "VIDEO" ? "video" : "ảnh"}): ${m.label}`).join("\n")

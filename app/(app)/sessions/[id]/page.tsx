@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, CalculatorIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +10,11 @@ import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { loadSessionViews } from "@/lib/jobs/views";
 import { canEditOwned } from "@/lib/permissions";
+import { listQuotes } from "@/lib/quoting/store";
 import { getSettings } from "@/lib/settings";
 import { fileUrl } from "@/lib/storage";
+import { fmtCm, fmtVnd } from "@/app/(app)/quote/format";
+import { QuoteStatusBadge } from "@/app/(app)/quote/status-badge";
 import { SessionResults } from "./session-results";
 
 export const metadata: Metadata = { title: "Kết quả phiên tư vấn" };
@@ -37,7 +40,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   });
   if (!session) notFound();
 
-  const [images, settings] = await Promise.all([loadSessionViews(session.id, user), getSettings()]);
+  const [images, settings, quotes] = await Promise.all([loadSessionViews(session.id, user), getSettings(), listQuotes({ sessionId: session.id, limit: 5 })]);
     const { brand } = session.logo;
   const fmt = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" });
   const isDesign = session.type === "DESIGN";
@@ -128,6 +131,46 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Báo giá sản xuất</CardTitle>
+          <CardDescription>Xếp logo lên tấm chất liệu và tính giá theo số lượng.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div>
+            <Link
+              href={`/quote?logoId=${encodeURIComponent(session.logoId)}&sessionId=${encodeURIComponent(session.id)}`}
+              className={buttonVariants({ className: "h-10" })}
+            >
+              <CalculatorIcon /> Lập báo giá cho logo này
+            </Link>
+          </div>
+          {quotes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Phiên này chưa có báo giá nào.</p>
+          ) : (
+            <ul className="flex flex-col divide-y rounded-lg border">
+              {quotes.map((q) => (
+                <li key={q.id}>
+                  <Link href={`/quote/${q.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5 text-sm no-underline transition-colors hover:bg-muted/50">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{q.materialLabel}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Logo {fmtCm(q.logoWidthMm)} cm · {q.perSheet} logo/tấm
+                        {q.firstUnitPrice !== null ? ` · ${fmtVnd(q.firstUnitPrice)}/cái ở mốc đầu` : ""}
+                      </span>
+                    </span>
+                    <QuoteStatusBadge status={q.status} />
+                    <span className="text-xs text-muted-foreground">
+                      {q.createdByName} · {fmt.format(q.createdAt)}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

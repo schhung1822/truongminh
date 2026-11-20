@@ -1,0 +1,13 @@
+export { calibrate, MIN_SAMPLES } from "./calibration";
+export type { CalibrationResult, TimeSample } from "./calibration";
+export { engraveShare, markupFor, parseEngravePct, parseMarginTiers, parseQuantities, parseQuoteConfig, validateMarginTiers } from "./config";
+export type { RawQuoteConfig } from "./config";
+export { findMissing, MISSING_MESSAGE } from "./missing";
+export { jobTotals, priceLine, roundPrice } from "./price";
+export { computeQuote } from "./quote";
+export type { ParamsSnapshot, QuoteComputation, QuoteInput } from "./quote";
+export { suggestSizes } from "./suggest";
+export type { SizeSuggestion } from "./suggest";
+export * from "./types";
+export { customerPriceText, toAdminView, toSaleView } from "./view";
+export type { AdminQuoteView, LayoutView, SaleQuoteView } from "./view";

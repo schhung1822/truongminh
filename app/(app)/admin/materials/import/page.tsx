@@ -37,6 +37,12 @@ export default async function ImportPage() {
               confidence, needsReview (TRUE/FALSE), reviewNote, isActive, sortOrder</code>. Cột nào không có thì không bị đụng tới.
             </li>
             <li>
+              Thông số tấm để báo giá, <b>dùng đúng đơn vị lưu trữ</b> (khác form sửa chất liệu, nơi kích thước tấm tính bằng cm):{" "}
+              <code>stockWidthMm</code> (rộng tấm, mm), <code>stockHeightMm</code> (cao tấm, mm), <code>stockPrice</code> (giá một tấm, đồng, số liền không dấu ngăn nghìn),{" "}
+              <code>edgeMarginMm</code> (lề tấm, mm), <code>gapMm</code> (khoảng cách giữa logo, mm), <code>allowRotate</code> (TRUE/FALSE). Rộng, cao, giá phải lớn hơn 0; lề và khoảng cách từ 0
+              trở lên. Ô trống = giữ nguyên, <code>[xoa]</code> = xóa (chưa có dữ liệu). Thay đổi được ghi ở Quản trị &gt; Thiết lập báo giá &gt; Lịch sử thay đổi.
+            </li>
+            <li>
               Các cột phân loại chỉ nhận <b>giá trị có trong danh mục</b> (ghi mã không dấu như <code>khac-laser</code> hoặc đúng nhãn như &quot;Khắc laser&quot;). Xem và
               sửa danh mục ở{" "}
               <Link href="/admin/materials/options" className="underline">

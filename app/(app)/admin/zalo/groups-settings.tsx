@@ -28,7 +28,7 @@ export function GroupsSettings({ initial, tokenSet }: { initial: ZaloSettings; t
       <Card>
         <CardHeader>
           <CardTitle>Gửi ảnh mẫu vào nhóm</CardTitle>
-          <CardDescription>Ảnh mẫu tạo xong có thể tự gửi vào nhóm Zalo của khách hoặc của sale. Nhóm nào được tự gửi thì bật ở bảng nhóm bên dưới.</CardDescription>
+<CardDescription>Ảnh mẫu không còn tự gửi vào nhóm khi tạo xong. Ảnh chỉ vào nhóm khi nhân viên tag bot giao việc (Trợ lý nhận lệnh) hoặc khi gửi tay từ Hộp thư.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           <SwitchRow
@@ -36,7 +36,7 @@ export function GroupsSettings({ initial, tokenSet }: { initial: ZaloSettings; t
             onChange={(c) => toggle("groupSend", c)}
             disabled={off}
             title="Cho phép gửi ảnh vào nhóm Zalo"
-            desc={'Chỉ còn cách tự động: nhóm bật "Tự động gửi" thì mỗi ảnh tạo xong được gửi vào nhóm. Tắt công tắc này là không gửi gì vào nhóm.'}
+            desc="Tắt công tắc này là bot không gửi ảnh nào vào nhóm, kể cả khi nhân viên tag bot ra lệnh (kết quả vẫn xem được trên web)."
           />
 
           <div className="flex flex-col gap-1.5">

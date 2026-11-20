@@ -4,7 +4,9 @@ import { MaterialForm } from "@/components/materials/material-form";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { loadOptions } from "@/lib/materials/options";
+import { decimalToNumber, stockToForm } from "@/lib/materials/stock";
 import { fileUrl } from "@/lib/storage";
+import { MaterialStockForm } from "./stock-form";
 
 export const metadata: Metadata = { title: "Sửa chất liệu" };
 
@@ -54,6 +56,17 @@ export default async function EditMaterialPage({ params }: { params: Promise<{ i
           reviewNote: m.reviewNote,
           styleTags: m.styleTags.map((t) => t.value),
         }}
+      />
+      <MaterialStockForm
+        materialId={m.id}
+        initial={stockToForm({
+          stockWidthMm: m.stockWidthMm,
+          stockHeightMm: m.stockHeightMm,
+          stockPrice: decimalToNumber(m.stockPrice),
+          edgeMarginMm: m.edgeMarginMm,
+          gapMm: m.gapMm,
+          allowRotate: m.allowRotate,
+        })}
       />
     </div>
   );

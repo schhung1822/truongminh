@@ -8,69 +8,31 @@ import { getEnv } from "@/lib/env";
  * Mỗi chức năng có công tắc bật/tắt riêng. Token bot và chuỗi bí mật webhook vẫn nằm trong .env (không lưu CSDL).
  */
 export const zaloSettingsSchema = z.object({
-  /** Công tắc tổng: tắt thì không gửi, không nhận, không trả lời gì qua Zalo. */
+  /** Công tắc tổng: tắt thì không gửi, không nhận, không làm gì qua Zalo. */
   enabled: z.boolean(),
-  /** Gửi ảnh mẫu vào nhóm Zalo (tự động hoặc bấm nút). */
+  /** Hộp thư Zalo trên web: nhân viên xem hội thoại và trả lời khách. */
+  inbox: z.boolean(),
+  /** Cho nhân viên bấm "AI soạn" để lấy câu trả lời nháp (duyệt rồi mới gửi). */
+  aiDraft: z.boolean(),
+  /** Gửi ảnh mẫu vào nhóm Zalo (khi nhân viên tag bot giao việc, hoặc gửi tay từ Hộp thư). */
   groupSend: z.boolean(),
   /** Nhân viên gõ /ghepnoi để ghép tài khoản Zalo, admin bấm Cho phép. */
   pairing: z.boolean(),
   /** Lệnh gõ nhanh cho tài khoản đã ghép nối (/help, /status...). */
   commands: z.boolean(),
-  /** Bot AI (kie.ai) tự trả lời khách. */
-  chatbot: z.boolean(),
-  /** Bot được phép trả lời trong nhóm (khi có người @bot hoặc trả lời tin bot). */
-  groupReply: z.boolean(),
-  /** Bot nhìn được ảnh khách gửi (cần model AI hỗ trợ ảnh). */
-  vision: z.boolean(),
-  /** Khi bot chuyển khách cho nhân viên, nhắn báo cho các nhân viên đã ghép nối (qua Zalo). */
-  staffNotify: z.boolean(),
-  /** Trả lời nhanh theo từ khóa (không tốn token), chạy trước bot AI. */
-  quickReplies: z.boolean(),
-  /** Gửi lời chào cho khách nhắn lần đầu. */
-  welcome: z.boolean(),
-  /** Bật giờ làm việc: ngoài giờ thì bot dùng câu "ngoài giờ" khi chuyển nhân viên. */
-  hoursEnabled: z.boolean(),
+  /**
+   * Trợ lý nhận lệnh: nhân viên đã ghép nối (và gắn tài khoản web) tag bot trong nhóm hoặc nhắn riêng để ra lệnh làm catalog, thiết kế,
+   * hoặc hỏi kỹ thuật; bot làm rồi gửi kết quả lại đúng cuộc chat. Bot KHÔNG tự trả lời khách.
+   */
+  agent: z.boolean(),
 
+  /** Tên bot hiển thị trên Zalo (để nhận ra và bỏ chữ @tag). Có tên thì chỉ tin nhắc đến tên này mới là lệnh; bỏ trống thì mọi tin bot nhận được từ nhân viên đều là lệnh. */
+  agentTagName: z.string().trim().max(60),
   /** Model chat của kie.ai, ví dụ gpt-5-2. */
   chatModel: z.string().trim().min(1, "Vui lòng nhập tên model chat.").max(100),
-  /** Dặn dò vai trò, giọng điệu của bot. */
-  botPrompt: z.string().trim().min(1, "Hướng dẫn cho bot không được để trống.").max(6000),
-  /** Thông tin xưởng bot được phép nói: giá, thời gian làm, địa chỉ, chính sách... */
-  botKnowledge: z.string().trim().max(12000),
-  /** Cho bot biết danh sách chất liệu đang bật (tên, nhóm, công nghệ, mô tả). */
-  includeMaterials: z.boolean(),
-  /** Câu bot trả khi khách gửi tin thoại hoặc file (bot chưa đọc được). */
-  unsupportedReply: z.string().trim().min(1).max(500),
-  /** Câu bot trả khi chuyển cho nhân viên. */
-  handoffReply: z.string().trim().min(1).max(500),
-  /** Câu bot trả khi chuyển nhân viên mà đang ngoài giờ làm việc. */
-  afterHoursReply: z.string().trim().min(1, "Câu trả lời ngoài giờ không được để trống.").max(500),
-  /** Lời chào khách nhắn lần đầu. */
-  welcomeMessage: z.string().trim().min(1, "Lời chào không được để trống.").max(1000),
-  /** Từ khóa khách gõ là chuyển nhân viên ngay (mỗi dòng một từ hoặc cụm từ). */
-  handoffKeywords: z.string().trim().max(2000),
-  /** Các câu trả lời nhanh theo từ khóa. */
-  quickReplyList: z
-    .array(
-      z.object({
-        keywords: z.string().trim().min(1, "Mỗi câu trả lời nhanh cần ít nhất một từ khóa.").max(300),
-        reply: z.string().trim().min(1, "Mỗi câu trả lời nhanh cần nội dung trả lời.").max(1500),
-      }),
-    )
-    .max(30, "Tối đa 30 câu trả lời nhanh."),
-  /** Giờ làm việc: từ giờ, đến giờ (HH:MM, theo múi giờ APP_TIMEZONE), và các ngày trong tuần (0 = Chủ nhật). */
-  hoursStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Giờ bắt đầu phải dạng HH:MM, ví dụ 08:00."),
-  hoursEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Giờ kết thúc phải dạng HH:MM, ví dụ 17:30."),
-  hoursDays: z.array(z.number().int().min(0).max(6)).min(1, "Chọn ít nhất một ngày làm việc.").max(7),
-  /** Bot im ở hội thoại đã chuyển nhân viên; sau bao nhiêu giờ thì tự trả lời lại. 0 = không tự trả lại. */
-  botResumeHours: z.coerce.number().int("Phải là số nguyên.").min(0).max(720),
   /** Lệnh gõ nhanh nào đang dùng được (ghép nối /ghepnoi bật riêng ở công tắc Ghép nối). */
-  enabledCommands: z.array(z.enum(["help", "status", "today", "waiting", "done", "reset", "human"])),
-  /** Tối đa số lượt bot trả lời mỗi ngày (cả hệ thống), để không tốn token ngoài ý muốn. 0 = không trả lời. */
-  botDailyLimit: z.coerce.number().int("Phải là số nguyên.").min(0).max(100000),
-  /** Tối đa số lượt bot trả lời mỗi giờ cho một người, chống nhắn dồn dập. */
-  botHourlyLimitPerContact: z.coerce.number().int("Phải là số nguyên.").min(1).max(1000),
-  /** Số tin gần nhất bot đọc làm ngữ cảnh. */
+  enabledCommands: z.array(z.enum(["help", "status", "today", "reset"])),
+  /** Số tin gần nhất AI đọc làm ngữ cảnh khi soạn nháp. */
   contextMessages: z.coerce.number().int("Phải là số nguyên.").min(1).max(40),
 
   /** Kịch bản chăm sóc nhóm: AI lên kịch bản đăng 2-3 lượt mỗi ngày, người dùng chỉnh rồi đăng. */
@@ -98,36 +60,15 @@ export type ZaloSettings = z.infer<typeof zaloSettingsSchema>;
 
 export const ZALO_SETTING_DEFAULTS: ZaloSettings = {
   enabled: true,
+  inbox: true,
+  aiDraft: true,
   groupSend: true,
   pairing: true,
   commands: true,
-  chatbot: false,
-  groupReply: false,
-  vision: false,
-  staffNotify: true,
-  quickReplies: false,
-  welcome: false,
-  hoursEnabled: false,
+  agent: false,
+  agentTagName: "",
   chatModel: "gpt-5-2",
-  botPrompt:
-    "Bạn là trợ lý tư vấn của xưởng in logo lên nhiều chất liệu (in UV, in khắc). Xưng em, gọi khách là anh/chị. " +
-    "Trả lời ngắn gọn, lịch sự, bằng tiếng Việt, tối đa vài câu. Chỉ dựa vào thông tin được cung cấp bên dưới; " +
-    "không bịa giá, thời gian hay chính sách. Muốn xem ảnh mẫu logo của mình trên chất liệu thì bảo khách để lại tên thương hiệu và logo, nhân viên sẽ gửi ảnh mẫu.",
-  botKnowledge: "",
-  includeMaterials: true,
-  unsupportedReply: "Em chưa đọc được loại tin này. Anh/chị nhắn chữ giúp em nhé, hoặc em sẽ nhờ nhân viên hỗ trợ ngay.",
-  handoffReply: "Dạ em đã báo nhân viên, anh/chị chờ chút để được hỗ trợ trực tiếp nhé.",
-  afterHoursReply: "Hiện xưởng đang ngoài giờ làm việc. Em đã ghi nhận, nhân viên sẽ trả lời anh/chị ngay khi vào ca nhé.",
-  welcomeMessage: "Chào anh/chị ạ, em là trợ lý của xưởng. Anh/chị cần xem ảnh mẫu hay hỏi chất liệu, cứ nhắn em nhé.",
-  handoffKeywords: "gặp nhân viên\ngặp người\nnói chuyện với người\nkhiếu nại\nbáo giá",
-  quickReplyList: [],
-  hoursStart: "08:00",
-  hoursEnd: "17:30",
-  hoursDays: [1, 2, 3, 4, 5, 6],
-  botResumeHours: 12,
-  enabledCommands: ["help", "status", "today", "waiting", "done", "reset", "human"],
-  botDailyLimit: 300,
-  botHourlyLimitPerContact: 20,
+  enabledCommands: ["help", "status", "today", "reset"],
   contextMessages: 12,
   care: false,
   careWeather: true,

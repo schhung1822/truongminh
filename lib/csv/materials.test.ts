@@ -74,3 +74,41 @@ describe("parseMaterialsCsv", () => {
     expect(r.columns).toHaveLength(MATERIAL_CSV_COLUMNS.length);
   });
 });
+
+describe("parseMaterialsCsv: thông số tấm (mm, đồng)", () => {
+  const STOCK = ["stockWidthMm", "stockHeightMm", "stockPrice", "edgeMarginMm", "gapMm", "allowRotate"] as const;
+
+  it("danh sách cột có đủ 6 cột tấm, đặt tên theo đơn vị lưu trữ", () => {
+    for (const c of STOCK) expect(MATERIAL_CSV_COLUMNS).toContain(c);
+  });
+
+  it("đọc 6 cột theo tên chuẩn", () => {
+    const r = parseMaterialsCsv("code,stockWidthMm,stockHeightMm,stockPrice,edgeMarginMm,gapMm,allowRotate\nP1,600,400,1500000,5,3,FALSE\n");
+    expect(r.errors).toEqual([]);
+    expect(r.rows[0].values).toEqual({ code: "P1", stockWidthMm: "600", stockHeightMm: "400", stockPrice: "1500000", edgeMarginMm: "5", gapMm: "3", allowRotate: "FALSE" });
+    expect(r.columns).toEqual(expect.arrayContaining([...STOCK]));
+  });
+
+  it("nhận tiêu đề tiếng Việt có dấu ghi rõ đơn vị và kiểu viết gạch dưới", () => {
+    const r = parseMaterialsCsv("Mã,Rộng tấm (mm),Cao tấm (mm),Giá một tấm,Lề tấm (mm),Khoảng cách (mm),Cho phép xoay\nP1,600,400,1500000,5,3,TRUE\n");
+    expect(r.rows[0].values).toEqual({ code: "P1", stockWidthMm: "600", stockHeightMm: "400", stockPrice: "1500000", edgeMarginMm: "5", gapMm: "3", allowRotate: "TRUE" });
+    const s = parseMaterialsCsv("code,stock_width_mm,stock_height_mm,edge_margin_mm,gap_mm,allow_rotate\nP1,600,400,5,3,TRUE\n");
+    expect(s.rows[0].values).toMatchObject({ stockWidthMm: "600", stockHeightMm: "400", edgeMarginMm: "5", gapMm: "3", allowRotate: "TRUE" });
+  });
+
+  it("ô trống = giữ nguyên (không có trong values), [xoa] = xóa (null)", () => {
+    const r = parseMaterialsCsv("code,stockWidthMm,stockPrice,gapMm,allowRotate\nP1,,1500000,[XOA],\n");
+    expect(r.rows[0].values).toEqual({ code: "P1", stockPrice: "1500000", gapMm: null });
+    expect("stockWidthMm" in r.rows[0].values).toBe(false);
+    expect("allowRotate" in r.rows[0].values).toBe(false);
+  });
+
+  it("file cũ không có cột tấm: không có cột nào của tấm trong kết quả", () => {
+    const r = parseMaterialsCsv("Mã,Tên gọi,Nhóm,Công nghệ in,Mô tả\nV01,Vải bố,Vải,In UV,Dày dặn\n");
+    expect(r.errors).toEqual([]);
+    for (const c of STOCK) {
+      expect(r.columns).not.toContain(c);
+      expect(c in r.rows[0].values).toBe(false);
+    }
+  });
+});

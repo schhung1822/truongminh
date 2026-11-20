@@ -356,7 +356,7 @@ Prompt bước 2 (DESIGN v3): "Create one realistic product photo of: {{product_
 1. Hỏi kết quả mỗi ~5 giây (`pollImage`, từ màn hình kết quả, hoặc từ callback tùy chọn `/api/webhooks/kie`).
 2. Xong → `finalizeImage`: tải về, lưu **ảnh gốc** `images/<sessionId>/<imageId>-original.<ext>`, rồi `renderFinal` (sharp) vẽ **đầu trang** (tên thương hiệu + "Ảnh N"), **nhãn từng ô** (mã, tên, nhóm, công nghệ in; kiểu `overlay` hoặc `legend` theo cấu hình), **chân trang** (tên xưởng, ghi chú) và lưu `images/<sessionId>/<imageId>-final.jpg`.
 3. Dòng `generated_images` lưu: phiên (→ logo → thương hiệu → khách), loại, trang mẫu hoặc chất liệu + kiểu thiết kế, `layoutSnapshot` (bố cục và danh sách chất liệu **tại thời điểm tạo**), `promptUsed` nguyên văn, phiên bản prompt, model, độ phân giải, tỉ lệ, `taskId`, trạng thái, số lần thử, đường dẫn ảnh gốc/hoàn thiện, `errorMessage`, `costCredits`, người tạo, thời gian. Mỗi ảnh có 1 dòng `usage_logs`.
-4. Tải về: ZIP / PDF cả phiên (`/api/sessions/[id]/download`), từng ảnh (`/api/images/[id]/download`). Tự gửi vào nhóm Zalo đang bật "tự động gửi" (`autoSendImage`, chạy nền).
+4. Tải về: ZIP / PDF cả phiên (`/api/sessions/[id]/download`), từng ảnh (`/api/images/[id]/download`). Không còn tự gửi vào nhóm Zalo khi tạo xong (D86); ảnh vào nhóm khi nhân viên tag bot giao việc.
 
 ### 4.8 Lỗi, thử lại, hàng đợi
 Không dùng hàng đợi ngoài (Redis/BullMQ). **Hàng đợi = chính cột `status`/`lastPolledAt` trong MySQL**, được đẩy bởi `kickSession` (`after()` sau khi tạo phiên, lặp tới 12 phút nếu còn ảnh chờ) và `/api/sessions/[id]/sync` (màn hình kết quả gọi định kỳ).

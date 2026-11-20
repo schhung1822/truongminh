@@ -37,7 +37,7 @@ export default async function ZaloGroupsPage() {
           <CardTitle>Nhóm Zalo</CardTitle>
           <CardDescription>
             Nhóm hiện ở đây khi bot nhận được tin từ nhóm (có người trả lời tin của bot hoặc gõ @tên bot, cần bật webhook), hoặc khi bạn
-            thêm bằng tay. Nhóm mới luôn ở chế độ KHÔNG tự động gửi.
+            thêm bằng tay. Đặt tên nhóm ở đây để bot lấy làm tên khách khi nhân viên tag bot ra lệnh. Ảnh chỉ vào nhóm khi nhân viên tag bot giao việc hoặc khi gửi tay từ Hộp thư.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -48,7 +48,6 @@ export default async function ZaloGroupsPage() {
               chatId: g.chatId,
               name: g.name,
               isActive: g.isActive,
-              autoSend: g.autoSend,
               lastSeen: g.lastSeenAt ? fmt.format(g.lastSeenAt) : null,
             }))}
           />

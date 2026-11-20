@@ -55,6 +55,8 @@ export const MATERIAL_CSV_COLUMNS = [
   "id", "code", "name", "thicknessMm", "groupName", "printTech", "baseMaterial", "technique", "surfaceFinish", "surfacePattern",
   "colorCount", "frontColorName", "frontColorFamily", "frontColorConfidence", "backColorName", "backColorFamily", "backColorConfidence",
   "seriesCode", "styleTags", "aiVisualNote", "descHuman", "photoIssue", "confidence", "needsReview", "reviewNote", "isActive", "sortOrder",
+  // Thông số tấm để báo giá, DÙNG ĐÚNG ĐƠN VỊ LƯU TRỮ (khác form nhập, nơi kích thước tấm tính bằng cm): kích thước, lề, khoảng cách bằng mm; giá bằng đồng.
+  "stockWidthMm", "stockHeightMm", "stockPrice", "edgeMarginMm", "gapMm", "allowRotate",
 ] as const;
 export type MaterialCsvField = (typeof MATERIAL_CSV_COLUMNS)[number];
 
@@ -86,6 +88,13 @@ const HEADER_ALIASES: Record<MaterialCsvField, string[]> = {
   reviewNote: ["reviewnote", "ghichuxemlai"],
   isActive: ["isactive", "dangbat"],
   sortOrder: ["sortorder", "thutu"],
+  // tên tiếng Việt cố ý ghi rõ đơn vị (mm, đồng) để không ai nhập nhầm cm vào cột mm
+  stockWidthMm: ["stockwidthmm", "rongtammm", "chieurongtammm"],
+  stockHeightMm: ["stockheightmm", "caotammm", "chieucaotammm"],
+  stockPrice: ["stockprice", "giatam", "giamottam", "giatamdong"],
+  edgeMarginMm: ["edgemarginmm", "letammm", "letam"],
+  gapMm: ["gapmm", "khoangcach", "khoangcachmm", "khoangcachgiualogomm"],
+  allowRotate: ["allowrotate", "chophepxoay"],
 };
 
 function normalizeHeader(h: string): string {

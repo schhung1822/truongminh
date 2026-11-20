@@ -152,6 +152,22 @@ export class MockChat implements ChatProvider {
     }
     const last = [...input.messages].reverse().find((m) => m.role === "user");
     const said = last?.content.map((p) => (p.type === "text" ? p.text : "[ảnh]")).join(" ") ?? "";
+    // Trợ lý nhận lệnh: đoán lệnh đơn giản bằng từ khóa để thử luồng mà không tốn token
+    if (sys.includes("bộ phận hiểu lệnh")) {
+      const t = said.toLowerCase();
+      const nums = [...t.matchAll(/số\s*(\d+(?:\s*(?:,|và|va)\s*\d+)*)/g)].flatMap((m) => m[1].match(/\d+/g) ?? []).map(Number);
+      const image = /ảnh\s*(\d+)/.exec(t)?.[1];
+      const intent = /xong chưa|tiến độ/.test(t)
+        ? { intent: "status" }
+        : nums.length
+          ? { intent: "design", picks: [{ image: image ? Number(image) : null, cells: nums }], productType: /móc khóa/.test(t) ? "móc khóa" : null, variants: null }
+          : /catalog|mẫu chất liệu|logo/.test(t)
+            ? { intent: "catalog" }
+            : /\?|không/.test(t)
+              ? { intent: "ask", question: said }
+              : { intent: "other" };
+      return { text: JSON.stringify(intent), promptTokens: 10, completionTokens: 5 };
+    }
     const wantsHuman = /nhân viên|nhan vien|\[\[nhan_vien\]\]/i.test(said);
     return {
       text: wantsHuman ? "(Mock) Để em chuyển nhân viên hỗ trợ. [[NHAN_VIEN]]" : `(Mock) Em đã nhận: ${said.slice(0, 120)}`,

@@ -12,7 +12,7 @@ import { getStorage } from "@/lib/storage";
 
 type Result = { error?: string };
 
-const NOT_EMPTY = "Thư mục này đã tạo ảnh nên không xóa được. Chỉ xóa được thư mục chưa tạo ảnh nào.";
+const NOT_EMPTY = "Thư mục này đã tạo ảnh hoặc báo giá nên không xóa được. Chỉ xóa được thư mục chưa tạo ảnh hay báo giá nào.";
 
 const nameSchema = (what: string) =>
   z.string().trim().min(1, `Vui lòng nhập tên ${what}.`).max(150, "Tên quá dài (tối đa 150 ký tự).");
@@ -48,7 +48,8 @@ export async function deleteBrandAction(id: string): Promise<Result> {
   await requireUser();
   const brand = await db.brand.findUnique({ where: { id }, include: { logos: true } });
   if (!brand) return {};
-  const used = await db.consultSession.count({ where: { logoId: { in: brand.logos.map((l) => l.id) } } });
+  const logoIds = brand.logos.map((l) => l.id);
+  const used = (await db.consultSession.count({ where: { logoId: { in: logoIds } } })) + (await db.quote.count({ where: { logoId: { in: logoIds } } }));
   if (used > 0) return { error: NOT_EMPTY };
 
   await db.$transaction([db.logo.deleteMany({ where: { brandId: id } }), db.brand.delete({ where: { id } })]);
@@ -61,7 +62,8 @@ export async function deleteCustomerAction(id: string): Promise<Result> {
   const customer = await db.customer.findUnique({ where: { id }, include: { brands: { include: { logos: true } } } });
   if (!customer) return {};
   const logos = customer.brands.flatMap((b) => b.logos);
-  const used = await db.consultSession.count({ where: { logoId: { in: logos.map((l) => l.id) } } });
+  const logoIds = logos.map((l) => l.id);
+  const used = (await db.consultSession.count({ where: { logoId: { in: logoIds } } })) + (await db.quote.count({ where: { logoId: { in: logoIds } } }));
   if (used > 0) return { error: NOT_EMPTY };
 
   await db.$transaction([

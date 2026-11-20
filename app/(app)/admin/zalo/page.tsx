@@ -18,11 +18,9 @@ type Row = { label: string; on: boolean; href: string; tab: string };
 function featureRows(s: ZaloSettings): Row[] {
   return [
     { label: "Gửi ảnh vào nhóm", on: s.groupSend, href: "/admin/zalo/groups", tab: "Nhóm và gửi ảnh" },
-    { label: "Bot AI trả lời khách", on: s.chatbot, href: "/admin/zalo/bot", tab: "Bot AI và trả lời" },
-    { label: "Lời chào khách mới", on: s.welcome, href: "/admin/zalo/bot", tab: "Bot AI và trả lời" },
-    { label: "Trả lời nhanh theo từ khóa", on: s.quickReplies, href: "/admin/zalo/bot", tab: "Bot AI và trả lời" },
-    { label: "Giờ làm việc", on: s.hoursEnabled, href: "/admin/zalo/bot", tab: "Bot AI và trả lời" },
-    { label: "Báo nhân viên khi khách cần người", on: s.staffNotify, href: "/admin/zalo/bot", tab: "Bot AI và trả lời" },
+    { label: "Trợ lý nhận lệnh (tag bot)", on: s.agent, href: "/admin/zalo/bot", tab: "Trợ lý AI" },
+    { label: "Hộp thư Zalo", on: s.inbox, href: "/admin/zalo/bot", tab: "Trợ lý AI" },
+    { label: "Nút “AI soạn” trong Hộp thư", on: s.aiDraft, href: "/admin/zalo/bot", tab: "Trợ lý AI" },
     { label: "Ghép nối nhân viên", on: s.pairing, href: "/admin/zalo/staff", tab: "Nhân viên và lệnh" },
     { label: "Lệnh gõ nhanh", on: s.commands, href: "/admin/zalo/staff", tab: "Nhân viên và lệnh" },
     { label: "Kịch bản chăm sóc nhóm", on: s.care, href: "/admin/zalo/care", tab: "Chăm sóc nhóm" },
@@ -73,7 +71,7 @@ export default async function ZaloAdminPage() {
       <Card>
         <CardHeader>
           <CardTitle>Thống kê Zalo</CardTitle>
-          <CardDescription>Tin nhắn 7 ngày gần nhất, và lượt bot AI trả lời 30 ngày. Tin nhắn chỉ được lưu khi bật Bot AI.</CardDescription>
+          <CardDescription>Tin nhắn 7 ngày gần nhất, và lượt AI soạn/trả lời lệnh 30 ngày. Tin nhắn được lưu khi bật Hộp thư hoặc Trợ lý nhận lệnh.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">

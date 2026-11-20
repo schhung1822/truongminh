@@ -110,12 +110,14 @@ describe("buildPlanPrompt", () => {
       holidays: [{ date: "2026-11-20", name: "Ngày Nhà giáo", inDays: 2 }],
       recentPosts: ["Bài cũ về mica"],
       recentGroupMessages: [],
-      materials: ["Mica trong"],
+      materials: "CÁC CHẤT LIỆU XƯỞNG ĐANG CÓ (1 loại):\nMica trong",
       media: [{ code: "I1", kind: "IMAGE", label: "Nextgency · Ảnh 1" }],
-      botKnowledge: "Làm mẫu 2-3 ngày",
+      knowledge: "KIẾN THỨC CỦA XƯỞNG:\n### Thử\nNội dung thử",
     });
     expect(system).toContain(PLAN_MARKER);
-    expect(system).toContain("Làm mẫu 2-3 ngày");
+    expect(system).toContain("Nội dung thử");
+    expect(user).toContain("Mica trong");
+    expect(system).not.toMatch(/in UV|in khắc/);
     expect(system).toContain("3 lượt");
     expect(user).toContain("Chủ quán cafe");
     expect(user).toContain("2026-11-19");
@@ -128,7 +130,7 @@ describe("buildPlanPrompt", () => {
   it("thiếu dữ liệu thì có câu thay thế", () => {
     const { user } = buildPlanPrompt({
       now: "x", days: ["2026-11-19"], postsPerDay: 2, groupName: "N", insight: "", workshopName: "X", location: "HN",
-      weather: [], holidays: [], recentPosts: [], recentGroupMessages: [], materials: [], media: [], botKnowledge: "",
+      weather: [], holidays: [], recentPosts: [], recentGroupMessages: [], materials: "", media: [], knowledge: "",
     });
     expect(user).toContain("chưa có mô tả");
     expect(user).toContain("không có, hãy dựa vào mùa");

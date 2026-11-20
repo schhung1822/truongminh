@@ -1,26 +1,31 @@
 import "server-only";
 import { randomInt } from "node:crypto";
+import sharp from "sharp";
 import { Prisma, type ZaloContact } from "@/generated/prisma/client";
 import { ChatError, getChatProvider } from "@/lib/ai/chat";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
+import { buildPdf, buildZip } from "@/lib/export/build";
 import { todayKey } from "@/lib/jobs/limits";
+import { compareSessionImages } from "@/lib/jobs/order";
+import { extractUnknown } from "@/lib/knowledge/rules";
+import { prepareKnowledgePrompt, recordKnowledgeUse } from "@/lib/knowledge";
 import { getKieCredits } from "@/lib/providers";
-import { getSettings } from "@/lib/settings";
 import { getStorage } from "@/lib/storage";
 import { zonedStartOfDay } from "@/lib/time";
-import { buildChatMessages, buildSystemPrompt, extractHandoff, type HistoryItem } from "./bot-prompt";
+import { handleAgentMessage } from "./agent";
+import { buildChatMessages } from "./bot-prompt";
 import { ZaloError, type ZaloClient } from "./client";
 import { helpText, parseCommand, PUBLIC_COMMANDS, type CommandName } from "./commands";
-import { describeHours, isWithinHours } from "./hours";
 import { getZaloClient } from "./index";
-import { containsKeyword, findQuickReply, parseKeywords } from "./keywords";
+import { sendPersonalAttachments, sendPersonalText, type PersonalAttachment } from "./personal/send";
 import { getZaloSettings, type ZaloSettings } from "./settings";
-import { preview, prepareReply, splitMessage } from "./text";
+import { preview, splitMessage, stripMarkdown } from "./text";
 
 /**
- * Bộ não của bot Zalo: nhận tin từ webhook, xử lý ghép nối và lệnh gõ nhanh, lời chào, từ khóa chuyển nhân viên,
- * trả lời nhanh, bot AI (kie.ai) trả lời khách. Mỗi chức năng có công tắc riêng trong cấu hình Zalo (Quản trị > Zalo).
+ * Bộ não của bot Zalo: nhận tin từ webhook, xử lý ghép nối và lệnh gõ nhanh của nhân viên, chuyển lệnh tag bot cho trợ lý (agent),
+ * ghi tin khách vào Hộp thư. Bot KHÔNG tự nói chuyện với khách: nhân viên nói với khách, bot chỉ làm việc khi nhân viên đã ghép nối gọi.
+ * Mỗi chức năng có công tắc riêng trong cấu hình Zalo (Quản trị > Zalo).
  */
 
 /* ---------- Kiểu dữ liệu webhook ---------- */
@@ -84,11 +89,6 @@ function classify(ev: ZaloEvent): { kind: Kind; text: string } {
   }
 }
 
-/** Có chức năng nào trả lời khách tự động đang bật không. */
-function customerAutomation(s: ZaloSettings): boolean {
-  return s.chatbot || s.quickReplies || s.welcome;
-}
-
 /** Điểm vào duy nhất cho webhook. Không bao giờ ném lỗi ra ngoài (Zalo chỉ cần nhận 200). */
 export async function processWebhook(ev: ZaloEvent): Promise<void> {
   try {
@@ -103,7 +103,7 @@ export async function processWebhook(ev: ZaloEvent): Promise<void> {
 
     const isGroup = msg.chat?.chat_type === "GROUP";
     if (isGroup) {
-      // nhận ra nhóm để admin bật "Tự động gửi" (chức năng gửi ảnh vào nhóm)
+      // nhận ra nhóm để admin đặt tên và gửi tin thử (bot gửi ảnh vào nhóm khi nhân viên tag bot ra lệnh)
       const now = new Date();
       await db.zaloGroup.upsert({
         where: { chatId },
@@ -112,7 +112,7 @@ export async function processWebhook(ev: ZaloEvent): Promise<void> {
       });
     }
 
-    if (!customerAutomation(s) && !s.commands && !s.pairing) return;
+    if (!s.inbox && !s.commands && !s.pairing && !s.agent) return;
 
     await serial(chatId, () => handleIncoming(client, s, ev, isGroup));
   } catch (e) {
@@ -124,17 +124,15 @@ async function handleIncoming(client: ZaloClient, s: ZaloSettings, ev: ZaloEvent
   const msg = ev.message!;
   const chatId = msg.chat!.id!;
   const { kind, text } = classify(ev);
-  // Chỉ lưu nội dung hội thoại khi bot AI bật (để bot đọc ngữ cảnh). Các chức năng khác không cần lưu.
-  const recording = s.chatbot;
+  // Lưu nội dung hội thoại khi Hộp thư bật (để nhân viên xem) hoặc trợ lý nhận lệnh bật (cần nhớ ảnh logo vừa gửi)
+  const recording = s.inbox || s.agent;
 
   const name = (msg.from?.display_name ?? "").trim().slice(0, 150) || (isGroup ? "Nhóm Zalo" : "Khách Zalo");
-  const known = await db.zaloContact.findUnique({ where: { chatId }, select: { id: true } });
-  let contact = await db.zaloContact.upsert({
+  const contact = await db.zaloContact.upsert({
     where: { chatId },
     create: { chatId, chatType: isGroup ? "GROUP" : "PRIVATE", displayName: name },
     update: isGroup ? {} : { displayName: name },
   });
-  const isNew = !known;
 
   // Lệnh gõ nhanh / ghép nối (chỉ chat riêng)
   const cmd = kind === "TEXT" && !isGroup ? parseCommand(text) : null;
@@ -152,54 +150,20 @@ async function handleIncoming(client: ZaloClient, s: ZaloSettings, ev: ZaloEvent
     return;
   }
 
-  // Nhân viên đã ghép nối nhắn chữ thường: gợi ý lệnh, không cho bot AI trả lời như với khách
+  // Trợ lý nhận lệnh: nhân viên đã ghép nối tag bot trong nhóm hoặc nhắn riêng. Người khác (khách) chỉ được ghi nhận, bot không trả lời.
+  if (s.agent && (await handleAgentMessage({ s, chat: contact, isGroup, senderId: msg.from?.id, kind, text }))) return;
+
+  // Nhân viên đã ghép nối nhắn chữ thường: gợi ý lệnh
   if (contact.role === "STAFF" && !isGroup) {
     if (s.commands && kind === "TEXT") await replySystem(client, contact, "Gõ /help để xem các lệnh.", recording);
     return;
   }
 
+  // Khách nhắn bot: chỉ ghi nhận để nhân viên thấy ở Hộp thư. Bot KHÔNG tự trả lời khách; nhân viên là người nói với khách.
   await db.zaloContact.update({
     where: { id: contact.id },
     data: { lastMessageAt: new Date(), lastMessageText: preview(text || kindLabel(kind), 200) },
   });
-
-  if (!customerAutomation(s) || kind === "STICKER") return;
-  if (isGroup && !s.groupReply) return;
-
-  contact = await resumeIfDue(contact, s);
-  if (contact.botPaused) return;
-
-  const lastText = preview(text || kindLabel(kind), 100);
-
-  // Lời chào cho khách mới (chat riêng)
-  if (s.welcome && isNew && !isGroup) {
-    await replyBot(client, contact, splitMessage(s.welcomeMessage), undefined, recording);
-  }
-
-  // Khách gõ từ khóa muốn gặp nhân viên: chuyển ngay, không tốn token
-  if (kind === "TEXT" && containsKeyword(text, parseKeywords(s.handoffKeywords))) {
-    await handOff(client, s, contact, lastText, "khách yêu cầu gặp nhân viên", undefined, recording);
-    return;
-  }
-
-  // Trả lời nhanh theo từ khóa
-  if (s.quickReplies && kind === "TEXT") {
-    const q = findQuickReply(text, s.quickReplyList);
-    if (q) {
-      await replyBot(client, contact, splitMessage(q.reply), undefined, recording);
-      return;
-    }
-  }
-
-  if (!s.chatbot) return;
-
-  if (kind === "VOICE" || kind === "FILE" || kind === "OTHER" || (kind === "IMAGE" && !s.vision)) {
-    await flagForStaff(client, s, contact, lastText, `khách gửi ${kindLabel(kind).toLowerCase()} mà bot chưa đọc được`, false);
-    if (kind !== "OTHER") await replyBot(client, contact, [s.unsupportedReply], undefined, recording);
-    return;
-  }
-
-  await botAnswer(client, s, contact, isGroup, msg.photo_url, lastText);
 }
 
 function isCommandOn(s: ZaloSettings, name: CommandName): boolean {
@@ -255,7 +219,7 @@ async function downloadPhoto(contactId: string, messageId: string, url: string):
 
 /* ---------- Gửi tin ---------- */
 
-type SendMeta = { author: "BOT" | "SYSTEM"; promptTokens?: number; completionTokens?: number };
+type SendMeta = { author: "BOT" | "SYSTEM" | "HUMAN"; userId?: string; promptTokens?: number; completionTokens?: number };
 
 /** Gửi lần lượt các đoạn chữ cho một cuộc chat và (nếu `record`) lưu từng đoạn vào hội thoại. Trả về lỗi đầu tiên nếu có. */
 async function sendChunks(client: ZaloClient, contactId: string, chatId: string, chunks: string[], meta: SendMeta, record: boolean): Promise<string | null> {
@@ -292,157 +256,16 @@ async function sendChunks(client: ZaloClient, contactId: string, chatId: string,
   return firstError;
 }
 
+async function touch(contactId: string, lastText: string) {
+  await db.zaloContact.update({ where: { id: contactId }, data: { lastMessageAt: new Date(), lastMessageText: preview(lastText, 200) } });
+}
+
 async function replySystem(client: ZaloClient, contact: { id: string; chatId: string }, text: string, record: boolean) {
   await sendChunks(client, contact.id, contact.chatId, splitMessage(text), { author: "SYSTEM" }, record);
 }
 
-async function replyBot(
-  client: ZaloClient,
-  contact: { id: string; chatId: string },
-  chunks: string[],
-  usage: { promptTokens: number; completionTokens: number } | undefined,
-  record: boolean,
-) {
-  await sendChunks(client, contact.id, contact.chatId, chunks, { author: "BOT", ...usage }, record);
-}
-
-/* ---------- Chuyển nhân viên ---------- */
-
-/** Thông tin giờ làm việc theo cấu hình, hoặc null nếu không bật. */
-function hoursInfo(s: ZaloSettings): { description: string; open: boolean } | null {
-  if (!s.hoursEnabled) return null;
-  const h = { start: s.hoursStart, end: s.hoursEnd, days: s.hoursDays };
-  return { description: describeHours(h), open: isWithinHours(new Date(), getEnv().APP_TIMEZONE, h) };
-}
-
-/** Câu bot nói khi chuyển nhân viên: ngoài giờ làm việc thì dùng câu "ngoài giờ". */
-function handoffText(s: ZaloSettings): string {
-  const h = hoursInfo(s);
-  return h && !h.open ? s.afterHoursReply : s.handoffReply;
-}
-
-/** Nhắn báo cho các nhân viên đã ghép nối (chat riêng). Lỗi gửi cho ai thì bỏ qua người đó. */
-async function notifyStaff(client: ZaloClient, contact: ZaloContact, lastText: string, reason: string) {
-  const staff = await db.zaloContact.findMany({ where: { role: "STAFF", chatType: "PRIVATE" }, select: { chatId: true } });
-  if (staff.length === 0) return;
-  const who = `${contact.displayName}${contact.chatType === "GROUP" ? " (nhóm)" : ""}`;
-  const text = `Khách "${who}" cần nhân viên: ${reason}.${lastText ? `\nTin gần nhất: "${lastText}"` : ""}\nGõ /cho để xem các khách đang chờ.`;
-  for (const st of staff) {
-    try {
-      await client.sendMessage(st.chatId, text);
-    } catch (e) {
-      console.error("Zalo: không báo được nhân viên:", errText(e));
-    }
-  }
-}
-
-/**
- * Đánh dấu khách đang chờ nhân viên; `pause` = bot im ở hội thoại này (đến khi nhân viên gõ /xong hoặc hết "botResumeHours").
- * Chỉ báo nhân viên một lần khi chuyển từ "không chờ" sang "chờ", để không làm phiền.
- */
-async function flagForStaff(client: ZaloClient, s: ZaloSettings, contact: ZaloContact, lastText: string, reason: string, pause: boolean) {
-  await db.zaloContact.update({
-    where: { id: contact.id },
-    data: { needsHuman: true, ...(pause ? { botPaused: true, botPausedAt: contact.botPaused && contact.botPausedAt ? contact.botPausedAt : new Date() } : {}) },
-  });
-  if (!contact.needsHuman && s.staffNotify) await notifyStaff(client, contact, lastText, reason);
-}
-
-/** Chuyển khách cho nhân viên: bot im, đánh dấu chờ, nói câu chuyển (nếu chưa có câu của AI), báo nhân viên. */
-async function handOff(
-  client: ZaloClient,
-  s: ZaloSettings,
-  contact: ZaloContact,
-  lastText: string,
-  reason: string,
-  usage: { promptTokens: number; completionTokens: number } | undefined,
-  record: boolean,
-  alreadySpoke = false,
-) {
-  if (!alreadySpoke) await replyBot(client, contact, [handoffText(s)], usage, record);
-  await flagForStaff(client, s, contact, lastText, reason, true);
-}
-
-/** Bot đang im mà quá `botResumeHours` giờ thì cho bot trả lời lại. 0 = không tự trả lại. */
-async function resumeIfDue(contact: ZaloContact, s: ZaloSettings): Promise<ZaloContact> {
-  if (!contact.botPaused) return contact;
-  const due = !contact.botPausedAt || (s.botResumeHours > 0 && Date.now() - contact.botPausedAt.getTime() > s.botResumeHours * 3600_000);
-  if (!due) return contact;
-  return db.zaloContact.update({ where: { id: contact.id }, data: { botPaused: false, botPausedAt: null, needsHuman: false } });
-}
-
-/* ---------- Bot AI trả lời ---------- */
-
 async function dayStart(): Promise<Date> {
   return zonedStartOfDay(todayKey(), getEnv().APP_TIMEZONE) ?? new Date(Date.now() - 24 * 3600_000);
-}
-
-async function botAnswer(client: ZaloClient, s: ZaloSettings, contact: ZaloContact, isGroup: boolean, photoUrl: string | undefined, lastText: string) {
-  const contactId = contact.id;
-
-  // Hạn mức: toàn hệ thống mỗi ngày, và mỗi người mỗi giờ
-  const [today, lastHour] = await Promise.all([
-    db.zaloMessage.count({ where: { author: "BOT", direction: "OUT", failed: false, createdAt: { gte: await dayStart() } } }),
-    db.zaloMessage.count({ where: { contactId, author: "BOT", direction: "OUT", createdAt: { gte: new Date(Date.now() - 3600_000) } } }),
-  ]);
-  if (today >= s.botDailyLimit || lastHour >= s.botHourlyLimitPerContact) {
-    await flagForStaff(client, s, contact, lastText, "bot đã hết hạn mức trả lời", false);
-    return;
-  }
-
-  if (!isGroup) void client.sendTyping(contact.chatId);
-
-  try {
-    const since = contact.contextResetAt ?? new Date(0);
-    const rows = await db.zaloMessage.findMany({
-      where: { contactId, createdAt: { gt: since }, failed: false },
-      orderBy: { createdAt: "desc" },
-      take: s.contextMessages,
-    });
-    const history: HistoryItem[] = rows.reverse().map((r) => ({ author: r.author, text: r.text ?? "" }));
-    // Ảnh vừa gửi: đưa link cho AI xem (chỉ tin cuối cùng của khách)
-    if (photoUrl && s.vision) {
-      for (let i = history.length - 1; i >= 0; i--) {
-        if (history[i].author === "CONTACT") {
-          history[i] = { ...history[i], imageUrl: photoUrl };
-          break;
-        }
-      }
-    }
-
-    const [materials, settings] = await Promise.all([
-      s.includeMaterials
-        ? db.material.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { code: true, name: true, groupName: true, printTech: true, descHuman: true, thicknessMm: true } })
-        : Promise.resolve([]),
-      getSettings(),
-    ]);
-    const system = buildSystemPrompt({
-      botPrompt: s.botPrompt,
-      botKnowledge: s.botKnowledge,
-      includeMaterials: s.includeMaterials,
-      materials,
-      workshopName: settings.workshopName,
-      contactName: contact.displayName,
-      isGroup,
-      hours: hoursInfo(s) ?? undefined,
-    });
-
-    const result = await getChatProvider().complete({ model: s.chatModel, messages: buildChatMessages(system, history) });
-    const { text, handoff } = extractHandoff(result.text);
-    const chunks = prepareReply(text);
-    const usage = { promptTokens: result.promptTokens, completionTokens: result.completionTokens };
-
-    if (chunks.length > 0) await replyBot(client, contact, chunks, usage, true);
-    if (handoff) await handOff(client, s, contact, lastText, "bot không trả lời được hoặc khách muốn gặp người", usage, true, chunks.length > 0);
-  } catch (e) {
-    // Bot lỗi (hết token, mạng...): ghi lại cho nhân viên thấy, đánh dấu cần người; khách không bị nhắn lỗi kỹ thuật
-    const reason = e instanceof ChatError ? e.message : errText(e);
-    console.error("Zalo bot: không trả lời được:", reason);
-    await db.zaloMessage.create({
-      data: { contactId, direction: "OUT", author: "SYSTEM", kind: "OTHER", text: "Bot không trả lời được tin này.", failed: true, error: reason },
-    });
-    await flagForStaff(client, s, contact, lastText, "bot gặp lỗi khi trả lời", false);
-  }
 }
 
 /* ---------- Lệnh gõ nhanh và ghép nối ---------- */
@@ -458,32 +281,19 @@ async function runCommand(client: ZaloClient, s: ZaloSettings, contact: ZaloCont
     return say(`Mã ghép nối của bạn là ${code}. Nhờ quản trị viên mở Quản trị > Zalo > Nhân viên và lệnh, đối chiếu đúng mã này rồi bấm "Cho phép". Sau đó gõ /help.`);
   }
 
-  if (!PUBLIC_COMMANDS.has(name) && !staff) {
-    return say(s.pairing ? "Lệnh này chỉ dành cho nhân viên đã ghép nối. Gõ /ghepnoi để xin ghép nối." : "Lệnh này chỉ dành cho nhân viên.");
-  }
+  // Người chưa ghép nối chỉ dùng được /ghepnoi; các lệnh khác bot im lặng (bot không tự nói chuyện với khách)
+  if (!PUBLIC_COMMANDS.has(name) && !staff) return;
 
   switch (name) {
     case "help":
-      return say(helpText(staff, s.enabledCommands));
+      return say(helpText(s.enabledCommands));
     case "reset":
-      await db.zaloContact.update({ where: { id: contact.id }, data: { contextResetAt: new Date(), botPaused: false, botPausedAt: null, needsHuman: false } });
+      await db.zaloContact.update({ where: { id: contact.id }, data: { contextResetAt: new Date() } });
       return say("Đã xóa ngữ cảnh, mình bắt đầu lại nhé.");
-    case "human":
-      await flagForStaff(client, s, contact, "khách gõ /nhanvien", "khách gõ /nhanvien", true);
-      return say(handoffText(s));
     case "status":
       return say(await statusText());
     case "today":
       return say(await todayText());
-    case "waiting":
-      return say(await waitingText());
-    case "done": {
-      const r = await db.zaloContact.updateMany({
-        where: { needsHuman: true, role: "CUSTOMER" },
-        data: { needsHuman: false, botPaused: false, botPausedAt: null },
-      });
-      return say(r.count > 0 ? `Đã đánh dấu xử lý xong ${r.count} khách, bot sẽ trả lời lại các khách đó.` : "Không có khách nào đang chờ.");
-    }
   }
 }
 
@@ -512,19 +322,170 @@ async function todayText(): Promise<string> {
   return [`Hôm nay: ${total} lượt tạo ảnh`, ...lines].join("\n");
 }
 
-async function waitingText(): Promise<string> {
-  const rows = await db.zaloContact.findMany({
-    where: { needsHuman: true, role: "CUSTOMER" },
-    orderBy: { lastMessageAt: "desc" },
-    take: 10,
-    select: { displayName: true, chatType: true, lastMessageText: true },
+/* ---------- Gửi từ web (nhân viên) ---------- */
+
+export type SendResult = { ok: true } | { ok: false; error: string };
+
+/** Nhân viên trả lời khách từ web. */
+export async function sendHumanReply(user: { id: string }, contactId: string, rawText: string): Promise<SendResult> {
+  const s = await getZaloSettings();
+  if (!s.enabled) return { ok: false, error: "Zalo đang tắt." };
+  const contact = await db.zaloContact.findUnique({ where: { id: contactId } });
+  if (!contact) return { ok: false, error: "Không tìm thấy hội thoại." };
+  // hội thoại của tài khoản Zalo cá nhân: gửi qua đúng tài khoản đó (không liên quan bot)
+  if (contact.accountId) {
+    const error = await sendPersonalText(contact, user.id, rawText);
+    return error ? { ok: false, error } : { ok: true };
+  }
+  const client = getZaloClient();
+  if (!client) return { ok: false, error: "Chưa cấu hình bot Zalo." };
+  const chunks = splitMessage(stripMarkdown(rawText));
+  if (chunks.length === 0) return { ok: false, error: "Vui lòng nhập nội dung." };
+
+  const err = await serial(contact.chatId, () => sendChunks(client, contact.id, contact.chatId, chunks, { author: "HUMAN", userId: user.id }, true));
+  await db.zaloContact.update({
+    where: { id: contactId },
+    data: { unreadCount: 0, needsHuman: false },
   });
-  if (rows.length === 0) return "Không có khách nào đang chờ nhân viên.";
-  const total = await db.zaloContact.count({ where: { needsHuman: true, role: "CUSTOMER" } });
-  const lines = rows.map((r) => `• ${r.displayName}${r.chatType === "GROUP" ? " (nhóm)" : ""}: ${preview(r.lastMessageText, 80) || "(chưa có tin)"}`);
-  return [`Đang chờ nhân viên: ${total} khách`, ...lines, total > rows.length ? `... và ${total - rows.length} khách nữa` : "", "Xử lý xong thì gõ /xong."]
-    .filter(Boolean)
-    .join("\n");
+  return err ? { ok: false, error: err } : { ok: true };
+}
+
+export type SessionSendMode = "images" | "pdf" | "zip";
+
+/** Gửi ảnh của một phiên cho khách: từng ảnh, hoặc một file PDF / ZIP. */
+export async function sendSessionToContact(user: { id: string }, contactId: string, sessionId: string, mode: SessionSendMode): Promise<SendResult & { sent?: number }> {
+  const s = await getZaloSettings();
+  if (!s.enabled) return { ok: false, error: "Zalo đang tắt." };
+  const contact = await db.zaloContact.findUnique({ where: { id: contactId } });
+  if (!contact) return { ok: false, error: "Không tìm thấy hội thoại." };
+  const client = getZaloClient();
+  if (!client && !contact.accountId) return { ok: false, error: "Chưa cấu hình bot Zalo." };
+  const session = await db.consultSession.findUnique({
+    where: { id: sessionId },
+    include: { logo: { include: { brand: { include: { customer: true } } } } },
+  });
+  if (!session) return { ok: false, error: "Không tìm thấy phiên." };
+
+  const images = await db.generatedImage.findMany({
+    where: { sessionId, status: "SUCCESS", retries: { none: {} }, finalPath: { not: null } },
+    select: { id: true, finalPath: true, materialId: true, variantIndex: true, createdAt: true, sheet: { select: { sortOrder: true } }, layoutSnapshot: true },
+  });
+  images.sort(compareSessionImages);
+  if (images.length === 0) return { ok: false, error: "Phiên này chưa có ảnh nào tạo xong." };
+  if (mode === "images" && images.length > 20) return { ok: false, error: "Phiên có hơn 20 ảnh, hãy gửi dạng PDF hoặc ZIP." };
+
+  const brand = session.logo.brand.name;
+  const storage = getStorage();
+
+  // hội thoại của tài khoản Zalo cá nhân: gửi ảnh/file qua đúng tài khoản đó
+  if (contact.accountId) {
+    const bufs = await Promise.all(images.map((i) => storage.get(i.finalPath!)));
+    const safe = brand.replace(/[\\/:*?"<>|]+/g, " ").trim() || "mau";
+    let items: PersonalAttachment[];
+    if (mode === "images") {
+      items = await Promise.all(
+        bufs.map(async (data, i) => {
+          const m = await sharp(data).metadata();
+          const snap = images[i].layoutSnapshot as { imageNumber?: number } | null;
+          return {
+            data,
+            filename: `anh-${i + 1}.jpg` as const,
+            width: m.width,
+            height: m.height,
+            caption: `${brand}${snap?.imageNumber ? ` · Ảnh ${snap.imageNumber}` : ""}`,
+            mediaPath: images[i].finalPath,
+            kind: "IMAGE" as const,
+          };
+        }),
+      );
+    } else {
+      const data = mode === "pdf" ? await buildPdf(bufs, brand) : buildZip(bufs.map((b, i) => ({ name: `anh-${i + 1}.jpg`, data: b })));
+      items = [{ data, filename: mode === "pdf" ? (`${safe} - anh mau.pdf` as const) : (`${safe} - anh mau.zip` as const), kind: "FILE" }];
+    }
+    const r = await sendPersonalAttachments(contact, user.id, items);
+    if (r.sent === 0) return { ok: false, error: r.error ?? "Gửi không thành công." };
+    return { ok: true, sent: r.sent };
+  }
+  if (!client) return { ok: false, error: "Chưa cấu hình bot Zalo." };
+
+  const sent = await serial(contact.chatId, async (): Promise<SendResult & { sent?: number }> => {
+    try {
+      if (mode === "images") {
+        let n = 0;
+        for (const img of images) {
+          const buf = await storage.get(img.finalPath!);
+          const snap = img.layoutSnapshot as { title?: string; imageNumber?: number } | null;
+          const caption = `${brand}${snap?.imageNumber ? ` · Ảnh ${snap.imageNumber}` : ""}`;
+          await client.sendPhoto({ chatId: contact.chatId, image: buf, fileName: `${img.id}.jpg`, caption });
+          await db.zaloMessage.create({
+            data: { contactId, direction: "OUT", author: "HUMAN", authorUserId: user.id, kind: "IMAGE", text: caption, mediaPath: img.finalPath },
+          });
+          n++;
+          await sleep(600);
+        }
+        await touch(contactId, `[Đã gửi ${n} ảnh]`);
+        return { ok: true, sent: n };
+      }
+      const bufs = await Promise.all(images.map((i) => storage.get(i.finalPath!)));
+      const safe = brand.replace(/[\\/:*?"<>|]+/g, " ").trim() || "mau";
+      const fileName = mode === "pdf" ? `${safe} - anh mau.pdf` : `${safe} - anh mau.zip`;
+      const data = mode === "pdf" ? await buildPdf(bufs, brand) : buildZip(bufs.map((b, i) => ({ name: `anh-${i + 1}.jpg`, data: b })));
+      await client.sendFile({ chatId: contact.chatId, data, fileName, caption: `Ảnh mẫu ${brand}` });
+      await db.zaloMessage.create({
+        data: { contactId, direction: "OUT", author: "HUMAN", authorUserId: user.id, kind: "FILE", text: `[Đã gửi file ${fileName}]` },
+      });
+      await touch(contactId, `[Đã gửi file ${fileName}]`);
+      return { ok: true, sent: 1 };
+    } catch (e) {
+      const message = e instanceof ZaloError ? e.message : errText(e);
+      await db.zaloMessage.create({
+        data: { contactId, direction: "OUT", author: "SYSTEM", kind: "OTHER", text: "Gửi ảnh mẫu không thành công.", failed: true, error: message },
+      });
+      return { ok: false, error: message };
+    }
+  });
+  if (sent.ok) {
+    await db.zaloContact.update({ where: { id: contactId }, data: { unreadCount: 0, needsHuman: false } });
+  }
+  return sent;
+}
+
+/**
+ * AI soạn sẵn một câu trả lời cho nhân viên duyệt rồi mới gửi (không tự gửi).
+ * Vai DRAFT_REPLY chỉ được đọc kiến thức CÔNG KHAI (chữ này đi tới khách); thiếu thông tin thì soạn câu "để em kiểm tra" và ghi vào danh sách chưa trả lời được.
+ */
+export async function draftReply(contactId: string, userId?: string): Promise<{ ok: true; text: string; unknown: boolean } | { ok: false; error: string }> {
+  const s = await getZaloSettings();
+  if (!s.enabled || !s.aiDraft) return { ok: false, error: "Chức năng AI soạn đang tắt." };
+  const contact = await db.zaloContact.findUnique({ where: { id: contactId } });
+  if (!contact) return { ok: false, error: "Không tìm thấy hội thoại." };
+
+  const rows = await db.zaloMessage.findMany({
+    where: { contactId, failed: false, createdAt: { gt: contact.contextResetAt ?? new Date(0) } },
+    orderBy: { createdAt: "desc" },
+    take: s.contextMessages,
+  });
+  if (rows.length === 0) return { ok: false, error: "Chưa có tin nào để soạn trả lời." };
+  const history = rows.reverse();
+  const lastCustomer = [...history].reverse().find((m) => m.author === "CONTACT" && m.text)?.text ?? "";
+
+  try {
+    const p = await prepareKnowledgePrompt({
+      role: "DRAFT_REPLY",
+      question: lastCustomer,
+      contactName: contact.displayName,
+      isGroup: contact.chatType === "GROUP",
+    });
+    const r = await getChatProvider().complete({
+      model: s.chatModel,
+      messages: buildChatMessages(p.system, history.map((m) => ({ author: m.author, text: m.text ?? "" }))),
+    });
+    const { text, unknown } = extractUnknown(r.text);
+    await recordKnowledgeUse({ role: "DRAFT_REPLY", question: lastCustomer, usedIds: p.usedIds, droppedIds: p.droppedIds, unknown, userId });
+    return { ok: true, text: stripMarkdown(text), unknown };
+  } catch (e) {
+    return { ok: false, error: e instanceof ChatError ? e.message : errText(e) };
+  }
 }
 
 /** Kiểm tra nhanh model chat: gửi một câu ngắn (tốn rất ít token). Dùng cho nút "Thử AI" của admin. */

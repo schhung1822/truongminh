@@ -94,7 +94,7 @@ export function ConnectionCard({
               Trong nhóm, nhờ ai đó trả lời tin bot vừa gửi hoặc gõ @tên bot. Nhóm sẽ hiện ở danh sách bên dưới (cần bật webhook). Nếu chưa
               bật webhook, lấy mã nhóm (chat.id) rồi thêm bằng tay.
             </li>
-            <li>Bấm &quot;Gửi tin thử&quot; để chắc chắn bot gửi được, rồi bật &quot;Tự động gửi&quot; nếu muốn.</li>
+            <li>Bấm &quot;Gửi tin thử&quot; để chắc chắn bot gửi được, rồi đặt tên nhóm để bot nhận ra khách khi nhân viên tag bot ra lệnh.</li>
           </ol>
           <p className="mt-2">Zalo ghi chú tính năng bot trong nhóm đang thử nghiệm nên có thể thay đổi.</p>
         </details>
@@ -108,7 +108,6 @@ type Group = {
   chatId: string;
   name: string;
   isActive: boolean;
-  autoSend: boolean;
   lastSeen: string | null;
 };
 
@@ -137,14 +136,6 @@ function GroupRow({ group, tokenSet }: { group: Group; tokenSet: boolean }) {
       </TableCell>
       <TableCell>
         <Switch checked={group.isActive} disabled={pending} onCheckedChange={(v) => patch({ isActive: v })} aria-label="Bật nhóm" />
-      </TableCell>
-      <TableCell>
-        <Switch
-          checked={group.autoSend}
-          disabled={pending || !group.isActive}
-          onCheckedChange={(v) => patch({ autoSend: v })}
-          aria-label="Tự động gửi ảnh vừa tạo xong"
-        />
       </TableCell>
       <TableCell className="text-right whitespace-nowrap">
         <Button
@@ -200,7 +191,6 @@ export function GroupsBoard({ groups, tokenSet }: { groups: Group[]; tokenSet: b
               <TableRow>
                 <TableHead>Nhóm</TableHead>
                 <TableHead>Bật</TableHead>
-                <TableHead>Tự động gửi</TableHead>
                 <TableHead className="text-right">Thao tác</TableHead>
               </TableRow>
             </TableHeader>

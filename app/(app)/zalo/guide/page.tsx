@@ -48,8 +48,9 @@ export default async function ZaloGuidePage() {
     ["sale", "Dành cho sale"],
     ["ket-noi", "Kết nối bot lần đầu"],
     ["nhom", "Gửi ảnh vào nhóm"],
-    ["bot", "Bot AI trả lời khách"],
-    ["nhan-vien", "Chuyển nhân viên, ghép nối, lệnh"],
+    ["bot", "Kho kiến thức và model AI"],
+    ["nhan-vien", "Ghép nối nhân viên và lệnh"],
+    ["tro-ly", "Tag bot ra lệnh trong nhóm"],
     ["cham-soc", "Kịch bản chăm sóc nhóm"],
     ["gioi-han", "Giới hạn cần biết"],
     ["su-co", "Xử lý sự cố"],
@@ -60,7 +61,7 @@ export default async function ZaloGuidePage() {
       <div>
         <h1 className="text-2xl font-semibold">Hướng dẫn sử dụng Zalo</h1>
         <p className="text-muted-foreground">
-          Bot Zalo giúp gửi ảnh mẫu cho khách và đồng nghiệp, trả lời khách tự động và nhắc việc chăm sóc nhóm.
+          Bot Zalo giúp gửi ảnh mẫu cho khách và đồng nghiệp, làm ảnh theo lệnh của nhân viên, giải thích kỹ thuật cho sale và nhắc việc chăm sóc nhóm. Bot không tự nói chuyện với khách: nhân viên là người nói với khách.
           {admin ? " Bạn là quản trị viên nên xem đủ các phần cấu hình." : " Sale chỉ cần đọc mục “Dành cho sale”; các mục còn lại dành cho quản trị viên."}
         </p>
       </div>
@@ -75,15 +76,14 @@ export default async function ZaloGuidePage() {
 
       <Section id="tong-quan" title="Zalo làm được gì" desc="Mỗi chức năng có công tắc bật/tắt riêng, nên chỉ bật cái bạn cần.">
         <ul>
-          <li><b>Gửi ảnh mẫu vào nhóm Zalo</b>: ảnh tạo xong tự gửi (hoặc sale bấm gửi) vào nhóm của khách hay nhóm nội bộ, kèm chữ ghi thương hiệu, sale.</li>
-          <li><b>Bot AI trả lời khách</b>: khách nhắn riêng cho bot, bot trả lời theo thông tin xưởng bạn nhập; không chắc thì chuyển nhân viên.</li>
-          <li><b>Lời chào, trả lời nhanh, từ khóa chuyển nhân viên</b>: các câu soạn sẵn, không tốn token.</li>
-          <li><b>Giờ làm việc</b>: ngoài giờ bot nói rõ nhân viên sẽ trả lời khi vào ca.</li>
-          <li><b>Nhân viên ghép nối</b>: nhân viên nhắn bot lệnh như /status, /today, /cho, và nhận thông báo khi có khách cần người.</li>
+          <li><b>Gửi ảnh mẫu vào nhóm Zalo</b>: ảnh được gửi vào nhóm khi nhân viên tag bot giao việc (hoặc gửi tay từ Hộp thư), kèm chữ ghi thương hiệu, sale. Ảnh tạo trên web không tự gửi vào nhóm.</li>
+          <li><b>Tag bot ra lệnh</b>: nhân viên đã ghép nối tag bot trong nhóm khách để làm catalog, làm ảnh thiết kế hoặc hỏi kỹ thuật; bot làm rồi gửi kết quả lại đúng nhóm đó.</li>
+          <li><b>Kho kiến thức</b>: thông tin xưởng (hồ sơ, bài kiến thức) mà các AI dùng chung. Mỗi AI chỉ nhận phần dành cho nó; thông tin chỉ admin thấy không AI nào đọc.</li>
+          <li><b>Ghép nối nhân viên</b>: nhân viên nhắn bot lệnh như /status, /today.</li>
           <li><b>Kịch bản chăm sóc nhóm</b>: AI lên sẵn 2-3 bài đăng mỗi ngày cho từng nhóm; bạn chỉnh rồi đăng.</li>
         </ul>
         <p>
-          Lưu ý: không còn <b>Hộp thư Zalo</b> trên web. Khi bot chuyển khách cho người, nhân viên trả lời khách trực tiếp trên Zalo của mình; web chỉ giữ danh sách “khách đang chờ”.
+          <b>Hộp thư Zalo</b> (menu Zalo): xem mọi hội thoại khách nhắn bot, trả lời ngay trên web, gửi ảnh mẫu của một phiên (từng ảnh, PDF hoặc ZIP), nhờ AI soạn nháp. Bot không tự trả lời khách trong Hộp thư; nhân viên trả lời.
         </p>
       </Section>
 
@@ -92,18 +92,17 @@ export default async function ZaloGuidePage() {
         <Steps>
           <li>Tạo ảnh như bình thường. Ở trang kết quả, bấm biểu tượng <b>Copy</b> dưới từng ảnh, rồi dán (Ctrl+V) vào ô chat Zalo.</li>
           <li>Muốn lấy cả bộ: bấm <b>Copy ảnh để dán Zalo</b>, trình duyệt chỉ copy được một ảnh mỗi lần nên bấm Copy, dán vào Zalo, rồi bấm ảnh kế tiếp.</li>
-          <li>Nhóm Zalo đặt chế độ <b>Tự động gửi</b> vẫn nhận ảnh mới tạo xong như trước (xem phần quản trị).</li>
+          <li>Muốn bot làm và gửi thẳng vào nhóm khách thì tag bot trong nhóm (xem mục “Tag bot ra lệnh trong nhóm”). Ảnh tạo trên web không tự gửi vào nhóm.</li>
         </Steps>
-        <p>Nếu nhóm được bật “Tự động gửi”, mỗi ảnh tạo xong tự vào nhóm, bạn không cần bấm gì.</p>
 
         <h3>Chăm sóc nhóm</h3>
         <p>
           Vào <Link href="/zalo/care" className="underline underline-offset-4">Kịch bản chăm sóc</Link>, xem các bài AI đã lên cho nhóm, sửa chữ hoặc đổi ảnh/video đính kèm rồi bấm <b>Đăng ngay</b>. Chi tiết ở mục “Kịch bản chăm sóc nhóm” bên dưới.
         </p>
 
-        <h3>Khi bot báo có khách cần người</h3>
+        <h3>Khi cần hỏi kỹ thuật</h3>
         <p>
-          Nếu bạn đã được ghép nối, bot nhắn bạn trên Zalo: “Khách … cần nhân viên”. Mở Zalo trả lời khách trực tiếp. Xong thì nhắn bot <Code>/xong</Code> để bot được trả lời lại các khách đó.
+          Bạn đã được ghép nối thì tag bot và hỏi, ví dụ <Code>@Bot mẫu dày 0.3 mm khắc được không?</Code>. Bot trả lời cho bạn dựa trên kho kiến thức (phần công khai và nội bộ) và danh sách chất liệu, bạn nói lại với khách. Bot chưa có thông tin thì nói thẳng là chưa có, và câu hỏi được ghi lại để quản trị viên bổ sung kiến thức. Xem thêm mục “Tag bot ra lệnh trong nhóm”.
         </p>
       </Section>
 
@@ -129,9 +128,9 @@ export default async function ZaloGuidePage() {
           <li>Mở Zalo Bot Creator, chọn bot, lấy link của bot ở trang thông tin bot.</li>
           <li>Gửi link đó vào nhóm Zalo. Trưởng nhóm bấm vào link và xác nhận thêm bot.</li>
           <li>Trong nhóm, nhờ ai đó trả lời tin bot vừa gửi hoặc gõ @tên bot. Nhóm sẽ hiện trong bảng Nhóm Zalo (cần webhook). Chưa có webhook thì lấy mã nhóm (chat.id) rồi thêm bằng tay.</li>
-          <li>Bấm <b>Gửi tin thử</b> để chắc bot gửi được, rồi bật <b>Tự động gửi</b> cho nhóm nào muốn.</li>
+          <li>Bấm <b>Gửi tin thử</b> để chắc bot gửi được, rồi đặt tên nhóm (bot lấy làm tên khách khi nhân viên tag bot ra lệnh).</li>
         </Steps>
-        <p>Nhóm mới luôn ở chế độ không tự động gửi, để tránh gửi nhầm.</p>
+        <p>Ảnh không tự gửi vào nhóm khi tạo xong. Chỉ có hai đường: nhân viên tag bot giao việc, hoặc gửi tay từ Hộp thư.</p>
 
         <h3>Chữ đi kèm mỗi ảnh</h3>
         <p>Soạn mẫu chữ ở ô “Chữ đi kèm mỗi ảnh”; hệ thống tự điền các chỗ trống:</p>
@@ -148,42 +147,31 @@ export default async function ZaloGuidePage() {
         <p>Ảnh gửi lần lượt từng tấm, mặc định nghỉ 600 mili giây. Hay gặp lỗi 429 (Zalo giới hạn) thì tăng lên 1000-1500.</p>
       </Section>
 
-      <Section id="bot" title="Bot AI trả lời khách" desc={admin ? "Cấu hình ở Cài đặt Zalo > Bot AI và trả lời." : "Quản trị viên cấu hình ở Cài đặt Zalo > Bot AI và trả lời."}>
+      <Section id="bot" title="Kho kiến thức và model AI" desc={admin ? "Kiến thức ở Quản trị > Thông tin doanh nghiệp; model ở Cài đặt Zalo > Trợ lý AI." : "Quản trị viên cấu hình kiến thức và model AI."}>
         <p>
-          Bot dùng model chat của kie.ai (chung khóa <Code>KIE_API_KEY</Code> với tạo ảnh, và phải để <Code>IMAGE_PROVIDER=&quot;kie&quot;</Code>). Mỗi lượt trả lời tốn một ít token.
+          Các AI dùng model chat của kie.ai (chung khóa <Code>KIE_API_KEY</Code> với tạo ảnh, và phải để <Code>IMAGE_PROVIDER=&quot;kie&quot;</Code>). Mỗi lượt hỏi tốn một ít token.
         </p>
-        <h3>Thứ tự bot xử lý một tin của khách</h3>
-        <Steps>
-          <li>Khách mới nhắn lần đầu: gửi <b>lời chào</b> (nếu bật).</li>
-          <li>Tin có <b>từ khóa chuyển nhân viên</b>: chuyển người ngay.</li>
-          <li>Tin có từ khóa <b>trả lời nhanh</b>: gửi câu soạn sẵn, dừng.</li>
-          <li>Còn lại: <b>bot AI</b> trả lời. AI gặp câu không chắc, khách đòi gặp người hoặc hỏi báo giá cụ thể thì chuyển nhân viên.</li>
-        </Steps>
-        <h3>Để bot trả lời tốt</h3>
+        <h3>Bot chỉ làm việc cho nhân viên</h3>
         <ul>
-          <li>Ô <b>Thông tin xưởng bot được phép nói</b>: ghi địa chỉ, giờ làm việc, giá tham khảo, số lượng tối thiểu, thời gian làm mẫu, chính sách. Bot không bịa ngoài những gì ghi ở đây và danh sách chất liệu.</li>
-          <li>Ô <b>Hướng dẫn cho bot</b>: vai trò và giọng điệu (xưng em, gọi anh/chị...).</li>
+          <li>Bot <b>không</b> tự trả lời khách, không tự chào, không trả lời nhanh. Khách nhắn bot thì tin chỉ hiện ở Hộp thư để nhân viên trả lời.</li>
+          <li>Bot chỉ chạy khi nhân viên đã ghép nối và gắn tài khoản web tag bot, hoặc khi nhân viên bấm “AI soạn” trong Hộp thư.</li>
+        </ul>
+        <h3>Mỗi AI nhận phần kiến thức riêng</h3>
+        <ul>
+          <li><b>Trợ lý cho sale</b> (tag bot hỏi kỹ thuật): đọc bài <b>Công khai</b> và <b>Nội bộ</b>.</li>
+          <li><b>AI soạn nháp</b> và <b>kịch bản chăm sóc nhóm</b>: chỉ đọc bài <b>Công khai</b>, vì chữ này đi tới khách.</li>
+          <li>Bài <b>Chỉ admin</b> (giá vốn, công thức tính giá...) không AI trò chuyện nào đọc.</li>
+          <li>Mỗi AI có một ngân sách ký tự; kiến thức nhiều hơn mức đó thì chỉ lấy các bài liên quan đến câu hỏi.</li>
+        </ul>
+        <h3>Khi AI không có thông tin</h3>
+        <p>AI không đoán giá, thời gian, số lượng tối thiểu hay khả năng làm được. Câu hỏi đó được gom vào danh sách “Câu hỏi chưa trả lời được” để quản trị viên viết thêm bài kiến thức.</p>
+        <h3>Model</h3>
+        <ul>
           <li>Bấm <b>Thử AI</b> sau khi đổi model để biết model chạy được không. Đã thử chạy tốt: <Code>gpt-5-2</Code>.</li>
-          <li>Bot chỉ xem được ảnh khách gửi nếu bật “Bot xem được ảnh” (tốn thêm token). Tin thoại và file thì bot chưa đọc được, sẽ báo nhân viên.</li>
         </ul>
-        <h3>Hạn mức để không tốn ngoài ý muốn</h3>
-        <ul>
-          <li><b>Tối đa lượt bot trả lời mỗi ngày</b> (cả hệ thống): hết lượt thì bot im và báo nhân viên. Đặt 0 để bot ngừng trả lời.</li>
-          <li><b>Tối đa lượt trả lời mỗi giờ cho một người</b>: chống khách nhắn dồn dập.</li>
-          <li><b>Số tin gần nhất bot đọc</b>: nhiều thì nhớ lâu nhưng tốn token.</li>
-        </ul>
-        <h3>Giờ làm việc</h3>
-        <p>Bật “Giờ làm việc”, chọn giờ và các ngày. Ngoài giờ, khi cần chuyển nhân viên bot dùng câu “ngoài giờ” và nói nhân viên sẽ trả lời khi vào ca. Giờ tính theo múi giờ của máy chủ (<Code>APP_TIMEZONE</Code>, mặc định Asia/Ho_Chi_Minh).</p>
       </Section>
 
-      <Section id="nhan-vien" title="Chuyển nhân viên, ghép nối, lệnh" desc={admin ? "Cấu hình ở Cài đặt Zalo > Nhân viên và lệnh." : "Quản trị viên cấu hình ở Cài đặt Zalo > Nhân viên và lệnh."}>
-        <h3>Khi bot chuyển khách cho người</h3>
-        <ul>
-          <li>Bot im ở cuộc trò chuyện đó và đánh dấu khách “chờ nhân viên”.</li>
-          <li>Nếu bật “Báo nhân viên qua Zalo”, bot nhắn cho mọi nhân viên đã ghép nối (một lần cho mỗi khách).</li>
-          <li>Nhân viên trả lời khách ngay trên Zalo của mình, xong thì gõ <Code>/xong</Code> với bot (hoặc quản trị viên bấm “Xử lý xong” ở trang Nhân viên và lệnh).</li>
-          <li>Nếu quên, bot tự trả lời lại khách sau số giờ ở ô “Bot tự trả lời lại sau” (mặc định 12 giờ; 0 là không bao giờ tự trả lại).</li>
-        </ul>
+      <Section id="nhan-vien" title="Ghép nối nhân viên và lệnh" desc={admin ? "Cấu hình ở Cài đặt Zalo > Nhân viên và lệnh." : "Quản trị viên cấu hình ở Cài đặt Zalo > Nhân viên và lệnh."}>
         <h3>Ghép nối nhân viên</h3>
         <Steps>
           <li>Nhân viên mở chat với bot trên Zalo, gõ <Code>/ghepnoi</Code>. Bot trả mã 4 số.</li>
@@ -195,12 +183,38 @@ export default async function ZaloGuidePage() {
         <ul>
           {TOGGLEABLE_COMMANDS.map((c) => (
             <li key={c}>
-              <Code>{COMMAND_INFO[c].usage}</Code> ({COMMAND_INFO[c].staffOnly ? "chỉ nhân viên" : "ai cũng dùng được"}): {COMMAND_INFO[c].desc}.
+              <Code>{COMMAND_INFO[c].usage}</Code> (chỉ nhân viên): {COMMAND_INFO[c].desc}.
             </li>
           ))}
           <li><Code>/ghepnoi</Code>: xin ghép nối (bật riêng bằng công tắc Ghép nối nhân viên).</li>
         </ul>
         <p>Lệnh gõ được không dấu hoặc có dấu. Từng lệnh bật/tắt riêng bằng ô tích trong trang cài đặt.</p>
+      </Section>
+
+      <Section id="tro-ly" title="Tag bot ra lệnh trong nhóm" desc={admin ? "Bật ở Cài đặt Zalo > Trợ lý AI > Trợ lý nhận lệnh; gắn tài khoản web cho nhân viên ở Nhân viên và lệnh." : "Quản trị viên bật và gắn tài khoản web cho bạn trước khi dùng."}>
+        <p>Sale đã ghép nối và được gắn tài khoản web tag bot trong nhóm khách để giao việc. Bot làm rồi gửi kết quả lại đúng nhóm đó. Khách trong nhóm tag bot không ra lệnh được.</p>
+        <h3>Làm catalog chất liệu cho logo của khách</h3>
+        <Steps>
+          <li>Lưu ảnh logo khách gửi, rồi gửi lại vào nhóm kèm tag bot và lời dặn, ví dụ: <Code>@Bot làm mẫu chất liệu cho logo này</Code>. Bot nhớ logo gửi trong 24 giờ gần nhất, nên các lệnh sau không cần gửi lại.</li>
+          <li>Bot lấy tên nhóm làm tên khách hàng (admin đặt tên nhóm ở Cài đặt Zalo &gt; Nhóm). Nhóm chưa có tên thì dặn kèm, ví dụ <Code>khách Anh Nam, thương hiệu Cà phê Gió</Code>. Khách và thương hiệu chưa có thì bot tự tạo dưới tên bạn.</li>
+          <li>Bot dùng các trang mẫu mặc định (hoặc trang bạn gọi tên) để tạo ảnh, báo đã nhận, và khi xong gửi toàn bộ ảnh vào nhóm. Phiên cũng hiện trên web như bình thường.</li>
+        </Steps>
+        <h3>Chọn vài mẫu để xem thiết kế</h3>
+        <ul>
+          <li>Tag bot và nói theo số in trên ảnh catalog: <Code>@Bot ảnh 2 số 3 và 5 làm móc khóa</Code>. Thêm <Code>3 phương án</Code> nếu muốn nhiều hơn (mặc định 2, tối đa 4). Cũng gọi được theo mã chất liệu.</li>
+          <li>Bot thiết kế từ catalog gần nhất trong nhóm, tối đa 10 chất liệu mỗi lần, rồi gửi ảnh vào nhóm.</li>
+        </ul>
+        <h3>Hỏi kỹ thuật và hỏi tiến độ</h3>
+        <ul>
+          <li><Code>@Bot mẫu dày 0.3 mm khắc được không?</Code>: bot trả lời dựa trên kho kiến thức (phần công khai và nội bộ) và danh sách chất liệu (gồm độ dày). Không có trong tài liệu thì bot nói thẳng là chưa có và ghi câu hỏi lại cho quản trị viên.</li>
+          <li><Code>@Bot xong chưa?</Code>: bot báo ảnh nào đã xong.</li>
+        </ul>
+        <h3>Lưu ý</h3>
+        <ul>
+          <li>Mỗi lệnh tốn một ít token AI để hiểu lời dặn; ảnh tạo tính vào hạn mức ngày của bạn như khi bấm trên web.</li>
+          <li>Bot chỉ thấy tin có tag bot (Zalo chỉ gửi những tin đó). Logo phải được gửi kèm tag, hoặc gửi lại vào nhóm sau khi lưu.</li>
+          <li>Nhắn riêng cho bot cũng dùng được các lệnh trên (không cần tag), kết quả gửi lại chat riêng.</li>
+        </ul>
       </Section>
 
       <Section id="cham-soc" title="Kịch bản chăm sóc nhóm" desc={admin ? "Bật ở Cài đặt Zalo > Chăm sóc nhóm; dùng ở mục Kịch bản chăm sóc." : "Quản trị viên bật ở Cài đặt Zalo > Chăm sóc nhóm."}>
@@ -223,9 +237,9 @@ export default async function ZaloGuidePage() {
         <ul>
           <li>Mỗi tin và mỗi ảnh gửi đều tính vào <b>hạn mức tin nhắn theo tháng</b> của bot do Zalo quy định. Hết hạn mức thì Zalo báo lỗi 429 và ngừng gửi tới tháng sau.</li>
           <li>Trong <b>nhóm</b>, Zalo chỉ gửi cho bot những tin có @bot hoặc trả lời tin của bot. Zalo ghi chú tính năng bot trong nhóm đang thử nghiệm nên có thể thay đổi.</li>
-          <li>Bot chỉ trả lời văn bản (và ảnh nếu bật). Tin thoại, file, sticker thì bot không đọc.</li>
+          <li>Bot chỉ hiểu lệnh bằng chữ của nhân viên. Tin thoại, file, sticker thì bot không đọc.</li>
           <li>Tin đã gửi không thu hồi được.</li>
-          <li>Tin nhắn chỉ được lưu khi bật Bot AI, để bot đọc ngữ cảnh. Quản trị viên có thể xóa tin cũ ở Cài đặt Zalo &gt; Tổng quan &gt; Dọn dữ liệu. Khách gõ <Code>/reset</Code> là bot quên cuộc trò chuyện trước đó.</li>
+          <li>Tin nhắn được lưu khi bật Hộp thư hoặc Trợ lý nhận lệnh. Quản trị viên có thể xóa tin cũ ở Cài đặt Zalo &gt; Tổng quan &gt; Dọn dữ liệu. Nhân viên gõ <Code>/reset</Code> trong chat riêng với bot để AI soạn nháp quên cuộc trò chuyện trước đó.</li>
         </ul>
       </Section>
 
@@ -234,9 +248,8 @@ export default async function ZaloGuidePage() {
           <li><b>Gửi ảnh báo lỗi 429</b>: hết hạn mức tháng của bot, hoặc gửi quá dồn. Tăng “Nghỉ giữa hai ảnh”.</li>
           <li><b>Gửi ảnh báo lỗi 401</b>: token sai hoặc đã bị đổi. Kiểm tra lại <Code>ZALO_BOT_TOKEN</Code> rồi bấm “Kiểm tra token”.</li>
           <li><b>Nhóm không hiện trong danh sách</b>: chưa có webhook, hoặc chưa có ai @bot / trả lời tin của bot trong nhóm. Có thể thêm nhóm bằng tay bằng mã nhóm.</li>
-          <li><b>Bot không trả lời khách</b>: kiểm tra lần lượt (1) công tắc Bật Zalo và Bot AI đều bật, (2) webhook đã đăng ký và <Code>ZALO_WEBHOOK_SECRET</Code> khớp, (3) hạn mức ngày chưa hết, (4) khách đó không đang “chờ nhân viên” (bot im), không bị chặn, (5) bấm Thử AI.</li>
-          <li><b>Bot im với một khách</b>: khách đang chờ nhân viên. Gõ <Code>/xong</Code>, hoặc bấm “Xử lý xong” ở Nhân viên và lệnh.</li>
-          <li><b>Nhân viên không nhận thông báo</b>: chưa ghép nối, hoặc công tắc “Báo nhân viên qua Zalo” đang tắt.</li>
+          <li><b>Bot không nhận lệnh của nhân viên</b>: kiểm tra lần lượt (1) công tắc Bật Zalo và Trợ lý nhận lệnh đều bật, (2) webhook đã đăng ký và <Code>ZALO_WEBHOOK_SECRET</Code> khớp, (3) nhân viên đã ghép nối và được gắn tài khoản web, (4) bấm Thử AI.</li>
+          <li><b>AI trả lời “chưa có thông tin”</b>: kho kiến thức chưa có bài đó, hoặc bài đang ở trạng thái Nháp/Ngừng, hoặc bài không dành cho AI đó. Xem “Câu hỏi chưa trả lời được” và trang Thử AI ở Thông tin doanh nghiệp.</li>
           <li><b>Webhook đăng ký không được</b>: <Code>APP_URL</Code> phải là https công khai và có <Code>ZALO_WEBHOOK_SECRET</Code>.</li>
           <li><b>Không đăng được bài chăm sóc</b>: xem dòng lỗi ngay dưới bài (thường do hết hạn mức tháng hoặc bot chưa còn trong nhóm).</li>
         </ul>

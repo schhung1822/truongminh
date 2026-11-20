@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/admin/zalo", label: "Tổng quan" },
+  { href: "/admin/zalo/accounts", label: "Tài khoản cá nhân" },
   { href: "/admin/zalo/groups", label: "Nhóm và gửi ảnh" },
-  { href: "/admin/zalo/bot", label: "Bot AI và trả lời" },
+  { href: "/admin/zalo/bot", label: "Trợ lý AI" },
   { href: "/admin/zalo/staff", label: "Nhân viên và lệnh" },
   { href: "/admin/zalo/care", label: "Chăm sóc nhóm" },
 ];

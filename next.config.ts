@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // Thư viện Zalo cá nhân (kết nối websocket, cookie) chạy thẳng bằng Node, không đóng gói vào bundle
+  serverExternalPackages: ["zca-js"],
   // Chỉ có tác dụng khi dev: chuyển biểu tượng của Next sang góc phải để không che nút Đăng xuất.
   devIndicators: { position: "bottom-right" },
   async headers() {
