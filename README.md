@@ -238,6 +238,7 @@ Trên máy cá nhân bạn bấm đăng bằng tay trong mục **Kịch bản ch
 | Đăng nhập xong bị đưa về trang đăng nhập | `APP_URL` trong `.env` phải đúng `https://tên-miền` (không có dấu `/` ở cuối) |
 | Ảnh báo lỗi 402 hoặc "hết token" | Nạp thêm token ở kie.ai (xem số dư ở thanh đầu trang) |
 | Sửa `.env` mà web không đổi | Chạy `docker compose up -d` để web đọc lại cấu hình |
+| Ảnh bị thiếu / không hiện (chất liệu, logo, ảnh đã tạo) | Chạy trong thư mục dự án: `node --env-file=.env --import tsx deploy/check-storage.ts`. Script chỉ đọc, cho biết web đang tìm ảnh ở đâu, ghi được không, và từng nhóm ảnh trong CSDL còn thiếu bao nhiêu file (kèm gợi ý nếu giải nén nhầm chỗ). Cách PM2: thư mục ảnh là `storage/` trong thư mục dự án; cách Docker: `data/storage` và `chown -R 1000:1000 data/storage` |
 | Hết dung lượng ổ đĩa | Kiểm tra `df -h`; xóa bớt thư mục `backups/` cũ, hoặc nâng ổ đĩa VPS |
 
 Sau khi thay đổi lớn, nên tự kiểm tra: đăng nhập admin, tạo một phiên thử với 1 logo, xem ảnh về đủ và tải được ZIP/PDF.
