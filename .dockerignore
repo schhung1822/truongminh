@@ -11,4 +11,3 @@ generated
 *.tsbuildinfo
 npm-debug.log*
 docs
-public/images
