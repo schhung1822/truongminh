@@ -1,4 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
+import { WEBP_QUALITY } from "./webp";
 import { badgeRect, computeCells, computeLegend } from "@/lib/grid/layout";
 import { HEADER_RATIO } from "./geometry";
 import { DEFAULT_LABEL_POS, labelCardOrigin, type LabelPos, type LabelStyle } from "./label-pos";
@@ -32,6 +33,8 @@ export type FinishInput = {
   footerNote: string;
   /** dòng ghi chú ngay dưới tên xưởng, ví dụ "Hình minh họa" (để trống nếu không cần) */
   footerDisclaimer?: string;
+  /** định dạng file trả về: jpeg (mặc định, giữ tương thích) hoặc webp (ảnh lưu trên kho, chất lượng 82) */
+  format?: "jpeg" | "webp";
 };
 
 type Overlay = OverlayOptions;
@@ -299,8 +302,6 @@ export async function finishImage(input: FinishInput): Promise<Buffer> {
   // đường kẻ mảnh dưới đầu trang
   const line = (top: number) => ({ input: svg(W, 2, `<rect width="${W}" height="2" fill="#ececec"/>`), left: 0, top });
 
-  return sharp({ create: { width: W, height: totalH, channels: 3, background: "#ffffff" } })
-    .composite([{ input: image, left: 0, top: imageTop }, line(headerH - 2), ...overlays])
-    .jpeg({ quality: 92 })
-    .toBuffer();
+  const canvas = sharp({ create: { width: W, height: totalH, channels: 3, background: "#ffffff" } }).composite([{ input: image, left: 0, top: imageTop }, line(headerH - 2), ...overlays]);
+  return (input.format === "webp" ? canvas.webp({ quality: WEBP_QUALITY }) : canvas.jpeg({ quality: 92 })).toBuffer();
 }

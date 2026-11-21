@@ -4,7 +4,9 @@ import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { getProvider } from "@/lib/providers";
 import { ProviderFatalError, ProviderRateLimitError } from "@/lib/providers/types";
+import { toWebp } from "@/lib/imaging/webp";
 import { getStorage } from "@/lib/storage";
+import { mockupKey } from "@/lib/storage/keys";
 import { mapLimit } from "./async";
 import { renderFinal } from "./finish";
 import { ensureLogoUrl, ensureMaterialUrl, NoReferenceError } from "./references";
@@ -211,15 +213,16 @@ async function finalizeImage(imageId: string, resultUrl: string, credits?: numbe
     if (!resultUrl) throw new Error("Nhà cung cấp không trả về đường dẫn ảnh.");
 
     const provider = getProvider();
-    const { buffer, contentType } = await provider.downloadResult(resultUrl);
-    const ext = contentType.includes("jpeg") ? "jpg" : contentType.includes("webp") ? "webp" : "png";
+    const { buffer } = await provider.downloadResult(resultUrl);
     const storage = getStorage();
-    const originalKey = `images/${img.sessionId}/${img.id}-original.${ext}`;
-    await storage.put(originalKey, buffer); // giữ ảnh gốc ngay: link của nhà cung cấp sẽ hết hạn
+    // Tải ảnh về, nén WebP rồi lưu lên kho (không lưu link của nhà cung cấp vì sẽ hết hạn); CSDL chỉ lưu key.
+    const brandId = img.session.logo.brandId;
+    const originalKey = mockupKey(brandId);
+    await storage.put(originalKey, await toWebp(buffer), { contentType: "image/webp" }); // giữ ảnh gốc ngay: link của nhà cung cấp sẽ hết hạn
 
-    const final = await renderFinal(img, img.session.logo.brand.name, buffer);
-    const finalKey = `images/${img.sessionId}/${img.id}-final.jpg`;
-    await storage.put(finalKey, final);
+    const final = await renderFinal(img, img.session.logo.brand.name, buffer); // vẽ từ ảnh gốc chưa nén, đã ra WebP
+    const finalKey = mockupKey(brandId);
+    await storage.put(finalKey, final, { contentType: "image/webp" });
 
     await db.generatedImage.updateMany({
       where: { id: imageId, status: "PROCESSING" },

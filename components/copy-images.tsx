@@ -9,7 +9,13 @@ import { cn } from "@/lib/utils";
 
 export type CopyImage = { id: string; label: string; url: string };
 
-/** Ảnh JPEG của hệ thống -> PNG (clipboard của trình duyệt chỉ nhận PNG). */
+/**
+ * Nguồn ảnh để copy: luôn đi qua máy chủ của mình (cùng địa chỉ trang web). Ảnh trên R2 nằm ở tên miền khác,
+ * nên vẽ lên canvas để đổi sang PNG sẽ bị trình duyệt chặn nếu bucket chưa bật CORS. Đường này còn trả JPEG chuẩn.
+ */
+export const copySourceUrl = (imageId: string) => `/api/images/${imageId}/download`;
+
+/** Ảnh của hệ thống -> PNG (clipboard của trình duyệt chỉ nhận PNG). */
 async function toPngBlob(url: string): Promise<Blob> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Không tải được ảnh (${res.status})`);

@@ -52,5 +52,6 @@ export async function renderFinal(
     workshopName: settings.workshopName,
     footerNote: settings.footerNote,
     footerDisclaimer: settings.footerDisclaimer,
+    format: "webp", // ảnh lưu trên kho là WebP; nơi cần JPEG (tải về, ZIP, PDF, Zalo) tự đổi bằng toJpeg
   });
 }

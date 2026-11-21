@@ -24,7 +24,7 @@ import { estimateProgress, formatElapsed, overallProgress } from "@/lib/jobs/pro
 import { isFinished, type ImageView } from "@/lib/jobs/view";
 import { cn } from "@/lib/utils";
 import { CellSelectImage, type SelectableCell } from "@/components/cell-select-image";
-import { CopyImageIconButton, CopyImagesButton } from "@/components/copy-images";
+import { CopyImageIconButton, CopyImagesButton, copySourceUrl } from "@/components/copy-images";
 import { MAX_DESIGN_MATERIALS } from "@/lib/design/assign";
 import type { LabelPos, LabelStyle } from "@/lib/imaging/label-pos";
 import { refinishSessionAction, retryImageAction } from "../actions";
@@ -243,7 +243,7 @@ export function SessionResults({
                       className="h-8"
                       images={images
                         .filter((i) => i.status === "SUCCESS" && i.finalUrl)
-                        .map((i) => ({ id: i.id, label: i.label, url: i.finalUrl! }))}
+                        .map((i) => ({ id: i.id, label: i.label, url: copySourceUrl(i.id) }))}
                     />
                     {canRefinish && (
                       <LabelPositionButton
@@ -540,7 +540,7 @@ function ImageCard({
                 <DownloadIcon />
               </a>
             )}
-            {img.status === "SUCCESS" && img.finalUrl && <CopyImageIconButton url={img.finalUrl} label={img.label} />}
+            {img.status === "SUCCESS" && img.finalUrl && <CopyImageIconButton url={copySourceUrl(img.id)} label={img.label} />}
             {img.canRetry && (
               <Button
                 type="button"

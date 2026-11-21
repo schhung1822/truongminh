@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { apiUser, isResponse, jsonError } from "@/lib/api";
 import { db } from "@/lib/db";
 import { getStorage } from "@/lib/storage";
+import { thumbKey as thumbKeyOf } from "@/lib/storage/keys";
 
 const THUMB_WIDTH = 480;
 
@@ -15,16 +16,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!img || img.status !== "SUCCESS" || !img.finalPath) return jsonError(404, "Ảnh chưa sẵn sàng.");
 
   const storage = getStorage();
-  const thumbKey = img.finalPath.replace(/\.jpg$/, "-thumb.jpg"); // khóa đổi khi ảnh được vẽ lại, nên thu nhỏ luôn khớp
+  const thumbKey = thumbKeyOf(img.finalPath); // khóa đổi khi ảnh được vẽ lại, nên thu nhỏ luôn khớp
+  const legacyJpeg = /\.jpe?g$/i.test(img.finalPath); // ảnh cũ chưa chuyển sang WebP thì thu nhỏ vẫn là JPEG
+  const type = legacyJpeg ? "image/jpeg" : "image/webp";
   let data: Buffer;
   if (await storage.exists(thumbKey)) {
     data = await storage.get(thumbKey);
   } else {
     const full = await storage.get(img.finalPath);
-    data = await sharp(full).resize({ width: THUMB_WIDTH, withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
-    await storage.put(thumbKey, data);
+    const resized = sharp(full).resize({ width: THUMB_WIDTH, withoutEnlargement: true });
+    data = await (legacyJpeg ? resized.jpeg({ quality: 80 }) : resized.webp({ quality: 80 })).toBuffer();
+    await storage.put(thumbKey, data, { contentType: type });
   }
   return new Response(new Uint8Array(data), {
-    headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400" },
+    headers: { "Content-Type": type, "Cache-Control": "private, max-age=86400" },
   });
 }

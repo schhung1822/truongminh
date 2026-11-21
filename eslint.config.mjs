@@ -15,8 +15,13 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
-    // Ảnh nằm trong kho riêng, cần đăng nhập mới xem được nên không dùng next/image.
+    // Ảnh hiển thị bằng thẻ img thường (ảnh R2 là địa chỉ công khai, ảnh riêng đi qua /api/files có đăng nhập); remotePatterns của next/image vẫn được khai báo trong next.config.ts.
     rules: { "@next/next/no-img-element": "off" },
+  },
+  {
+    // Script triển khai viết bằng CommonJS (.cjs) để chạy được bằng node thuần, nên được dùng require().
+    files: ["deploy/**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
   },
   {
     // Component do shadcn sinh ra, giữ nguyên mã gốc.

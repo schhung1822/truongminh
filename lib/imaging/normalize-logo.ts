@@ -16,10 +16,10 @@ export type NormalizedLogo = {
   tooSmall: boolean;
 };
 
-/** Chuẩn hóa logo upload (PNG, JPG, WEBP, SVG; tối đa 10MB). Ném lỗi tiếng Việt khi file không hợp lệ. */
+/** Chuẩn hóa logo upload (PNG, JPG, WEBP, SVG; tối đa 15MB). Ném lỗi tiếng Việt khi file không hợp lệ. */
 export async function normalizeLogo(input: Buffer): Promise<NormalizedLogo> {
   if (input.length === 0) throw new Error("File logo rỗng.");
-  if (input.length > MAX_UPLOAD_BYTES) throw new Error("Logo quá lớn (tối đa 10MB).");
+  if (input.length > MAX_UPLOAD_BYTES) throw new Error("Logo quá lớn (tối đa 15MB).");
 
   let meta: Metadata;
   try {

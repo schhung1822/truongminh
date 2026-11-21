@@ -2,7 +2,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { prepareLogoForAi } from "@/lib/imaging/logo-for-ai";
 import { getProvider } from "@/lib/providers";
-import { getStorage } from "@/lib/storage";
+import { getPublicUrl, getStorage, usesPublicStorage } from "@/lib/storage";
+import { logoAiKey } from "@/lib/storage/keys";
 import { once, shared } from "./throttle";
 
 /** Hậu tố có trong tên file logo đã chuẩn bị cho AI. Đổi số khi thay cách chuẩn bị logo để buộc tải lại. */
@@ -23,6 +24,20 @@ export async function ensureLogoUrl(logo: {
   kieUrl: string | null;
   kieExpiresAt: Date | null;
 }): Promise<string> {
+  // Kho công khai (R2): đưa thẳng địa chỉ công khai cho nhà cung cấp, không upload lên kho của họ nữa.
+  // Bản logo gửi AI (nền tương phản) được tạo một lần, lưu cạnh bản chuẩn hóa; key suy ra từ key bản chuẩn hóa nên không cần cột CSDL riêng.
+  if (usesPublicStorage()) {
+    const aiKey = logoAiKey(logo.normalizedPath);
+    return once(`logo:${aiKey}`, async () => {
+      const storage = getStorage();
+      if (!(await storage.exists(aiKey))) {
+        const { buffer } = await prepareLogoForAi(await storage.get(logo.normalizedPath));
+        await storage.put(aiKey, buffer, { contentType: "image/png" });
+      }
+      return getPublicUrl(aiKey);
+    });
+  }
+
   const provider = getProvider();
   // "-v2-" là phiên bản chuẩn bị logo cho AI (nền tương phản). URL đệm của bản cũ (nền trong suốt) bị bỏ, tải lại bản mới.
   if (provider.cacheReferences && stillValid(logo.kieUrl, logo.kieExpiresAt) && logo.kieUrl.includes(LOGO_VERSION_TAG)) {
@@ -52,6 +67,8 @@ export async function ensureMaterialUrl(material: {
   kieRefExpiresAt: Date | null;
 }): Promise<string> {
   if (!material.referencePath) throw new NoReferenceError(material.code);
+  // Kho công khai (R2): ảnh tham chiếu đã nằm sẵn trên kho, dùng thẳng địa chỉ công khai.
+  if (usesPublicStorage()) return getPublicUrl(material.referencePath);
   const provider = getProvider();
   if (provider.cacheReferences && stillValid(material.kieRefUrl, material.kieRefExpiresAt)) {
     return material.kieRefUrl;

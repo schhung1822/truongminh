@@ -4,6 +4,7 @@ import { buildPdf, buildZip } from "@/lib/export/build";
 import { compareSessionImages } from "@/lib/jobs/order";
 import type { LayoutSnapshot } from "@/lib/jobs/snapshot";
 import { getStorage } from "@/lib/storage";
+import { toJpeg } from "@/lib/imaging/webp";
 
 function contentDisposition(name: string): string {
   const ascii = name
@@ -49,7 +50,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const files = await Promise.all(
     images.map(async (img, i) => {
       const snap = img.layoutSnapshot as unknown as LayoutSnapshot;
-      return { name: `${brand} - Ảnh ${snap.imageNumber ?? i + 1}.jpg`, data: await storage.get(img.finalPath!) };
+      return { name: `${brand} - Ảnh ${snap.imageNumber ?? i + 1}.jpg`, data: await toJpeg(await storage.get(img.finalPath!)) }; // ZIP/PDF cần JPEG
     }),
   );
 

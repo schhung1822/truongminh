@@ -46,6 +46,16 @@ describe("finishImage", () => {
     expect(m.footerH).toBeLessThan(m.headerH);
   });
 
+  it("format webp: trả về WebP cùng kích thước như bản JPEG (ảnh lưu trên kho)", async () => {
+    const src = await original(800, 1200);
+    const jpg = await finishImage({ ...common, original: src, labelMode: "overlay" });
+    const webp = await finishImage({ ...common, original: src, labelMode: "overlay", format: "webp" });
+    const mj = await sharp(jpg).metadata();
+    const mw = await sharp(webp).metadata();
+    expect(mw.format).toBe("webp");
+    expect([mw.width, mw.height]).toEqual([mj.width, mj.height]);
+  });
+
   it("có dòng chú thích thì chân trang cao hơn, không có xưởng và không có chú thích thì rất mỏng", () => {
     const base = layoutMetrics(1000, { hasWorkshop: true, hasNote: false }).footerH;
     expect(layoutMetrics(1000, { hasWorkshop: true, hasNote: true }).footerH).toBeGreaterThan(base);

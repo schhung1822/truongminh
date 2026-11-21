@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { normalizeLogo, type NormalizedLogo } from "@/lib/imaging/normalize-logo";
 import { getStorage } from "@/lib/storage";
+import { logoKey } from "@/lib/storage/keys";
 
 export class LogoError extends Error {
   constructor(
@@ -30,6 +31,10 @@ export async function createLogoFromBuffer(input: {
     throw new LogoError(e instanceof Error ? e.message : "Không xử lý được logo.", true);
   }
 
+  // key logo nằm dưới thư mục của khách hàng (id nội bộ, không phải tên khách), tên file ngẫu nhiên
+  const brand = await db.brand.findUnique({ where: { id: input.brandId }, select: { customerId: true } });
+  if (!brand) throw new LogoError("Không tìm thấy thương hiệu.", false);
+
   const storage = getStorage();
   const logo = await db.logo.create({
     data: {
@@ -43,8 +48,8 @@ export async function createLogoFromBuffer(input: {
     },
   });
 
-  const originalKey = `logos/${logo.id}/original.${normalized.originalExt}`;
-  const normalizedKey = `logos/${logo.id}/normalized.png`;
+  const originalKey = logoKey(brand.customerId, normalized.originalExt); // logo gốc: giữ nguyên định dạng và chất lượng
+  const normalizedKey = logoKey(brand.customerId, "png"); // bản chuẩn hóa (png, giữ nền trong suốt) dùng cho AI và hình học
   try {
     await storage.put(originalKey, input.file);
     await storage.put(normalizedKey, normalized.png);

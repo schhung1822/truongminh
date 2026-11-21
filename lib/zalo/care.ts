@@ -13,6 +13,7 @@ import { ZaloError } from "./client";
 import { getZaloClient } from "./index";
 import { getZaloSettings } from "./settings";
 import { splitMessage, stripMarkdown } from "./text";
+import { toJpeg } from "@/lib/imaging/webp";
 
 /** Kịch bản chăm sóc nhóm Zalo: AI lên kịch bản, người dùng chỉnh, bấm đăng (hoặc máy chủ tự đăng khi bật chạy tự động). */
 
@@ -200,9 +201,13 @@ export async function publishPost(postId: string): Promise<PublishResult> {
       }
       const path = post.asset?.path ?? post.image?.finalPath;
       if (!path) throw new Error("Bài này thiếu ảnh/video đính kèm. Chọn lại tư liệu rồi đăng.");
-      const data = await storage.get(path);
+      const raw = await storage.get(path);
+      // ảnh mẫu đã tạo lưu dạng WebP: gửi Zalo bằng JPEG. Ảnh/video do người dùng tải lên giữ nguyên.
+      const fromGenerated = !post.asset && !!post.image;
+      const data = fromGenerated && post.kind === "IMAGE" ? await toJpeg(raw) : raw;
       if (post.kind === "IMAGE") {
-        await client.sendPhoto({ chatId, image: data, fileName: path.split("/").pop() ?? "anh.jpg", caption: text.slice(0, 2000) });
+        const fileName = fromGenerated ? `${post.image!.id}.jpg` : (path.split("/").pop() ?? "anh.jpg");
+        await client.sendPhoto({ chatId, image: data, fileName, caption: text.slice(0, 2000) });
       } else {
         if (data.length > MAX_VIDEO_BYTES) throw new Error("Video quá lớn (trên 50MB).");
         await client.sendFile({ chatId, data, fileName: post.asset?.title ? `${post.asset.title}.${path.split(".").pop()}` : (path.split("/").pop() ?? "video.mp4"), caption: text.slice(0, 2000) });

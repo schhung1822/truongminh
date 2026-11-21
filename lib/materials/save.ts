@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { composeReference, processMaterialImage, type ProcessedImage } from "@/lib/imaging/material-images";
 import { getStorage } from "@/lib/storage";
+import { materialKey, type MaterialImageRole } from "@/lib/storage/keys";
+import { toWebp } from "@/lib/imaging/webp";
 import { normalizeClassification, requireBasics, type ClassifyPatch } from "./classify";
 import { loadOptions } from "./options";
 import { parseThickness } from "./thickness";
@@ -113,12 +115,12 @@ export async function saveMaterial(id: string | null, form: FormData): Promise<S
   const written: string[] = []; // file mới ghi, để dọn nếu lỗi
   const toDelete: string[] = []; // file cũ bị thay thế, xóa sau khi lưu thành công
   try {
-    const stamp = Date.now();
     const update: Record<string, unknown> = {};
 
-    const store = async (img: ProcessedImage, name: string) => {
-      const key = `materials/${material.id}/${name}-${stamp}.${img.ext}`;
-      await storage.put(key, img.buffer);
+    // Ảnh chất liệu nén WebP (chất lượng 82) rồi lưu; key có chuỗi ngẫu nhiên nên thay ảnh là key mới (không bị lưu đệm bản cũ)
+    const store = async (img: ProcessedImage, role: MaterialImageRole) => {
+      const key = materialKey(material.code, role);
+      await storage.put(key, await toWebp(img.buffer), { contentType: "image/webp" });
       written.push(key);
       return key;
     };

@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import type { LabelPos, LabelStyle } from "@/lib/imaging/label-pos";
 import { getStorage } from "@/lib/storage";
+import { mockupKey, thumbKey } from "@/lib/storage/keys";
 import { mapLimit } from "./async";
 import { renderFinal } from "./finish";
 
@@ -40,16 +41,16 @@ export async function refinishSession(
           }
         : img.layoutSnapshot;
       const final = await renderFinal({ ...img, layoutSnapshot: snapshot }, img.session.logo.brand.name, original);
-      // tên file mới mỗi lần để trình duyệt không dùng lại ảnh cũ đã lưu đệm
-      const key = `images/${img.sessionId}/${img.id}-final-${Date.now().toString(36)}.jpg`;
-      await storage.put(key, final);
+      // key mới mỗi lần (ngẫu nhiên) để trình duyệt không dùng lại ảnh cũ đã lưu đệm
+      const key = mockupKey(img.session.logo.brandId);
+      await storage.put(key, final, { contentType: "image/webp" });
       await db.generatedImage.update({
         where: { id: img.id },
         data: { finalPath: key, ...(changed ? { layoutSnapshot: snapshot as Prisma.InputJsonValue } : {}) },
       });
       if (img.finalPath && img.finalPath !== key) {
         await storage.delete(img.finalPath).catch(() => {});
-        await storage.delete(img.finalPath.replace(/\.jpg$/, "-thumb.jpg")).catch(() => {}); // ảnh thu nhỏ cũ
+        await storage.delete(thumbKey(img.finalPath)).catch(() => {}); // ảnh thu nhỏ cũ
       }
       done++;
     } catch (e) {

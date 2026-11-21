@@ -9,6 +9,7 @@ import { buildCaption, publicSessionUrl } from "./caption";
 import { ZaloError } from "./client";
 import { getZaloClient } from "./index";
 import { getZaloSettings, groupSendEnabled } from "./settings";
+import { toJpeg } from "@/lib/imaging/webp";
 
 const RETRY_DELAYS_MS = [3_000, 8_000]; // lỗi tạm thời: thử lại tối đa 2 lần
 /** Lỗi mà gửi tiếp ảnh khác vào cùng nhóm cũng sẽ lỗi y hệt: dừng cả loạt. */
@@ -74,7 +75,7 @@ export async function deliverImage(imageId: string, group: GroupRef, opts?: { fo
     let error: ZaloError | Error | undefined;
     let messageId: string | undefined;
     try {
-      const image = await getStorage().get(img.finalPath);
+      const image = await toJpeg(await getStorage().get(img.finalPath)); // ảnh lưu là WebP; gửi Zalo bằng JPEG
       for (let attempt = 0; ; attempt++) {
         try {
           const r = await client.sendPhoto({ chatId: group.chatId, image, fileName: `${img.id}.jpg`, caption });

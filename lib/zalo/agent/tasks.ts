@@ -12,6 +12,7 @@ import { getZaloClient } from "../index";
 import { deliverImage } from "../send";
 import { getZaloSettings, groupSendEnabled } from "../settings";
 import { splitMessage, stripMarkdown } from "../text";
+import { toJpeg } from "@/lib/imaging/webp";
 
 /**
  * Giao kết quả của việc nhân viên giao cho bot: theo dõi phiên ảnh đã tạo, khi xong thì gửi ảnh lại đúng cuộc chat đã ra lệnh.
@@ -165,7 +166,7 @@ async function deliver(taskId: string, stillOpen: number): Promise<void> {
     const r = await shared().zaloSend(async () => {
       let error: Error | undefined;
       try {
-        const image = await getStorage().get(img.finalPath!);
+        const image = await toJpeg(await getStorage().get(img.finalPath!)); // ảnh lưu là WebP; gửi Zalo bằng JPEG
         for (let attempt = 0; ; attempt++) {
           try {
             await client.sendPhoto({ chatId: task.chatId, image, fileName: `${img.id}.jpg`, caption });

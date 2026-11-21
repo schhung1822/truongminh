@@ -445,7 +445,7 @@ function LogoFiles({
         <div className="flex flex-col gap-1.5 sm:max-w-sm">
           <Label htmlFor="l-note">Ghi chú cho logo sắp tải lên (không bắt buộc)</Label>
           <Input id="l-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10" />
-          <p className="text-xs text-muted-foreground">PNG, JPG, WEBP hoặc SVG, tối đa 10MB.</p>
+          <p className="text-xs text-muted-foreground">PNG, JPG, WEBP hoặc SVG, tối đa 15MB.</p>
         </div>
       ) : (
         <Alert>

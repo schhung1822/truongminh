@@ -2,6 +2,7 @@ import { apiUser, isResponse, jsonError } from "@/lib/api";
 import { db } from "@/lib/db";
 import { getStorage } from "@/lib/storage";
 import type { LayoutSnapshot } from "@/lib/jobs/snapshot";
+import { toJpeg } from "@/lib/imaging/webp";
 
 /** Tên file tải về: có dấu tiếng Việt (filename*) và bản không dấu dự phòng cho trình duyệt cũ. */
 function contentDisposition(name: string): string {
@@ -31,7 +32,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const part = snapshot.imageNumber ? `Ảnh ${snapshot.imageNumber}` : snapshot.title;
   const name = `${img.session.logo.brand.name} - ${part}.jpg`.replace(/[\\/:*?"<>|]+/g, " ");
 
-  const data = await getStorage().get(img.finalPath);
+  // ảnh lưu trên kho là WebP; tải về cho khách thì đưa về JPEG cho mở được ở mọi nơi
+  const data = await toJpeg(await getStorage().get(img.finalPath));
   return new Response(new Uint8Array(data), {
     headers: {
       "Content-Type": "image/jpeg",

@@ -31,4 +31,4 @@ export function aspectSize(ratio: string, resolution: Resolution): { width: numb
 export const MAX_MATERIALS_PER_IMAGE = 10; // một ảnh: API tối đa 16 ảnh tham chiếu = 1 logo + chất liệu
 export const MAX_MATERIALS_IN_SHEET = 200; // một trang mẫu có thể dài hơn một ảnh: tự chia thành nhiều ảnh khi tạo
 export const MAX_REFERENCE_IMAGES = 16;
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;

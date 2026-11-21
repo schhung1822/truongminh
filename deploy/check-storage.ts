@@ -1,5 +1,5 @@
 /**
- * Kiểm tra thư mục ảnh trên máy chủ: mọi ảnh mà CSDL nhắc tới có nằm đúng chỗ không.
+ * Kiểm tra kho ảnh: mọi ảnh mà CSDL nhắc tới có nằm đúng chỗ không (thư mục trên máy chủ, hoặc bucket R2 khi STORAGE_DRIVER="r2").
  * Chạy trong thư mục dự án (cùng nơi có file .env):   node --env-file=.env --import tsx deploy/check-storage.ts
  * Chỉ ĐỌC, không sửa gì. Không in mật khẩu.
  */
@@ -8,6 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../generated/prisma/client";
+import { getR2Config, getEnv } from "../lib/env";
+import { R2Storage } from "../lib/storage/r2";
 
 const exists = async (p: string) => {
   try {
@@ -40,14 +42,18 @@ async function countFiles(dir: string, limit = 200_000): Promise<number> {
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("Thiếu DATABASE_URL (chạy với --env-file=.env trong thư mục dự án).");
+  const useR2 = process.env.STORAGE_DRIVER === "r2";
+  const r2cfg = useR2 ? getR2Config(getEnv()) : null;
+  if (useR2 && !r2cfg) throw new Error('STORAGE_DRIVER="r2" nhưng thiếu R2_* trong .env');
+  const r2 = r2cfg ? new R2Storage(r2cfg) : null;
   const root = path.resolve(process.env.STORAGE_DIR || "./storage");
   console.log("Thư mục làm việc hiện tại :", process.cwd());
-  console.log("Web sẽ tìm ảnh ở          :", root);
+  console.log("Web sẽ tìm ảnh ở          :", r2cfg ? `Cloudflare R2, bucket ${r2cfg.bucket} (${r2cfg.publicUrl})` : root);
   console.log("Người dùng đang chạy      :", os.userInfo().username);
 
   const rootOk = await exists(root);
-  console.log("Thư mục đó có tồn tại không:", rootOk ? "có" : "KHÔNG");
-  if (rootOk) {
+  if (!r2) console.log("Thư mục đó có tồn tại không:", rootOk ? "có" : "KHÔNG");
+  if (!r2 && rootOk) {
     const w = await fs.access(root, constants.W_OK).then(() => true, () => false);
     console.log("Ghi được vào thư mục đó   :", w ? "có" : "KHÔNG (web không lưu được ảnh mới, cần chown/chmod)");
     const subs = (await fs.readdir(root, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name);
@@ -89,13 +95,13 @@ async function main() {
   for (const r of refs) {
     if (r.keys.length === 0) continue;
     const missing: string[] = [];
-    for (const k of r.keys) if (!(await exists(path.join(root, ...k.split("/"))))) missing.push(k);
+    for (const k of r.keys) if (!(r2 ? await r2.exists(k).catch(() => false) : await exists(path.join(root, ...k.split("/"))))) missing.push(k);
     totalKeys += r.keys.length;
     totalMissing += missing.length;
     const mark = missing.length === 0 ? "đủ " : "THIẾU";
     console.log(`  [${mark}] ${r.table} / ${r.column}: ${r.keys.length - missing.length}/${r.keys.length} file có`);
     if (missing.length > 0) console.log(`           ví dụ thiếu: ${missing.slice(0, 3).join(" | ")}`);
-    if (missing.length > 0) {
+    if (missing.length > 0 && !r2) {
       for (const alt of alternatives) {
         const k = missing[0];
         if (await exists(path.join(alt, ...k.split("/")))) {

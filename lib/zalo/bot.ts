@@ -21,6 +21,7 @@ import { getZaloClient } from "./index";
 import { sendPersonalAttachments, sendPersonalText, type PersonalAttachment } from "./personal/send";
 import { getZaloSettings, type ZaloSettings } from "./settings";
 import { preview, splitMessage, stripMarkdown } from "./text";
+import { toJpeg } from "@/lib/imaging/webp";
 
 /**
  * Bộ não của bot Zalo: nhận tin từ webhook, xử lý ghép nối và lệnh gõ nhanh của nhân viên, chuyển lệnh tag bot cho trợ lý (agent),
@@ -379,7 +380,7 @@ export async function sendSessionToContact(user: { id: string }, contactId: stri
 
   // hội thoại của tài khoản Zalo cá nhân: gửi ảnh/file qua đúng tài khoản đó
   if (contact.accountId) {
-    const bufs = await Promise.all(images.map((i) => storage.get(i.finalPath!)));
+    const bufs = await Promise.all(images.map(async (i) => toJpeg(await storage.get(i.finalPath!)))); // ảnh lưu là WebP; gửi/ZIP/PDF bằng JPEG
     const safe = brand.replace(/[\\/:*?"<>|]+/g, " ").trim() || "mau";
     let items: PersonalAttachment[];
     if (mode === "images") {
@@ -413,7 +414,7 @@ export async function sendSessionToContact(user: { id: string }, contactId: stri
       if (mode === "images") {
         let n = 0;
         for (const img of images) {
-          const buf = await storage.get(img.finalPath!);
+          const buf = await toJpeg(await storage.get(img.finalPath!));
           const snap = img.layoutSnapshot as { title?: string; imageNumber?: number } | null;
           const caption = `${brand}${snap?.imageNumber ? ` · Ảnh ${snap.imageNumber}` : ""}`;
           await client.sendPhoto({ chatId: contact.chatId, image: buf, fileName: `${img.id}.jpg`, caption });
@@ -426,7 +427,7 @@ export async function sendSessionToContact(user: { id: string }, contactId: stri
         await touch(contactId, `[Đã gửi ${n} ảnh]`);
         return { ok: true, sent: n };
       }
-      const bufs = await Promise.all(images.map((i) => storage.get(i.finalPath!)));
+      const bufs = await Promise.all(images.map(async (i) => toJpeg(await storage.get(i.finalPath!)))); // ảnh lưu là WebP; gửi/ZIP/PDF bằng JPEG
       const safe = brand.replace(/[\\/:*?"<>|]+/g, " ").trim() || "mau";
       const fileName = mode === "pdf" ? `${safe} - anh mau.pdf` : `${safe} - anh mau.zip`;
       const data = mode === "pdf" ? await buildPdf(bufs, brand) : buildZip(bufs.map((b, i) => ({ name: `anh-${i + 1}.jpg`, data: b })));

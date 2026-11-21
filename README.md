@@ -166,6 +166,20 @@ sudo certbot --nginx -d tên-miền-của-bạn
 **Cập nhật bản mới:** `bash deploy/update-pm2.sh` (sao lưu, lấy mã, build, nạp lại PM2). **Sao lưu:** `bash deploy/backup-pm2.sh` (cần lệnh `mysqldump`, có sẵn trong gói `mysql`), đặt lịch như mục "Sao lưu" bên dưới nhưng dùng `backup-pm2.sh`. Phần "Thử bot Zalo trên VPS" bên dưới dùng được y như vậy.
 **Lưu ý:** không chạy PM2 ở chế độ cluster hay nhiều bản (`instances` phải là 1), vì tiến trình giữ kết nối Zalo và theo dõi việc bot đang làm.
 
+### Lưu ảnh trên Cloudflare R2
+Ảnh (chất liệu, logo, ảnh đã tạo) có thể lưu trên **Cloudflare R2** thay vì thư mục trên máy chủ: không đầy ổ đĩa, không phải sao lưu thư mục ảnh, ảnh tải nhanh qua mạng của Cloudflare và kie.ai đọc ảnh thẳng từ địa chỉ công khai (không phải upload sang kho của kie.ai nữa). Chọn bằng `STORAGE_DRIVER="r2"` trong `.env`; để `"local"` thì mọi thứ chạy như cũ.
+
+**Tạo bucket (một lần, trên Cloudflare):** R2 > Create bucket (một bucket duy nhất) > Settings > bật **Public access** (địa chỉ `https://pub-xxxx.r2.dev`, hoặc gắn tên miền riêng ở *Custom Domains*). R2 > **Manage API tokens** > tạo token quyền *Object Read & Write* cho đúng bucket đó. Điền vào `.env`: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` (mẫu trong `.env.example`). Đổi sang tên miền riêng sau này chỉ cần sửa `R2_PUBLIC_URL` rồi build/khởi động lại, không sửa code.
+
+**Cách đặt tên file (key) trên bucket:** `materials/{mã chất liệu}/{lớp 1, lớp 2, ảnh ghép}-{ngẫu nhiên}.webp`, `mockups/{brandId}/{yyyy-mm}/{ngẫu nhiên}.webp`, `logos/{customerId}/{ngẫu nhiên}.{đuôi}`. Tên file là chuỗi ngẫu nhiên, không có tên khách hay tên thương hiệu. CSDL chỉ lưu key; địa chỉ đầy đủ được ghép lúc hiển thị. Ảnh chất liệu và ảnh tạo ra được nén WebP (chất lượng 82); logo gốc giữ nguyên định dạng và chất lượng. Ảnh khách gửi qua Zalo và tư liệu video vẫn nằm trên bucket nhưng **không** đưa địa chỉ công khai ra trình duyệt, chỉ phục vụ qua trang web sau khi đăng nhập.
+
+**Chuyển ảnh đã có sang R2** (làm một lần, trên máy đang giữ ảnh cũ và CSDL tương ứng):
+```bash
+node --env-file=.env --import tsx scripts/migrate-to-r2.ts --dry-run   # chỉ in kế hoạch, không đụng gì
+node --env-file=.env --import tsx scripts/migrate-to-r2.ts             # chạy thật; chạy lại được, chỉ làm phần chưa xong
+```
+Sau đó đặt `STORAGE_DRIVER="r2"` và khởi động lại. Script **không xóa** thư mục ảnh cũ: cứ giữ làm bản sao lưu cho tới khi kiểm tra kỹ. Giữ lại file `storage/.secret-key` (khóa mã hóa tài khoản Zalo cá nhân), thư mục `STORAGE_DIR` vẫn cần cho file này. Kiểm tra ảnh còn thiếu: `node --env-file=.env --import tsx deploy/check-storage.ts`.
+
 ### Thử bot Zalo trên VPS
 Bot Zalo chính thức cần một địa chỉ https công khai để Zalo đẩy tin về, nên VPS có tên miền là chỗ thử bot đúng nhất. Làm sau khi web đã chạy và đăng nhập được:
 1. Trong `.env` điền `ZALO_BOT_TOKEN` (lấy ở mini app Zalo Bot Creator) và `ZALO_WEBHOOK_SECRET` (tự đặt, 8 đến 256 ký tự), rồi `docker compose up -d` để web nhận cấu hình mới. `APP_URL` phải là địa chỉ https của web.
