@@ -17,7 +17,9 @@
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
     "db:seed-demo": "tsx prisma/seed-demo.ts",
     "db:update-prompts": "tsx prisma/update-prompts.ts",
-    "db:seed-styles": "tsx prisma/seed-styles.ts"
+    "db:seed-styles": "tsx prisma/seed-styles.ts",
+    "ext:build": "node extension/build.mjs",
+    "ext:check": "tsc -p extension/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1175.0",
@@ -46,12 +48,15 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
+    "@types/chrome": "^0.3.7",
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^18.0.10",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "jsdom": "^31.0.1",
     "prisma": "^7.10.1",
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.15",

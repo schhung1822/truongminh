@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trường Minh - Lead Facebook</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>Lead Facebook</h1>
+
+    <section id="status" class="card" aria-live="polite">Đang kiểm tra kết nối...</section>
+
+    <section id="cycle" class="card muted" hidden></section>
+
+    <div class="actions">
+      <button id="runNow" type="button">Quét ngay</button>
+      <button id="follow" type="button" class="secondary">Theo dõi bài này</button>
+      <button id="settings" type="button" class="link">Cài đặt</button>
+    </div>
+    <p id="message" class="message" role="status"></p>
+    <p class="hint">Extension chỉ đọc comment trên bài do chính nick của bạn đăng và gửi về webapp. Nó không tự đăng, không tự comment, không tự bấm gửi.</p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

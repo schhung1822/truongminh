@@ -13,6 +13,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Bỏ qua: trang đăng nhập, file tĩnh của Next, favicon.
-  matcher: ["/((?!login|api/webhooks|api/jobs|api/zalo/assets|api/healthz|_next/static|_next/image|favicon.ico).*)"],
+  // Bỏ qua: trang đăng nhập, file tĩnh của Next, favicon. api/ext là đường của Chrome extension, xác thực bằng mã kết nối
+  // (Bearer) trong lib/ext/auth.ts chứ không dùng cookie đăng nhập, nên không được chuyển hướng về /login.
+  matcher: ["/((?!login|api/webhooks|api/jobs|api/ext|api/zalo/assets|api/healthz|_next/static|_next/image|favicon.ico).*)"],
 };

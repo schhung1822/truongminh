@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { createUserAction, type FormState } from "./actions";
 
 export function CreateUserForm() {
@@ -21,9 +22,9 @@ export function CreateUserForm() {
   }, [state]);
 
   return (
-    <form ref={formRef} action={formAction} className="grid gap-4 sm:grid-cols-3">
+    <form ref={formRef} action={formAction} className="grid gap-4 sm:grid-cols-4">
       {state.error && (
-        <Alert variant="destructive" className="sm:col-span-3">
+        <Alert variant="destructive" className="sm:col-span-4">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
@@ -48,10 +49,17 @@ export function CreateUserForm() {
           className="h-10"
         />
       </div>
-      <div className="sm:col-span-3">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="new-role">Vai trò</Label>
+        <NativeSelect id="new-role" name="role" defaultValue="SALE">
+          <option value="SALE">Sale</option>
+          <option value="MKT">Marketing</option>
+        </NativeSelect>
+      </div>
+      <div className="sm:col-span-4">
         <Button type="submit" className="h-10 px-4" disabled={pending}>
           {pending && <Loader2Icon className="animate-spin" />}
-          Tạo tài khoản sale
+          Tạo tài khoản
         </Button>
       </div>
     </form>

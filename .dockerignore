@@ -11,3 +11,5 @@ generated
 *.tsbuildinfo
 npm-debug.log*
 docs
+
+extension

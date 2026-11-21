@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cài đặt - Trường Minh Lead Facebook</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { max-width: 560px; margin: 32px auto; padding: 0 16px; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      h1 { font-size: 20px; }
+      label { display: block; margin: 16px 0 6px; font-weight: 600; }
+      input { width: 100%; box-sizing: border-box; height: 38px; padding: 0 10px; border: 1px solid #888; border-radius: 8px; font: inherit; }
+      button { height: 38px; margin-top: 12px; padding: 0 16px; border: 0; border-radius: 8px; background: #111; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+      button.secondary { background: none; color: inherit; border: 1px solid #888; margin-left: 8px; }
+      code { padding: 1px 6px; border-radius: 6px; background: rgba(128, 128, 128, 0.2); }
+      #message { min-height: 20px; margin-top: 12px; }
+      .err { color: #b42318; }
+      .good { color: #067647; }
+      .muted { color: #777; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <h1>Trường Minh - Lead Facebook</h1>
+    <p class="muted">Địa chỉ webapp (cố định lúc build extension): <code id="origin"></code></p>
+    <p id="current"></p>
+
+    <label for="token">Mã kết nối</label>
+    <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="tmx_..." />
+    <p class="muted">Lấy mã ở webapp: Lead Facebook &gt; Kết nối extension &gt; Tạo mã kết nối. Mã chỉ hiện một lần.</p>
+    <button id="save" type="button">Kết nối</button>
+    <button id="disconnect" type="button" class="secondary" hidden>Ngắt kết nối</button>
+    <p id="message" role="status"></p>
+
+    <script src="options.js"></script>
+  </body>
+</html>

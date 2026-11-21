@@ -1,3 +1,4 @@
+import type { Role } from "@/generated/prisma/enums";
 import {
   BarChart3Icon,
   BookOpenIcon,
@@ -12,12 +13,16 @@ import {
   CalendarHeartIcon,
   LayoutGridIcon,
   MessageCircleIcon,
+  NewspaperIcon,
   type LucideIcon,
   PaletteIcon,
+  PlugZapIcon,
   ScrollTextIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
+  TargetIcon,
   UsersIcon,
+  UsersRoundIcon,
 } from "lucide-react";
 
 export type NavItem = {
@@ -28,6 +33,8 @@ export type NavItem = {
   ready: boolean;
   /** true = chỉ quản trị viên thấy */
   adminOnly?: boolean;
+  /** Chỉ các vai trò này thấy (ghi đè adminOnly). Dùng cho mục của module Lead Facebook: quản trị + marketing. */
+  roles?: Role[];
 };
 
 export type NavGroup = {
@@ -58,6 +65,16 @@ export const navGroups: NavGroup[] = [
       { href: "/zalo/care", label: "Kịch bản chăm sóc", icon: CalendarHeartIcon, ready: true },
       { href: "/zalo/guide", label: "Hướng dẫn Zalo", icon: BookOpenIcon, ready: true },
       { href: "/admin/zalo", label: "Cài đặt Zalo", icon: MessageCircleIcon, ready: true, adminOnly: true },
+    ],
+  },
+  {
+    id: "fb",
+    label: "Lead Facebook",
+    items: [
+      { href: "/fb/leads", label: "Lead", icon: TargetIcon, ready: true },
+      { href: "/fb/posts", label: "Bài đăng", icon: NewspaperIcon, ready: true, roles: ["MKT"] },
+      { href: "/fb/groups", label: "Nhóm", icon: UsersRoundIcon, ready: true, roles: ["MKT"] },
+      { href: "/fb/connect", label: "Kết nối extension", icon: PlugZapIcon, ready: true, roles: ["MKT"] },
     ],
   },
   {
@@ -98,10 +115,9 @@ export const navGroups: NavGroup[] = [
 ];
 
 /** Các nhóm (và mục) mà người xem được thấy; nhóm rỗng bị bỏ. */
-export function visibleNav(role: "ADMIN" | "SALE"): NavGroup[] {
-  return navGroups
-    .map((g) => ({ ...g, items: g.items.filter((i) => role === "ADMIN" || !i.adminOnly) }))
-    .filter((g) => g.items.length > 0);
+export function visibleNav(role: Role): NavGroup[] {
+  const canSee = (i: NavItem) => (i.roles ? role === "ADMIN" || i.roles.includes(role) : role === "ADMIN" || !i.adminOnly);
+  return navGroups.map((g) => ({ ...g, items: g.items.filter(canSee) })).filter((g) => g.items.length > 0);
 }
 
 /** Mục menu đang được chọn theo đường dẫn: khớp dài nhất thắng (để /admin/zalo không bị /zalo nuốt). */

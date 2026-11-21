@@ -13,6 +13,7 @@ datasource db {
 enum Role {
   ADMIN
   SALE
+  MKT // phòng marketing: quản lý bài đăng, nhóm, kết nối extension của module Lead Facebook (D91)
 }
 
 enum PromptKind {
@@ -69,18 +70,22 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  authSessions     AuthSession[]
-  ownedCustomers   Customer[]       @relation("CustomerOwner")
-  createdCustomers Customer[]       @relation("CustomerCreator")
-  createdBrands    Brand[]
-  createdLogos     Logo[]
-  consultSessions  ConsultSession[]
-  generatedImages  GeneratedImage[]
-  usageLogs        UsageLog[]
-  promptTemplates  PromptTemplate[]
-  zaloStaff        ZaloContact[]
-  zaloBotTasks     ZaloBotTask[]
-  quotes           Quote[]
+  authSessions      AuthSession[]
+  ownedCustomers    Customer[]       @relation("CustomerOwner")
+  createdCustomers  Customer[]       @relation("CustomerCreator")
+  createdBrands     Brand[]
+  createdLogos      Logo[]
+  consultSessions   ConsultSession[]
+  generatedImages   GeneratedImage[]
+  usageLogs         UsageLog[]
+  promptTemplates   PromptTemplate[]
+  zaloStaff         ZaloContact[]
+  zaloBotTasks      ZaloBotTask[]
+  quotes            Quote[]
+  fbAccounts        FbAccount[]
+  extTokens         ExtToken[]
+  assignedFbLeads   FbLead[]         @relation("FbLeadAssignee")
+  registeredFbPosts FbPost[]         @relation("FbPostRegistrar")
 
   @@map("users")
 }
@@ -278,9 +283,10 @@ model Customer {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner     User    @relation("CustomerOwner", fields: [ownerId], references: [id])
-  createdBy User    @relation("CustomerCreator", fields: [createdById], references: [id])
+  owner     User     @relation("CustomerOwner", fields: [ownerId], references: [id])
+  createdBy User     @relation("CustomerCreator", fields: [createdById], references: [id])
   brands    Brand[]
+  fbLeads   FbLead[]
 
   @@index([name])
   @@index([phone])
@@ -950,4 +956,246 @@ model MachineTimeLog {
 
   @@index([technique, createdAt])
   @@map("machine_time_logs")
+}
+
+// ============================================================================================
+// Module Lead Facebook (docs/thiet-ke-module-lead-facebook.md, quyết định D91).
+// Giai đoạn 1: thu thập comment trên bài do CHÍNH nick của mình đăng, tách số điện thoại, tạo lead.
+// Extension chỉ ĐỌC trang và báo về; không có bảng hay trường nào dùng để tự gửi comment hay tự đăng bài.
+// ============================================================================================
+
+enum FbAccountStatus {
+  ACTIVE
+  PAUSED
+  RESTRICTED // extension báo checkpoint / bị hạn chế: ngừng giao việc cho tới khi quản trị bật lại
+}
+
+enum FbGroupPurpose {
+  FIND_CUSTOMER
+  FIND_SUPPLIER
+  BOTH
+}
+
+enum FbGroupStatus {
+  ACTIVE
+  PAUSED
+  BANNED
+}
+
+enum FbPostPurpose {
+  FIND_CUSTOMER
+  FIND_SUPPLIER
+}
+
+enum FbTrackingStatus {
+  TRACKING
+  PAUSED
+  DONE
+}
+
+enum FbCommentCategory {
+  HAS_CONTACT
+  INTEREST
+  QUESTION
+  OTHER
+  SPAM
+}
+
+enum FbLeadType {
+  CUSTOMER
+  SUPPLIER
+}
+
+enum FbLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  WON
+  LOST
+  INVALID
+}
+
+enum ExtLogType {
+  SCAN_OK
+  SCAN_FAIL
+  SELECTOR_BROKEN
+  CHECKPOINT
+  REPLY_SENT
+  POST_DONE
+}
+
+// Nick Facebook của nhân sự dùng để đăng bài (và là nick duy nhất extension đọc bài cho).
+model FbAccount {
+  id          String          @id @default(cuid())
+  userId      String
+  displayName String          @db.VarChar(150)
+  profileUrl  String          @db.VarChar(300)
+  status      FbAccountStatus @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  user   User       @relation(fields: [userId], references: [id])
+  posts  FbPost[]
+  tokens ExtToken[]
+
+  @@index([userId])
+  @@map("fb_accounts")
+}
+
+model FbGroup {
+  id        String         @id @default(cuid())
+  name      String         @db.VarChar(200)
+  url       String         @unique @db.VarChar(300)
+  topic     String?        @db.VarChar(150)
+  purpose   FbGroupPurpose @default(BOTH)
+  notes     String?        @db.Text // quy định của nhóm, lưu ý admin
+  status    FbGroupStatus  @default(ACTIVE)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  posts FbPost[]
+  leads FbLead[]
+
+  @@map("fb_groups")
+}
+
+// Bài đã đăng cần theo dõi. Chỉ bài có trong bảng này mới được extension mở và đọc.
+model FbPost {
+  id              String           @id @default(cuid())
+  accountId       String
+  groupId         String? // null nếu đăng trang cá nhân
+  url             String           @unique @db.VarChar(400) // permalink đã chuẩn hoá (lib/fb/urls.ts)
+  contentSnapshot String?          @db.Text
+  purpose         FbPostPurpose
+  postedAt        DateTime?
+  trackingStatus  FbTrackingStatus @default(TRACKING)
+  lastScannedAt   DateTime?
+  lastCommentAt   DateTime? // lần cuối thấy comment mới; quá N ngày không có thì tự chuyển DONE
+  commentCount    Int              @default(0)
+  leadCount       Int              @default(0)
+  registeredById  String? // người đã đăng ký bài này vào danh sách theo dõi (đã xác nhận là bài của nick)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  account      FbAccount   @relation(fields: [accountId], references: [id])
+  group        FbGroup?    @relation(fields: [groupId], references: [id])
+  registeredBy User?       @relation("FbPostRegistrar", fields: [registeredById], references: [id])
+  comments     FbComment[]
+  leads        FbLead[]
+
+  @@index([accountId, trackingStatus, lastScannedAt])
+  @@index([groupId])
+  @@map("fb_posts")
+}
+
+model FbComment {
+  id                String            @id @default(cuid())
+  postId            String
+  fbCommentId       String            @db.VarChar(100) // ID comment của Facebook, dùng chống trùng
+  parentFbCommentId String?           @db.VarChar(100)
+  authorName        String            @db.VarChar(200)
+  authorProfileUrl  String?           @db.VarChar(500)
+  isOwn             Boolean           @default(false) // do nick của mình viết
+  text              String            @db.Text
+  timeText          String?           @db.VarChar(60) // chuỗi thời gian nguyên văn ("2 giờ"), vì quy đổi ra giờ chỉ là ước chừng
+  commentedAt       DateTime? // quy đổi từ timeText, có thể lệch
+  category          FbCommentCategory @default(OTHER)
+  extractedPhone    String?           @db.VarChar(20)
+  extractedOther    Json? // { phones, zalo, emails, spelledOut }
+  handled           Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  post    FbPost         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  lead    FbLead?
+  sources FbLeadSource[]
+
+  @@unique([postId, fbCommentId])
+  @@index([category, createdAt])
+  @@index([extractedPhone])
+  @@map("fb_comments")
+}
+
+model FbLead {
+  id           String       @id @default(cuid())
+  commentId    String       @unique // comment đầu tiên sinh ra lead
+  postId       String
+  groupId      String?
+  name         String       @db.VarChar(200)
+  phone        String?      @unique @db.VarChar(20) // 0xxxxxxxxx; cùng số thì không tạo lead mới, chỉ thêm nguồn
+  zalo         String?      @db.VarChar(20)
+  email        String?      @db.VarChar(200)
+  profileUrl   String?      @db.VarChar(500)
+  leadType     FbLeadType
+  status       FbLeadStatus @default(NEW)
+  assignedToId String?
+  customerId   String? // gắn tay vào khách hàng có sẵn (hệ thống chỉ gợi ý khi trùng số điện thoại)
+  note         String?      @db.Text
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  comment    FbComment      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  post       FbPost         @relation(fields: [postId], references: [id])
+  group      FbGroup?       @relation(fields: [groupId], references: [id])
+  assignedTo User?          @relation("FbLeadAssignee", fields: [assignedToId], references: [id])
+  customer   Customer?      @relation(fields: [customerId], references: [id])
+  sources    FbLeadSource[]
+
+  @@index([status, createdAt])
+  @@index([assignedToId])
+  @@index([postId])
+  @@index([groupId])
+  @@index([customerId])
+  @@map("fb_leads")
+}
+
+// Mỗi comment có chứa liên hệ của một lead đúng một dòng (kể cả comment đầu tiên): để thống kê theo bài/nhóm cho đúng
+// khi một khách để lại cùng số ở nhiều bài.
+model FbLeadSource {
+  id        String   @id @default(cuid())
+  leadId    String
+  commentId String   @unique
+  createdAt DateTime @default(now())
+
+  lead    FbLead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  comment FbComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("fb_lead_sources")
+}
+
+// Mã kết nối extension: chỉ lưu băm (sha256), mã gốc hiện đúng một lần lúc tạo.
+model ExtToken {
+  id          String    @id @default(cuid())
+  userId      String
+  accountId   String
+  tokenHash   String    @unique @db.VarChar(64)
+  tokenPrefix String    @db.VarChar(16) // vài ký tự đầu để nhận ra mã trong danh sách, không đủ để dùng
+  label       String    @db.VarChar(100)
+  lastSeenAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user    User      @relation(fields: [userId], references: [id])
+  account FbAccount @relation(fields: [accountId], references: [id])
+  logs    ExtLog[]
+
+  @@index([userId])
+  @@index([accountId])
+  @@map("ext_tokens")
+}
+
+model ExtLog {
+  id        String     @id @default(cuid())
+  tokenId   String
+  type      ExtLogType
+  detail    Json?
+  createdAt DateTime   @default(now())
+
+  token ExtToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@index([tokenId, createdAt])
+  @@index([type, createdAt])
+  @@map("ext_logs")
 }

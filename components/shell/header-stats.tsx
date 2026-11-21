@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CoinsIcon, WalletIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Role } from "@/generated/prisma/enums";
 import type { UsageSummary } from "@/lib/usage-summary";
 
 const REFRESH_MS = 30_000;
@@ -41,7 +42,7 @@ function Stat({
 }
 
 /** Thống kê token ở bên phải thanh đầu trang. Admin thấy token đã dùng và số dư; sale thấy số lượt còn lại hôm nay. */
-export function HeaderStats({ role }: { role: "ADMIN" | "SALE" }) {
+export function HeaderStats({ role }: { role: Role }) {
   const [data, setData] = useState<UsageSummary | null>(null);
 
   const load = useCallback(async () => {

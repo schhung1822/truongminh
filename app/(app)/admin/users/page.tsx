@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth/dal";
+import { roleLabel } from "@/lib/roles";
 import { CreateUserForm } from "./create-user-form";
 import { UserRowActions } from "./user-row-actions";
 
@@ -20,12 +21,12 @@ export default async function UsersPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Người dùng</h1>
-        <p className="text-muted-foreground">Tạo tài khoản cho sale, khóa tài khoản hoặc đổi mật khẩu.</p>
+        <p className="text-muted-foreground">Tạo tài khoản cho sale và marketing, đổi vai trò, khóa tài khoản hoặc đổi mật khẩu.</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Thêm tài khoản sale</CardTitle>
+          <CardTitle>Thêm tài khoản</CardTitle>
           <CardDescription>Web không có trang tự đăng ký, chỉ quản trị viên tạo được tài khoản.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -53,7 +54,7 @@ export default async function UsersPage() {
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">{u.name}</TableCell>
                   <TableCell>{u.email}</TableCell>
-                  <TableCell>{u.role === "ADMIN" ? "Quản trị viên" : "Sale"}</TableCell>
+                  <TableCell>{roleLabel(u.role)}</TableCell>
                   <TableCell>
                     {u.isActive ? <Badge>Đang hoạt động</Badge> : <Badge variant="secondary">Đã khóa</Badge>}
                   </TableCell>
@@ -63,6 +64,7 @@ export default async function UsersPage() {
                       userName={u.name}
                       isActive={u.isActive}
                       isSelf={u.id === admin.id}
+                      role={u.role}
                     />
                   </TableCell>
                 </TableRow>

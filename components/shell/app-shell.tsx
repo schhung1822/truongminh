@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { ChevronDownIcon, CircleUserIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Role } from "@/generated/prisma/enums";
+import { roleLabel } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,7 +22,7 @@ import { logoutAction } from "@/app/(auth)/actions";
 import { HeaderStats } from "./header-stats";
 import { activeHref, visibleNav, type NavGroup, type NavItem } from "./nav-config";
 
-type ShellUser = { name: string; email: string; role: "ADMIN" | "SALE" };
+type ShellUser = { name: string; email: string; role: Role };
 
 function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   const Icon = item.icon;
@@ -104,7 +106,7 @@ function UserMenu({ user }: { user: ShellUser }) {
         <CircleUserIcon className="size-4 shrink-0 text-white/70" strokeWidth={1.75} />
         <span className="hidden min-w-0 flex-col leading-tight sm:flex">
           <span className="max-w-40 truncate text-xs font-semibold">{user.name}</span>
-          <span className="text-[10px] text-white/60">{user.role === "ADMIN" ? "Quản trị viên" : "Sale"}</span>
+          <span className="text-[10px] text-white/60">{roleLabel(user.role)}</span>
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">

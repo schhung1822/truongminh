@@ -34,6 +34,8 @@ const schema = z.object({
   ZALO_ACCOUNT_KEY: z.string().min(16).optional(),
   // Khóa để máy chủ (cron) gọi /api/jobs/zalo-care chạy kịch bản chăm sóc tự động. Bỏ trống = tắt đường gọi này.
   ZALO_CARE_CRON_SECRET: z.string().min(16).max(256).optional(),
+  // Khóa để máy chủ (cron) gọi /api/jobs/fb-retention dọn dữ liệu cũ của module Lead Facebook. Bỏ trống = tắt đường gọi này.
+  FB_CRON_SECRET: z.string().min(16).max(256).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

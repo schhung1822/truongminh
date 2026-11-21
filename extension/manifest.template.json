@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Trường Minh - Lead Facebook",
+  "version": "0.1.0",
+  "description": "Đọc comment trên bài do chính nick của bạn đăng và gửi về webapp Trường Minh để tách số điện thoại. Không tự đăng, không tự comment, không tự bấm gửi bất cứ thứ gì lên Facebook.",
+  "permissions": ["storage", "alarms", "tabs"],
+  "host_permissions": ["https://www.facebook.com/*", "__APP_ORIGIN__/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Trường Minh - Lead Facebook",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}

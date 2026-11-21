@@ -49,3 +49,6 @@ next-env.d.ts
 # triển khai VPS
 /data/
 /backups/
+
+# Chrome extension (module Lead Facebook): thư mục build
+extension/dist/

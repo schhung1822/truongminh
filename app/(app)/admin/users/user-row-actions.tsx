@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { KeyRoundIcon, Loader2Icon, LockIcon, LockOpenIcon } from "lucide-react";
+import { ArrowLeftRightIcon, KeyRoundIcon, Loader2Icon, LockIcon, LockOpenIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { resetPasswordAction, setUserActiveAction, type FormState } from "./actions";
+import type { Role } from "@/generated/prisma/enums";
+import { resetPasswordAction, setUserActiveAction, setUserRoleAction, type FormState } from "./actions";
 
 function ResetPasswordDialog({ userId, userName }: { userId: string; userName: string }) {
   const [open, setOpen] = useState(false);
@@ -77,11 +78,13 @@ export function UserRowActions({
   userName,
   isActive,
   isSelf,
+  role,
 }: {
   userId: string;
   userName: string;
   isActive: boolean;
   isSelf: boolean;
+  role: Role;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -93,8 +96,22 @@ export function UserRowActions({
     });
   }
 
+  function switchRole() {
+    startTransition(async () => {
+      const result = await setUserRoleAction(userId, role === "MKT" ? "SALE" : "MKT");
+      if (result.error) toast.error(result.error);
+      else if (result.ok) toast.success(result.ok);
+    });
+  }
+
   return (
     <div className="flex flex-wrap justify-end gap-2">
+      {role !== "ADMIN" && !isSelf && (
+        <Button variant="outline" size="sm" onClick={switchRole} disabled={pending}>
+          <ArrowLeftRightIcon />
+          {role === "MKT" ? "Chuyển sang Sale" : "Chuyển sang Marketing"}
+        </Button>
+      )}
       <ResetPasswordDialog userId={userId} userName={userName} />
       {!isSelf && (
         <Button variant={isActive ? "destructive" : "outline"} size="sm" onClick={toggle} disabled={pending}>
