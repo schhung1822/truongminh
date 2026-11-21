@@ -16,7 +16,7 @@ export type OptionType = (typeof OPTION_TYPES)[number];
 
 export const OPTION_TYPE_INFO: Record<OptionType, { title: string; hint: string }> = {
   BASE_MATERIAL: { title: "Nhóm chất liệu", hint: "Chất liệu nền: nhựa, vải, giả gương. Ghi song song vào cột nhóm cũ." },
-  TECHNIQUE: { title: "Công nghệ in", hint: "Cách gia công: khắc laser, cắt laser, in UV. Ghi song song vào cột công nghệ in cũ (gửi cho AI)." },
+  TECHNIQUE: { title: "Công nghệ in", hint: "Cách gia công, quyết định ảnh thành phẩm AI vẽ: Khắc laser (hai lớp, vẻ khắc), Cắt laser (decal một lớp phẳng, không viền, không khắc), In UV (in phẳng). Ghi song song vào cột công nghệ in cũ (gửi cho AI)." },
   SURFACE_FINISH: { title: "Chất bề mặt", hint: "Bề mặt trông thế nào: mờ, bóng, gương, nhũ, nhung..." },
   SURFACE_PATTERN: { title: "Họa tiết", hint: "Hình vẽ/vân trên bề mặt: trơn, caro, hoa văn, chuyển màu..." },
   COLOR_FAMILY: { title: "Họ màu", hint: "Nhóm màu dùng để lọc, cho cả mặt trước và mặt sau." },

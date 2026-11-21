@@ -29,7 +29,7 @@ async function main() {
           version,
           body,
           isActive: true,
-          note: "Logo cắt theo hình logo: mặt trước = lớp 1, viền = lớp 2",
+          note: "Tấm mỏng phẳng; phân biệt hàng khắc / cắt (một lớp, không viền) / in UV theo công nghệ của chất liệu",
         },
       }),
     ]);

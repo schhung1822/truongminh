@@ -32,6 +32,7 @@ const VARIABLE_HELP: Record<"CATALOG" | "DESIGN", { name: string; desc: string }
     { name: "{{product_type}}", desc: "loại sản phẩm sale nhập" },
     { name: "{{design_style}}", desc: "mô tả kiểu thiết kế được chọn" },
     { name: "{{note}}", desc: "ghi chú thêm của sale" },
+    { name: "{{material_finish}}", desc: "kiểu hoàn thiện theo công nghệ của chất liệu: khắc laser, cắt laser (một lớp phẳng không viền) hoặc in UV, hệ thống tự sinh; thiếu biến này thì hệ thống tự nối vào cuối prompt" },
   ],
 };
 

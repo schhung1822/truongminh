@@ -1,3 +1,5 @@
+import { FINISH_RULES, finishKindOf } from "./finish";
+
 /** Sinh prompt từ mẫu có biến {{ten_bien}}. Phép tính thuần, không phụ thuộc CSDL. */
 
 export const PROMPT_VARIABLES = [
@@ -7,6 +9,7 @@ export const PROMPT_VARIABLES = [
   "product_type",
   "design_style",
   "note",
+  "material_finish",
 ] as const;
 export type PromptVariable = (typeof PROMPT_VARIABLES)[number];
 
@@ -43,19 +46,40 @@ export function renderPrompt(template: string, values: Partial<Record<PromptVari
   });
 }
 
-export type MaterialForPrompt = { printTech: string };
+export type MaterialForPrompt = { printTech: string; technique?: string | null };
 
 /**
- * Sinh {{materials_list}}. Mỗi dòng: "Cell 3 = reference image 4: <cách lấy chất liệu>, technique: <công nghệ in>".
- * Chất liệu được mô tả hoàn toàn bằng ảnh tham chiếu hai nửa (trái = mặt trước, phải = mặt sau), không có mô tả chữ.
+ * Prompt thiết kế: thay biến, và dặn kiểu hoàn thiện (khắc / cắt / in UV) của chất liệu.
+ * Mẫu có {{material_finish}} thì câu dặn nằm đúng chỗ đó. Mẫu cũ chưa có biến này thì câu dặn được nối vào cuối,
+ * để quy tắc phân biệt hàng cắt luôn có hiệu lực kể cả khi chưa cập nhật prompt.
+ */
+export function renderDesignPrompt(
+  template: string,
+  values: { product_type: string; design_style: string; note: string },
+  finishRule: string,
+): string {
+  const out = renderPrompt(template, { ...values, material_finish: finishRule });
+  if (extractVariables(template).includes("material_finish")) return out;
+  return `${out}\n\nFinish of the logo piece (follow it exactly; it overrides any conflicting detail above): ${finishRule}`;
+}
+
+/**
+ * Sinh {{materials_list}}. Mỗi dòng: "Cell 3 = reference image 4: <cách lấy chất liệu>, technique: <công nghệ in>. Finish: <kiểu hoàn thiện>".
+ * Chất liệu được mô tả bằng ảnh tham chiếu hai nửa (trái = mặt trước, phải = mặt sau); kiểu hoàn thiện (khắc / cắt / in UV)
+ * lấy từ công nghệ của chất liệu, riêng hàng chỉ cắt thì chỉ dùng nửa trái (xem lib/prompts/finish.ts).
  * Ảnh tham chiếu số 1 là logo nên ô thứ k (tính từ 1) ứng với ảnh tham chiếu số k + 1.
  * Nếu trang chưa đầy ô thì thêm dòng dặn AI để trống các ô còn lại.
  */
 export function buildMaterialsList(materials: MaterialForPrompt[], grid: { cols: number; rows: number }): string {
   const clean = (s: string) => s.replace(/\s+/g, " ").trim();
-  const lines = materials.map(
-    (m, i) => `Cell ${i + 1} = reference image ${i + 2}: use the front and back materials shown in the two panels of the reference image, technique: ${clean(m.printTech)}`,
-  );
+  const lines = materials.map((m, i) => {
+    const kind = finishKindOf(m);
+    const use =
+      kind === "CUT"
+        ? "use ONLY the front material shown in the LEFT panel of the reference image"
+        : "use the front and back materials shown in the two panels of the reference image";
+    return `Cell ${i + 1} = reference image ${i + 2}: ${use}, technique: ${clean(m.printTech)}. Finish: ${FINISH_RULES[kind]}`;
+  });
 
   const total = grid.cols * grid.rows;
   if (materials.length < total) {

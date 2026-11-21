@@ -3,7 +3,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { SessionUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { assignStyles, validateDesignRequest } from "@/lib/design/assign";
-import { renderPrompt } from "@/lib/prompts/render";
+import { finishRuleOf } from "@/lib/prompts/finish";
+import { renderDesignPrompt } from "@/lib/prompts/render";
 import { getSettings, type Settings } from "@/lib/settings";
 import type { BuiltImage } from "./built";
 import { assertQuota, todayKey } from "./limits";
@@ -16,6 +17,8 @@ type MaterialRow = {
   name: string;
   groupName: string;
   printTech: string;
+  /** mã công nghệ (khac-laser, cat-laser, in-uv...): quyết định ảnh vẽ kiểu khắc, cắt hay in, xem lib/prompts/finish.ts */
+  technique?: string | null;
   referencePath: string | null;
 };
 type StyleRow = { id: string; name: string; description: string };
@@ -37,11 +40,15 @@ export function buildDesignImage(input: {
   }
   let promptUsed: string;
   try {
-    promptUsed = renderPrompt(template.body, {
-      product_type: input.productType,
-      design_style: `${style.name}: ${style.description}`,
-      note: input.note.trim() || "none",
-    });
+    promptUsed = renderDesignPrompt(
+      template.body,
+      {
+        product_type: input.productType,
+        design_style: `${style.name}: ${style.description}`,
+        note: input.note.trim() || "none",
+      },
+      finishRuleOf(material),
+    );
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Không sinh được prompt." };
   }
