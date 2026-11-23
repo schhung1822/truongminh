@@ -34,7 +34,7 @@ describe("extension không tự gửi, không gõ chữ, không che giấu tự 
     expect(violations(/KeyboardEvent|InputEvent|execCommand|insertText|setRangeText|\.submit\s*\(|requestSubmit|dispatchEvent/)).toEqual([]);
   });
 
-  it("content script không ghi vào trang (chỉ đọc và bấm nút mở rộng nội dung)", () => {
+  it("content script không ghi vào trang (chỉ đọc, cuộn và bấm nút mở rộng nội dung)", () => {
     expect(violations(/\.(value|innerText|innerHTML|outerHTML|textContent|checked)\s*=[^=]/, /^src\/content\//)).toEqual([]);
     expect(violations(/contenteditable|role=["']textbox["']|<textarea|\.focus\s*\(/i, /^src\/content\//)).toEqual([]);
   });
@@ -47,10 +47,30 @@ describe("extension không tự gửi, không gõ chữ, không che giấu tự 
     expect(violations(/navigator\.(webdriver|userAgent|languages|platform|hardwareConcurrency|plugins)|chrome\.(cookies|debugger|proxy|webRequest|declarativeNetRequest)|document\.cookie|Object\.defineProperty\(\s*navigator/)).toEqual([]);
   });
 
+  it("chrome.scripting chỉ nạp đúng file content.js của extension, không chạy mã tuỳ ý trong trang", () => {
+    let uses = 0;
+    for (const f of FILES) {
+      for (const u of code(f.text).matchAll(/chrome\.scripting\.executeScript\(([\s\S]*?)\)/g)) {
+        uses++;
+        expect(u[1], f.path).toMatch(/files:\s*\["content\.js"\]/);
+        expect(u[1], f.path).not.toMatch(/func:|function|=>/);
+      }
+    }
+    expect(uses).toBeGreaterThan(0);
+    expect(violations(/chrome\.scripting\.(insertCSS|registerContentScripts)/)).toEqual([]);
+  });
+
   it("manifest chỉ xin đúng quyền cần thiết", () => {
-    const m = JSON.parse(readFileSync(join(ROOT, "manifest.template.json"), "utf8")) as { permissions: string[]; host_permissions: string[]; content_scripts: { matches: string[] }[] };
-    expect([...m.permissions].sort()).toEqual(["alarms", "storage", "tabs"]);
-    expect([...m.host_permissions].sort()).toEqual(["__APP_ORIGIN__/*", "https://www.facebook.com/*"]);
-    expect(m.content_scripts.flatMap((c) => c.matches)).toEqual(["https://www.facebook.com/*"]);
+    const m = JSON.parse(readFileSync(join(ROOT, "manifest.template.json"), "utf8")) as { name: string; permissions: string[]; host_permissions: string[]; content_scripts: { matches: string[] }[] };
+    // scripting: chỉ để nạp bổ sung chính content.js vào tab Facebook đã mở sẵn; notifications: báo "có lead mới" trên máy
+    expect([...m.permissions].sort()).toEqual(["alarms", "notifications", "scripting", "storage", "tabs"]);
+    expect([...m.host_permissions].sort()).toEqual(["__APP_ORIGIN__/*", "https://*.facebook.com/*"]);
+    expect(m.content_scripts.flatMap((c) => c.matches)).toEqual(["https://*.facebook.com/*"]);
+  });
+
+  it("tên extension là Data Lead Facebook, không kèm tên xưởng", () => {
+    const m = JSON.parse(readFileSync(join(ROOT, "manifest.template.json"), "utf8")) as { name: string };
+    expect(m.name).toBe("Data Lead Facebook");
+    expect(FILES.filter((f) => /Trường Minh|Truong Minh/i.test(f.text)).map((f) => f.path)).toEqual([]);
   });
 });

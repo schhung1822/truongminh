@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { authenticateExt } from "@/lib/ext/auth";
 import { getFbConfig } from "@/lib/ext/config";
+import { acquireScanLeases } from "@/lib/fb/lease";
 import { pickPostsToScan, shouldMarkDone } from "@/lib/fb/schedule";
 
 /** Số mã comment đã biết gửi kèm mỗi bài (để extension biết phần nào đã có). */
@@ -14,7 +15,7 @@ const MAX_KNOWN_IDS = 3000;
 export async function GET(request: Request) {
   const auth = await authenticateExt(request);
   if (!auth.ok) return auth.response;
-  const { account } = auth.ctx;
+  const { account, token } = auth.ctx;
   const headers = { "Cache-Control": "no-store" };
 
   if (account.status !== "ACTIVE") {
@@ -45,8 +46,9 @@ export async function GET(request: Request) {
     cfg,
     { force },
   );
+  // Hai máy cùng một nick (hai mã kết nối) không được giao cùng một bài trong lúc máy kia đang quét
   const scan = [];
-  for (const p of picks) {
+  for (const p of acquireScanLeases(picks, token.id, now)) {
     const known = await db.fbComment.findMany({ where: { postId: p.id }, select: { fbCommentId: true }, take: MAX_KNOWN_IDS });
     scan.push({ post_id: p.id, url: p.url, known_comment_ids: known.map((k) => k.fbCommentId) });
   }

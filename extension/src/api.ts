@@ -27,7 +27,7 @@ async function call<T>(token: string, path: string, init: { method?: string; bod
       credentials: "omit", // không gửi cookie nào của webapp: xác thực chỉ bằng mã kết nối
     });
   } catch {
-    throw new ApiError(0, "NETWORK", "Không kết nối được tới webapp.");
+    throw new ApiError(0, "NETWORK", `Không kết nối được tới ${APP_ORIGIN}. Kiểm tra mạng hoặc web đang bảo trì.`);
   }
   let json: unknown = null;
   try {
@@ -42,10 +42,12 @@ async function call<T>(token: string, path: string, init: { method?: string; bod
   return json as T;
 }
 
+export type IngestBody = { scanned_at: string; complete: boolean; comments: CommentPayload[]; resolved_url?: string | null; note?: string | null };
+
 export const api = {
   me: (token: string) => call<MeResponse>(token, "/api/ext/me"),
   jobs: (token: string, force: boolean) => call<JobsResponse>(token, "/api/ext/jobs" + (force ? "?force=1" : "")),
-  postComments: (token: string, postId: string, payload: { scanned_at: string; complete: boolean; comments: CommentPayload[] }) =>
+  postComments: (token: string, postId: string, payload: IngestBody) =>
     call<IngestResponse>(token, `/api/ext/posts/${encodeURIComponent(postId)}/comments`, { method: "POST", body: payload }),
   registerPost: (
     token: string,

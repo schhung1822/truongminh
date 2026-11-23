@@ -3,9 +3,11 @@ import { Prisma } from "@/generated/prisma/client";
 import type { FbPostPurpose } from "@/generated/prisma/enums";
 import { db } from "@/lib/db";
 import { prepareComment, type IngestPayload, type PreparedComment } from "./comments";
+import { ensureGroup } from "./groups";
+import { parsePostUrl } from "./urls";
 
 export type IngestInput = {
-  post: { id: string; groupId: string | null; purpose: FbPostPurpose };
+  post: { id: string; url: string; groupId: string | null; purpose: FbPostPurpose };
   account: { profileUrl: string };
   tokenId: string;
   payload: IngestPayload;
@@ -23,7 +25,19 @@ type Stored = { id: string; authorName: string; authorProfileUrl: string | null;
  */
 export async function ingestComments(opts: IngestInput): Promise<IngestResult> {
   const now = opts.now ?? new Date();
-  const { post } = opts;
+  const post = { ...opts.post };
+
+  // Link chia sẻ rút gọn (share/p/...) đã được Facebook chuyển tới permalink thật: cập nhật link bài để hiển thị và chống trùng đúng
+  const resolved = opts.payload.resolved_url ? parsePostUrl(opts.payload.resolved_url) : null;
+  if (resolved && resolved.url !== post.url && post.url.includes("/share/")) {
+    const clash = await db.fbPost.findUnique({ where: { url: resolved.url }, select: { id: true } });
+    if (!clash) {
+      const groupId = post.groupId ?? (resolved.groupUrl ? await ensureGroup(resolved.groupUrl) : null);
+      await db.fbPost.update({ where: { id: post.id }, data: { url: resolved.url, groupId } });
+      post.url = resolved.url;
+      post.groupId = groupId;
+    }
+  }
 
   // Một mã comment xuất hiện hai lần trong cùng lần gửi: lấy bản cuối
   const byId = new Map<string, PreparedComment>();
@@ -115,7 +129,7 @@ export async function ingestComments(opts: IngestInput): Promise<IngestResult> {
     data: {
       tokenId: opts.tokenId,
       type: opts.payload.complete ? "SCAN_OK" : "SCAN_FAIL",
-      detail: { post_id: post.id, received: opts.payload.comments.length, new_comments: toCreate.length, updated_comments: toUpdate.length, new_leads: newLeads, complete: opts.payload.complete },
+      detail: { post_id: post.id, received: opts.payload.comments.length, new_comments: toCreate.length, updated_comments: toUpdate.length, new_leads: newLeads, complete: opts.payload.complete, ...(opts.payload.note ? { note: opts.payload.note } : {}) },
     },
   });
 

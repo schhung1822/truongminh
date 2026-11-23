@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanCommentText, commentCountFromText, commentIdsFromHref, isCheckpointUrl, isLoginUrl, isOwnComment, labelMatches, normalizeLabel } from "./selectors";
+import { authorFromCommentLabel, cleanCommentText, commentCountFromText, commentIdsFromHref, fallbackCommentId, isCheckpointUrl, isCommentLabel, isLoginUrl, isOwnComment, isUiNoise, labelMatches, linkPattern, looksLikeRelativeTime, normalizeLabel } from "./selectors";
 
 describe("labelMatches (tiếng Việt và tiếng Anh)", () => {
   it("xem thêm bình luận", () => {
@@ -118,5 +118,55 @@ describe("isOwnComment", () => {
   it("không có link: so tên", () => {
     expect(isOwnComment({ ...own, authorUrl: null, authorName: "Lan Trường Minh" })).toBe(true);
     expect(isOwnComment({ ...own, authorUrl: null, authorName: "" })).toBe(false);
+  });
+});
+
+describe("nhãn có dòng mô tả phụ, nhãn giao diện, thời gian tương đối", () => {
+  it("menu 'Tất cả bình luận' có dòng mô tả bên dưới vẫn khớp (so dòng đầu)", () => {
+    expect(labelMatches("Tất cả bình luận\nHiển thị tất cả bình luận, bao gồm cả bình luận có thể là spam.", "allComments")).toBe(true);
+    expect(labelMatches("Phù hợp nhất\nHiển thị bình luận của bạn bè trước", "sortButton")).toBe(true);
+    expect(labelMatches("Xem thêm bình luận\n3 trong 12", "viewMoreComments")).toBe(true);
+  });
+
+  it("các nhãn thêm: 'Xem 3 bình luận trước', 'See more comments'", () => {
+    expect(labelMatches("Xem 3 bình luận trước", "viewMoreComments")).toBe(true);
+    expect(labelMatches("See more comments", "viewMoreComments")).toBe(true);
+  });
+
+  it("nhận ra chữ chỉ là nhãn giao diện quanh bình luận", () => {
+    for (const t of ["Thích", "Phản hồi", "Like", "Reply", "Đã chỉnh sửa", "Tác giả", "Top fan", "2 giờ", "5m", "3", "·", "Xem bản dịch"]) expect(isUiNoise(t), t).toBe(true);
+    for (const t of ["ib giá em nhé", "0912 345 678", "Mình quan tâm"]) expect(isUiNoise(t), t).toBe(false);
+  });
+
+  it("thời gian tương đối", () => {
+    for (const t of ["2 giờ", "5 phút", "3 ngày", "1 tuần", "2h", "5m", "3d", "1w", "Vừa xong", "Just now", "Hôm qua", "2 giờ trước", "3 days ago"]) expect(looksLikeRelativeTime(t), t).toBe(true);
+    for (const t of ["Nguyễn Văn A", "0912345678", "giờ", "2 chiếc"]) expect(looksLikeRelativeTime(t), t).toBe(false);
+  });
+});
+
+describe("aria-label của bình luận và mã tạm", () => {
+  it("lấy tên người viết từ aria-label", () => {
+    expect(authorFromCommentLabel("Bình luận của Nguyễn Văn A")).toBe("Nguyễn Văn A");
+    expect(authorFromCommentLabel("Phản hồi của Trần B")).toBe("Trần B");
+    expect(authorFromCommentLabel("Comment by John Doe")).toBe("John Doe");
+    expect(authorFromCommentLabel("Reply by Jane")).toBe("Jane");
+    expect(authorFromCommentLabel("Bài viết của Lan")).toBeNull();
+    expect(authorFromCommentLabel(null)).toBeNull();
+    expect(isCommentLabel("Bình luận của X")).toBe(true);
+    expect(isCommentLabel("Bài viết của X")).toBe(false);
+  });
+
+  it("mã tạm ổn định, khác nhau theo nội dung, chỉ gồm ký tự server chấp nhận", () => {
+    const a = fallbackCommentId("u1|ib giá");
+    expect(a).toBe(fallbackCommentId("u1|ib giá"));
+    expect(a).not.toBe(fallbackCommentId("u1|ib giá!"));
+    expect(a).toMatch(/^h[a-z0-9]+$/);
+    expect(a.length).toBeLessThan(30);
+  });
+
+  it("mẫu đường link thay số và mã dài bằng #, bỏ tham số theo dõi", () => {
+    expect(linkPattern("https://www.facebook.com/groups/123456789/posts/987654321012/?comment_id=555&__cft__[0]=abc")).toBe("www.facebook.com/groups/#/posts/#/?comment_id");
+    expect(linkPattern("https://www.facebook.com/profile.php?id=100012345678")).toBe("www.facebook.com/profile.php?id");
+    expect(linkPattern("https://www.facebook.com/lan/posts/pfbid02AbCdEfGhIjKlMnOpQrStUvWxYz")).toBe("www.facebook.com/lan/posts/pfbid#");
   });
 });

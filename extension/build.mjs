@@ -12,6 +12,9 @@ const dist = resolve(root, "dist");
 const origin = (process.env.APP_ORIGIN || "https://truongminh.activate.vn").replace(/\/+$/, "");
 if (!/^https?:\/\/[^/\s]+$/.test(origin)) throw new Error(`APP_ORIGIN không hợp lệ: ${origin} (ví dụ https://truongminh.activate.vn)`);
 
+const manifestText = (await readFile(resolve(root, "manifest.template.json"), "utf8")).replaceAll("__APP_ORIGIN__", origin);
+const manifest = JSON.parse(manifestText);
+
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
@@ -30,12 +33,12 @@ await build({
   minify: false,
   sourcemap: false,
   logLevel: "info",
-  define: { __APP_ORIGIN__: JSON.stringify(origin) },
+  define: { __APP_ORIGIN__: JSON.stringify(origin), __EXT_VERSION__: JSON.stringify(manifest.version) },
 });
 
-const manifest = (await readFile(resolve(root, "manifest.template.json"), "utf8")).replaceAll("__APP_ORIGIN__", origin);
-await writeFile(resolve(dist, "manifest.json"), manifest);
+await writeFile(resolve(dist, "manifest.json"), manifestText);
 for (const f of ["popup/popup.html", "popup/popup.css", "options/options.html"]) {
   await cp(resolve(root, "src", f), resolve(dist, f.split("/")[1]));
 }
-console.log(`\nĐã build vào ${dist}\nĐịa chỉ webapp: ${origin}\nCài: chrome://extensions > bật "Chế độ nhà phát triển" > "Tải tiện ích đã giải nén" > chọn thư mục dist.`);
+for (const s of [16, 32, 48, 128]) await cp(resolve(root, "src/icons", `icon${s}.png`), resolve(dist, `icon${s}.png`));
+console.log(`\nĐã build ${manifest.name} v${manifest.version} vào ${dist}\nĐịa chỉ webapp: ${origin}\nCài: chrome://extensions > bật "Chế độ nhà phát triển" > "Tải tiện ích đã giải nén" > chọn thư mục dist. Đã cài rồi thì bấm nút tải lại của extension.`);

@@ -1,14 +1,31 @@
 /**
- * Đọc nội dung trang Facebook. File này CHỈ ĐỌC trang và bấm các nút mở rộng nội dung (Xem thêm bình luận, Xem phản hồi,
- * Xem thêm, menu sắp xếp). Không điền chữ, không bấm gửi/đăng/trả lời (có test chặn trong guard.test.ts).
+ * Đọc nội dung trang Facebook. File này CHỈ ĐỌC trang, cuộn trang, và bấm các nút mở rộng nội dung (Xem thêm bình luận,
+ * Xem phản hồi, Xem thêm, menu sắp xếp). Không điền chữ, không bấm gửi/đăng/trả lời (có test chặn trong guard.test.ts).
  * Cách tìm phần tử nằm ở selectors.ts; Facebook đổi giao diện thì sửa ở đó.
  */
-import { canonicalGroupUrl, parsePostUrl, profileUrlFromAnyLink } from "../../../lib/fb/urls";
-import type { CommentPayload, PostInfo } from "../types";
-import { cleanCommentText, commentIdsFromHref, isCheckpointUrl, isLoginUrl, isOwnComment, labelMatches, type LabelKind } from "./selectors";
+import { canonicalGroupUrl, isPostHref, parsePostUrl, profileUrlFromAnyLink } from "../../../lib/fb/urls";
+import { EXT_VERSION } from "../config";
+import type { CommentPayload, DiagnosticReport, PostInfo } from "../types";
+import {
+  LABELS,
+  authorFromCommentLabel,
+  cleanCommentText,
+  commentIdsFromHref,
+  fallbackCommentId,
+  isCheckpointUrl,
+  isCommentLabel,
+  isLoginUrl,
+  isOwnComment,
+  isUiNoise,
+  labelMatches,
+  linkPattern,
+  looksLikeRelativeTime,
+  type LabelKind,
+} from "./selectors";
 
-const CLICKABLE = '[role="button"], [role="menuitem"], [role="menuitemradio"], [role="option"], span[tabindex="0"], div[tabindex="0"]';
+const CLICKABLE = '[role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], span[tabindex="0"], div[tabindex="0"]';
 const ARTICLE = '[role="article"]';
+const MESSAGE = '[data-ad-comet-preview="message"], [data-ad-preview="message"]';
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -27,6 +44,7 @@ const isVisible = (el: Element) => {
   return r.width > 0 && r.height > 0;
 };
 const textOf = (el: Element) => (el as HTMLElement).innerText ?? el.textContent ?? "";
+const labelOf = (el: Element) => textOf(el).trim() || el.getAttribute("aria-label") || "";
 
 export function pageState(): "ok" | "login" | "checkpoint" {
   if (isCheckpointUrl(location.href)) return "checkpoint";
@@ -39,8 +57,8 @@ export function findClickables(kind: LabelKind, opts: { root?: ParentNode; skip?
   const out: HTMLElement[] = [];
   for (const el of (opts.root ?? document).querySelectorAll<HTMLElement>(CLICKABLE)) {
     if (opts.skip?.has(el) || !isVisible(el)) continue;
-    const label = textOf(el).trim() || el.getAttribute("aria-label") || "";
-    if (label.length > 80) continue;
+    const label = labelOf(el);
+    if (label.length > 160) continue;
     if (labelMatches(label, kind)) out.push(el);
   }
   return out;
@@ -48,16 +66,40 @@ export function findClickables(kind: LabelKind, opts: { root?: ParentNode; skip?
 
 export const findClickable = (kind: LabelKind, skip?: Set<Element>) => findClickables(kind, { skip })[0] ?? null;
 
-/** Comment có link thời gian riêng (tham số comment_id) nằm ngay trong chính phần tử article của nó, không tính article lồng bên trong. */
-function ownTimeLink(article: HTMLElement): HTMLAnchorElement | null {
-  for (const a of article.querySelectorAll<HTMLAnchorElement>('a[href*="comment_id="]')) {
-    if (a.closest(ARTICLE) === article) return a;
-  }
-  return null;
+/* ---------- Bình luận ---------- */
+
+const ownLevel = (article: Element) => (el: Element) => el.closest(ARTICLE) === article;
+
+/** Các link nằm ngay trong chính article này (không tính article con lồng bên trong). */
+function ownLinks(article: HTMLElement): HTMLAnchorElement[] {
+  return [...article.querySelectorAll<HTMLAnchorElement>("a[href]")].filter(ownLevel(article));
+}
+
+function hasCommentId(href: string): boolean {
+  return commentIdsFromHref(href) !== null;
+}
+
+/**
+ * Link thời gian của bình luận: link có comment_id mà chữ là thời gian tương đối ("2 giờ"); dự phòng: link có comment_id
+ * mà KHÔNG phải link trang cá nhân (link tên người viết trong Comet cũng có comment_id, phải loại ra).
+ */
+function timeLinkOf(article: HTMLElement): HTMLAnchorElement | null {
+  const links = ownLinks(article).filter((a) => hasCommentId(a.href));
+  return links.find((a) => looksLikeRelativeTime(textOf(a))) ?? links.find((a) => isPostHref(a.href) || profileUrlFromAnyLink(a.href) === null) ?? links[0] ?? null;
+}
+
+/** Link tên người viết: link trang cá nhân (không phải link bài), có chữ, chữ không phải thời gian. */
+function authorLinkOf(article: HTMLElement, exclude: Element | null): HTMLAnchorElement | null {
+  return ownLinks(article).find((a) => a !== exclude && !isPostHref(a.href) && profileUrlFromAnyLink(a.href) !== null && textOf(a).trim() !== "" && !looksLikeRelativeTime(textOf(a))) ?? null;
+}
+
+/** article là một bình luận: có link thời gian kèm comment_id, hoặc aria-label dạng "Bình luận của X". */
+function isCommentArticle(a: HTMLElement): boolean {
+  return timeLinkOf(a) !== null || isCommentLabel(a.getAttribute("aria-label"));
 }
 
 export function commentArticles(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(ARTICLE)].filter((a) => ownTimeLink(a) !== null);
+  return [...document.querySelectorAll<HTMLElement>(ARTICLE)].filter(isCommentArticle);
 }
 
 /** Nút "Xem thêm" của các bình luận bị cắt ngắn. Chỉ lấy nút nằm trong một bình luận. */
@@ -65,54 +107,89 @@ export function seeMoreButtons(): HTMLElement[] {
   return commentArticles().flatMap((a) => findClickables("seeMore", { root: a }));
 }
 
-export function readComment(article: HTMLElement, own: { profileUrl: string; displayName: string }): CommentPayload | null {
-  const timeLink = ownTimeLink(article);
-  if (!timeLink) return null;
-  const ids = commentIdsFromHref(timeLink.href);
-  if (!ids) return null;
+export type ReadComment = CommentPayload & { fallbackId: boolean };
 
-  const ownLevel = (el: Element) => el.closest(ARTICLE) === article;
-  const authorLink =
-    [...article.querySelectorAll<HTMLAnchorElement>("a[href]")].find(
-      (a) => a !== timeLink && ownLevel(a) && textOf(a).trim() !== "" && profileUrlFromAnyLink(a.href) !== null,
-    ) ?? null;
-  const authorName = authorLink ? textOf(authorLink).trim() : "";
+export function readComment(article: HTMLElement, own: { profileUrl: string; displayName: string }): ReadComment | null {
+  const timeLink = timeLinkOf(article);
+  const authorLink = authorLinkOf(article, timeLink);
+  const label = article.getAttribute("aria-label");
+  const authorName = (authorLink ? textOf(authorLink).trim() : "") || authorFromCommentLabel(label) || "";
   const authorUrl = authorLink ? profileUrlFromAnyLink(authorLink.href) : null;
 
   // Nội dung: các khối chữ (dir="auto") của riêng bình luận này, bỏ khối chứa tên người viết / link thời gian, lấy khối ngoài cùng
+  const mine = ownLevel(article);
   const blocks = [...article.querySelectorAll<HTMLElement>('[dir="auto"]')].filter(
-    (el) => ownLevel(el) && !el.closest("a") && !el.closest('[role="button"]') && !(authorLink && el.contains(authorLink)) && !el.contains(timeLink),
+    (el) => mine(el) && !el.closest("a") && !el.closest('[role="button"]') && !(authorLink && el.contains(authorLink)) && !(timeLink && el.contains(timeLink)),
   );
   const outer = blocks.filter((el) => !blocks.some((o) => o !== el && o.contains(el)));
-  const text = cleanCommentText(outer.map(textOf).join("\n"));
+  let text = cleanCommentText(outer.map(textOf).join("\n"));
+  if (!text) {
+    // Dự phòng khi không có khối dir="auto": lấy chữ của article trừ chữ của các article con, bỏ tên người viết và nhãn giao diện
+    const clone = article.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll(ARTICLE).forEach((n) => n.remove());
+    const lines = textOf(clone)
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter((l) => l && l !== authorName && !isUiNoise(l));
+    text = cleanCommentText(lines.join("\n"));
+  }
+
+  const ids = timeLink ? commentIdsFromHref(timeLink.href) : null;
+  if (!ids && !text && !authorName) return null; // không phải bình luận đọc được
+  const timeText = timeLink ? textOf(timeLink).trim().slice(0, 60) || null : (ownLinks(article).map((a) => textOf(a).trim()).find(looksLikeRelativeTime) ?? null);
 
   return {
-    fb_comment_id: ids.fbCommentId,
-    parent_fb_comment_id: ids.parentFbCommentId,
+    fb_comment_id: ids?.fbCommentId ?? fallbackCommentId(`${authorUrl ?? authorName}|${text}`),
+    parent_fb_comment_id: ids?.parentFbCommentId ?? (article.parentElement?.closest(ARTICLE) ? "?" : null),
     author_name: authorName,
     author_profile_url: authorUrl ?? authorLink?.href ?? null,
     is_own: isOwnComment({ authorUrl, authorName, ownProfileUrl: own.profileUrl, ownDisplayName: own.displayName }),
     text,
-    time_text: textOf(timeLink).trim().slice(0, 60) || null,
+    time_text: timeText,
+    fallbackId: !ids,
   };
 }
 
-export function readAllComments(own: { profileUrl: string; displayName: string }): CommentPayload[] {
-  const byId = new Map<string, CommentPayload>();
+export function readAllComments(own: { profileUrl: string; displayName: string }): ReadComment[] {
+  const byId = new Map<string, ReadComment>();
   for (const a of commentArticles()) {
     const c = readComment(a, own);
     if (c) byId.set(c.fb_comment_id, c);
   }
-  return [...byId.values()];
+  // mã cha "?" (biết là trả lời nhưng không biết của ai) thì bỏ, server chỉ nhận mã thật
+  return [...byId.values()].map((c) => (c.parent_fb_comment_id === "?" ? { ...c, parent_fb_comment_id: null } : c));
 }
 
-/** Bài chính của trang permalink: article ngoài cùng (không nằm trong article khác). */
+/* ---------- Bài chính ---------- */
+
+/** Bài chính của trang permalink: article ngoài cùng (không nằm trong article khác) mà không phải một bình luận. */
 export function mainPostArticle(): HTMLElement | null {
-  return [...document.querySelectorAll<HTMLElement>(ARTICLE)].find((a) => !a.parentElement?.closest(ARTICLE)) ?? null;
+  return [...document.querySelectorAll<HTMLElement>(ARTICLE)].find((a) => !a.parentElement?.closest(ARTICLE) && !isCommentArticle(a)) ?? null;
 }
 
-export function postText(post: HTMLElement): string {
-  return textOf(post);
+/** Vùng chứa bài chính, có dự phòng khi Facebook không đánh dấu role="article": khối chứa nội dung bài, rồi vùng main, rồi cả trang. */
+export function mainPostRoot(): HTMLElement {
+  return mainPostArticle() ?? document.querySelector<HTMLElement>(MESSAGE)?.closest<HTMLElement>("div[aria-posinset], [role=\"main\"]") ?? document.querySelector<HTMLElement>('[role="main"]') ?? document.body;
+}
+
+export function postText(root: HTMLElement): string {
+  return textOf(root);
+}
+
+/** Link tên tác giả của bài chính: ưu tiên chỗ Facebook đánh dấu tên, rồi tiêu đề h2/h3/h4 hoặc chữ đậm, rồi link trang cá nhân đầu tiên trong bài. */
+export function postAuthorLink(root: HTMLElement): HTMLAnchorElement | null {
+  const mine = root.matches(ARTICLE) ? ownLevel(root) : () => true;
+  const ok = (a: HTMLAnchorElement) => mine(a) && textOf(a).trim() !== "" && !isPostHref(a.href) && profileUrlFromAnyLink(a.href) !== null && !looksLikeRelativeTime(textOf(a));
+  const tiers = [
+    '[data-ad-rendering-role="profile_name"] a[href]',
+    "h2 a[href], h3 a[href], h4 a[href], strong a[href], b a[href]",
+    "a[href]",
+  ];
+  for (const sel of tiers) {
+    const found = [...root.querySelectorAll<HTMLAnchorElement>(sel)].find((a) => ok(a) && !a.closest(ARTICLE + " " + ARTICLE));
+    if (found) return found;
+  }
+  return null;
 }
 
 /**
@@ -121,20 +198,15 @@ export function postText(post: HTMLElement): string {
  */
 export function readPostInfo(): PostInfo {
   const parsed = parsePostUrl(location.href);
-  if (!parsed) return { ok: false, error: "Trang này không phải link bài đăng (permalink). Mở bài ở trang riêng của nó rồi thử lại." };
-  const post = mainPostArticle();
-  if (!post) return { ok: false, error: "Không thấy phần bài đăng trên trang. Chờ trang tải xong rồi thử lại." };
-
-  const ownLevel = (el: Element) => el.closest(ARTICLE) === post;
-  const candidates = [
-    ...post.querySelectorAll<HTMLAnchorElement>('[data-ad-rendering-role="profile_name"] a[href]'),
-    ...post.querySelectorAll<HTMLAnchorElement>("h2 a[href], h3 a[href], h4 a[href], strong a[href]"),
-  ].filter((a) => ownLevel(a) && textOf(a).trim() !== "" && profileUrlFromAnyLink(a.href) !== null);
-  const author = candidates[0];
-  if (!author) return { ok: false, error: "Không đọc được tên tác giả của bài (Facebook có thể đã đổi giao diện), nên chưa thể xác nhận đây là bài của nick." };
+  if (!parsed) {
+    return { ok: false, error: "Trang này không phải link của một bài đăng. Mở bài ở trang riêng của nó (bấm vào thời gian đăng của bài) rồi bấm lại." };
+  }
+  const root = mainPostRoot();
+  const author = postAuthorLink(root);
+  if (!author) return { ok: false, error: "Không đọc được tên tác giả của bài (Facebook có thể đã đổi giao diện), nên chưa xác nhận được đây là bài của nick. Bấm \"Chẩn đoán trang này\" và gửi báo cáo cho người phát triển." };
 
   const groupLink = [...document.querySelectorAll<HTMLAnchorElement>('a[href*="/groups/"]')].map((a) => canonicalGroupUrl(a.href)).find((u) => u !== null) ?? null;
-  const message = post.querySelector<HTMLElement>('[data-ad-comet-preview="message"], [data-ad-preview="message"]');
+  const message = root.querySelector<HTMLElement>(MESSAGE);
   return {
     ok: true,
     url: parsed.url,
@@ -142,5 +214,75 @@ export function readPostInfo(): PostInfo {
     authorName: textOf(author).trim() || null,
     groupUrl: parsed.groupUrl ?? groupLink,
     content: (message ? textOf(message) : "").trim().slice(0, 2000),
+  };
+}
+
+/* ---------- Cuộn để Facebook vẽ nốt phần bình luận ---------- */
+
+/** Cuộn xuống cuối trang vài lần (chờ cố định 700 ms mỗi lần) rồi đưa bình luận cuối vào khung nhìn. Facebook vẽ bình luận theo khung nhìn. */
+export async function scrollToLoad(rounds = 4): Promise<void> {
+  for (let i = 0; i < rounds; i++) {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await sleep(700);
+  }
+  const all = commentArticles();
+  all.at(-1)?.scrollIntoView({ block: "end" });
+  await sleep(500);
+}
+
+/* ---------- Chẩn đoán ---------- */
+
+const summarizeStructure = (a: HTMLElement): string => {
+  const parts: string[] = [];
+  const tl = timeLinkOf(a);
+  const al = authorLinkOf(a, tl);
+  parts.push(`aria-label=${a.getAttribute("aria-label") ? "có" : "không"}`);
+  parts.push(`timeLink=${tl ? linkPattern(tl.href) : "không"}`);
+  parts.push(`authorLink=${al ? linkPattern(al.href) : "không"}`);
+  parts.push(`dirAutoBlocks=${a.querySelectorAll('[dir="auto"]').length}`);
+  parts.push(`nestedArticles=${a.querySelectorAll(ARTICLE).length}`);
+  parts.push(`links=${ownLinks(a).length}`);
+  return parts.join(" ");
+};
+
+/** Báo cáo cấu trúc trang, không chứa dữ liệu cá nhân (xem DiagnosticReport). */
+export function diagnose(own: { profileUrl: string; displayName: string }): DiagnosticReport {
+  const articles = [...document.querySelectorAll<HTMLElement>(ARTICLE)];
+  const comments = readAllComments(own);
+  const buttons: Record<string, string[]> = {};
+  for (const kind of Object.keys(LABELS) as LabelKind[]) {
+    const labels = findClickables(kind).map((b) => labelOf(b).split(/\r?\n/)[0].trim().slice(0, 40));
+    if (labels.length) buttons[kind] = [...new Set(labels)].slice(0, 5);
+  }
+  const sort = findClickable("sortButton");
+  const root = mainPostRoot();
+  const countText = /(\d[\d.,]*\s*[kKmM]?\s*(?:bình luận|binh luan|comments?))/i.exec(postText(root))?.[1] ?? null;
+  const labelPatterns = [...new Set(articles.map((a) => (a.getAttribute("aria-label") ?? "").replace(/\s.*$/u, "").slice(0, 20)).filter(Boolean))].slice(0, 8);
+  const linkPatterns = [...new Set([...document.querySelectorAll<HTMLAnchorElement>("a[href]")].map((a) => linkPattern(a.href)))].filter((p) => /comment_id|posts|permalink|photo|groups|profile/.test(p)).slice(0, 25);
+  const sample = articles.filter(isCommentArticle).slice(0, 3).map(summarizeStructure);
+  return {
+    at: new Date().toISOString(),
+    url: location.href.replace(/\?.*$/, ""),
+    host: location.hostname,
+    visibility: document.visibilityState,
+    pageState: pageState(),
+    isPostUrl: parsePostUrl(location.href) !== null,
+    counts: {
+      articles: articles.length,
+      articlesWithCommentLink: articles.filter((a) => timeLinkOf(a) !== null).length,
+      articlesWithCommentLabel: articles.filter((a) => isCommentLabel(a.getAttribute("aria-label"))).length,
+      commentsRead: comments.length,
+      commentsWithFallbackId: comments.filter((c) => c.fallbackId).length,
+      ownComments: comments.filter((c) => c.is_own).length,
+    },
+    buttons,
+    sortButtonLabel: sort ? labelOf(sort).split(/\r?\n/)[0].slice(0, 40) : null,
+    commentCountText: countText,
+    postAuthorFound: postAuthorLink(root) !== null,
+    mainPostFound: mainPostArticle() !== null,
+    articleLabelPatterns: labelPatterns,
+    linkPatterns,
+    sampleCommentStructure: sample,
+    extensionVersion: EXT_VERSION,
   };
 }

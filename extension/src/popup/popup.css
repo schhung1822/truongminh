@@ -8,6 +8,8 @@
   --accent-fg: #fff;
   --danger: #b42318;
   --ok: #067647;
+  --warn: #b54708;
+  --border: #d4d4d8;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -19,19 +21,34 @@
     --accent-fg: #18181b;
     --danger: #f97066;
     --ok: #47cd89;
+    --warn: #fdb022;
+    --border: #3f3f46;
   }
 }
+* {
+  box-sizing: border-box;
+}
 body {
-  width: 320px;
+  width: 360px;
   margin: 0;
-  padding: 14px;
+  padding: 12px 14px 10px;
   background: var(--bg);
   color: var(--fg);
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+.top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.top img {
+  border-radius: 6px;
+}
 h1 {
-  margin: 0 0 10px;
-  font-size: 16px;
+  margin: 0;
+  font-size: 15px;
+  flex: 1;
 }
 .card {
   padding: 10px 12px;
@@ -39,14 +56,22 @@ h1 {
   border-radius: 10px;
   background: var(--card);
 }
+.guide ol {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.guide li {
+  margin: 3px 0;
+}
 .muted {
   color: var(--muted);
+  font-size: 12px;
 }
 .actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 10px 0 6px;
+  margin: 8px 0 0;
 }
 button {
   height: 34px;
@@ -62,12 +87,18 @@ button {
 button.secondary {
   background: var(--card);
   color: var(--fg);
-  border: 1px solid var(--muted);
+  border: 1px solid var(--border);
+}
+button.small {
+  height: 30px;
+  font-size: 12px;
+  font-weight: 500;
 }
 button.link {
   background: none;
   color: var(--muted);
   text-decoration: underline;
+  padding: 0 4px;
 }
 button:disabled {
   opacity: 0.5;
@@ -75,7 +106,8 @@ button:disabled {
 }
 .message {
   min-height: 18px;
-  margin: 0 0 6px;
+  margin: 8px 0 4px;
+  white-space: pre-wrap;
 }
 .message.error,
 .err {
@@ -84,6 +116,54 @@ button:disabled {
 .message.ok,
 .good {
   color: var(--ok);
+}
+.warn {
+  color: var(--warn);
+}
+details {
+  margin: 6px 0;
+}
+summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+.events {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 150px;
+  overflow: auto;
+  font-size: 12px;
+}
+.events li {
+  padding: 3px 0;
+  border-top: 1px solid var(--border);
+}
+.events time {
+  color: var(--muted);
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.progress {
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.links {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.links a {
+  color: inherit;
 }
 .hint {
   margin: 8px 0 0;

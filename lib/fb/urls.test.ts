@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalGroupUrl, canonicalProfileUrl, groupNameFromUrl, parsePostUrl, profileUrlFromAnyLink, sameProfile } from "./urls";
+import { canonicalGroupUrl, canonicalProfileUrl, groupNameFromUrl, isPostHref, parsePostUrl, profileUrlFromAnyLink, sameProfile } from "./urls";
 
 describe("canonicalProfileUrl", () => {
   it("chuẩn hoá host, bỏ tham số", () => {
@@ -103,5 +103,48 @@ describe("profileUrlFromAnyLink", () => {
   it("không phải link người dùng thì null", () => {
     expect(profileUrlFromAnyLink("https://www.facebook.com/groups/123456789/posts/987654321")).toBeNull();
     expect(profileUrlFromAnyLink("https://example.com/groups/1/user/100012345678/")).toBeNull();
+  });
+});
+
+describe("parsePostUrl: ảnh, video, reel, link chia sẻ video", () => {
+  it("bài là một ảnh", () => {
+    expect(parsePostUrl("https://www.facebook.com/photo/?fbid=1234567890&set=a.111")).toEqual({ url: "https://www.facebook.com/photo/?fbid=1234567890", groupUrl: null });
+    expect(parsePostUrl("https://web.facebook.com/photo.php?fbid=1234567890&set=gm.99999999&type=3")).toEqual({
+      url: "https://www.facebook.com/photo/?fbid=1234567890",
+      groupUrl: "https://www.facebook.com/groups/99999999",
+    });
+    expect(parsePostUrl("https://www.facebook.com/photo/?fbid=abc")).toBeNull();
+  });
+
+  it("video, reel", () => {
+    expect(parsePostUrl("https://www.facebook.com/lan.truongminh/videos/1234567890/")?.url).toBe("https://www.facebook.com/lan.truongminh/videos/1234567890");
+    expect(parsePostUrl("https://www.facebook.com/watch/?v=1234567890")?.url).toBe("https://www.facebook.com/watch/?v=1234567890");
+    expect(parsePostUrl("https://www.facebook.com/reel/1234567890/?s=x")?.url).toBe("https://www.facebook.com/reel/1234567890");
+  });
+
+  it("link chia sẻ video / reel", () => {
+    expect(parsePostUrl("https://www.facebook.com/share/v/1AbCdEf/")?.url).toBe("https://www.facebook.com/share/v/1AbCdEf/");
+    expect(parsePostUrl("https://www.facebook.com/share/r/1AbCdEf/")?.url).toBe("https://www.facebook.com/share/r/1AbCdEf/");
+    expect(parsePostUrl("https://www.facebook.com/share/x/1AbCdEf/")).toBeNull();
+  });
+
+  it("web.facebook.com (Facebook ở Việt Nam hay chuyển sang host này) được coi như www", () => {
+    expect(parsePostUrl("https://web.facebook.com/groups/123456789/posts/987654321012/")?.url).toBe("https://www.facebook.com/groups/123456789/posts/987654321012");
+    expect(canonicalProfileUrl("https://web.facebook.com/profile.php?id=61596612322186")).toBe("https://www.facebook.com/profile.php?id=61596612322186");
+  });
+});
+
+describe("isPostHref và link bài không bị nhầm là trang cá nhân", () => {
+  it("link thời gian của comment (bài + comment_id) là link bài, không phải trang cá nhân", () => {
+    const href = "https://www.facebook.com/lan.truongminh/posts/pfbid02AbCdEf123?comment_id=555&__cft__[0]=x";
+    expect(isPostHref(href)).toBe(true);
+    expect(canonicalProfileUrl(href)).toBeNull();
+    expect(profileUrlFromAnyLink(href)).toBeNull();
+  });
+
+  it("link trang cá nhân không phải link bài", () => {
+    expect(isPostHref("https://www.facebook.com/lan.truongminh")).toBe(false);
+    expect(isPostHref("https://www.facebook.com/profile.php?id=100012345678")).toBe(false);
+    expect(isPostHref("https://www.facebook.com/groups/1/user/100012345678/")).toBe(false);
   });
 });

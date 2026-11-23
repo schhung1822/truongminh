@@ -3,23 +3,51 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Trường Minh - Lead Facebook</title>
+    <title>Data Lead Facebook</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>Lead Facebook</h1>
+    <header class="top">
+      <img src="icon32.png" width="22" height="22" alt="" />
+      <h1>Data Lead Facebook</h1>
+      <span id="version" class="muted"></span>
+    </header>
 
     <section id="status" class="card" aria-live="polite">Đang kiểm tra kết nối...</section>
 
-    <section id="cycle" class="card muted" hidden></section>
+    <section id="guide" class="card guide" hidden>
+      <b>Bắt đầu trong 3 bước</b>
+      <ol>
+        <li>Trên webapp: <b>Lead Facebook › Kết nối extension</b> → thêm nick Facebook của bạn → <b>Tạo mã kết nối</b>, sao chép mã.</li>
+        <li>Bấm <b>Cài đặt</b> bên dưới, dán mã, bấm <b>Kết nối</b>.</li>
+        <li>Đăng nhập Facebook trên Chrome này bằng đúng nick đó. Mở một bài bạn đã đăng, bấm <b>Theo dõi bài này</b>.</li>
+      </ol>
+    </section>
+
+    <section id="activity" class="card" hidden></section>
 
     <div class="actions">
-      <button id="runNow" type="button">Quét ngay</button>
-      <button id="follow" type="button" class="secondary">Theo dõi bài này</button>
-      <button id="settings" type="button" class="link">Cài đặt</button>
+      <button id="runNow" type="button" title="Quét ngay các bài đang theo dõi, bỏ qua lịch chờ">Quét ngay</button>
+      <button id="follow" type="button" class="secondary" title="Thêm bài đang mở ở tab này vào danh sách theo dõi (phải là bài do nick của bạn đăng, mở ở trang riêng của bài)">Theo dõi bài này</button>
+    </div>
+    <div class="actions">
+      <button id="diagnose" type="button" class="secondary small" title="Đọc thử cấu trúc trang Facebook đang mở và tạo báo cáo (không chứa tên hay nội dung) để chỉnh bộ đọc">Chẩn đoán trang này</button>
+      <button id="copyReport" type="button" class="secondary small" hidden>Sao chép báo cáo</button>
+      <button id="settings" type="button" class="link small">Cài đặt &amp; hướng dẫn</button>
     </div>
     <p id="message" class="message" role="status"></p>
-    <p class="hint">Extension chỉ đọc comment trên bài do chính nick của bạn đăng và gửi về webapp. Nó không tự đăng, không tự comment, không tự bấm gửi.</p>
+
+    <details id="eventsBox">
+      <summary>Nhật ký gần đây</summary>
+      <ul id="events" class="events"></ul>
+    </details>
+
+    <nav class="links">
+      <a id="lnkLeads" href="#" target="_blank" rel="noopener">Lead</a> ·
+      <a id="lnkPosts" href="#" target="_blank" rel="noopener">Bài đăng</a> ·
+      <a id="lnkConnect" href="#" target="_blank" rel="noopener">Kết nối extension</a>
+    </nav>
+    <p class="hint">Extension chỉ đọc comment trên bài do chính nick của bạn đăng và gửi về webapp. Không tự đăng, không tự comment, không tự bấm gửi.</p>
 
     <script src="popup.js"></script>
   </body>

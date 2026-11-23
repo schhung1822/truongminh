@@ -24,6 +24,10 @@ export const ingestPayloadSchema = z.object({
   scanned_at: z.string().max(40).optional(),
   /** false = extension dừng giữa chừng (quá dài, lỗi); phần đã đọc vẫn được lưu. */
   complete: z.boolean().default(true),
+  /** Địa chỉ thật của bài sau khi Facebook chuyển hướng (link chia sẻ rút gọn -> permalink). Web dùng để cập nhật link bài. */
+  resolved_url: z.string().trim().max(600).nullish(),
+  /** Ghi chú của bộ đọc trang (ví dụ dùng mã tạm vì không thấy link thời gian). Chỉ để tra cứu. */
+  note: z.string().trim().max(300).nullish(),
   comments: z.array(commentInputSchema).max(3000, "Một lần gửi tối đa 3000 comment."),
 });
 

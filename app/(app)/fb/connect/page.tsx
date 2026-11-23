@@ -12,7 +12,29 @@ import { AccountActions, AccountForm, ConfigForm, RevokeButton, TokenForm } from
 export const metadata: Metadata = { title: "Kết nối extension" };
 
 const STATUS_LABEL = { ACTIVE: "Đang hoạt động", PAUSED: "Tạm dừng", RESTRICTED: "Bị hạn chế" } as const;
-const WARN_LABEL = { SELECTOR_BROKEN: "Không tìm thấy phần tử trên trang Facebook", CHECKPOINT: "Facebook yêu cầu xác minh / hạn chế nick" } as const;
+const WARN_LABEL: Record<string, string> = {
+  SELECTOR_BROKEN: "Không đọc được trang Facebook (giao diện có thể đã đổi)",
+  CHECKPOINT: "Facebook yêu cầu xác minh / hạn chế nick",
+  SCAN_FAIL: "Quét không trọn vẹn",
+};
+/** Lý do extension báo kèm trong detail.reason của SCAN_FAIL. */
+const REASON_LABEL: Record<string, string> = {
+  login_required: "Facebook hiện trang đăng nhập (hết phiên trên Chrome đó)",
+  tab_timeout: "Trang Facebook tải quá lâu",
+  content_unreachable: "Không nạp được bộ đọc trang vào tab Facebook",
+  tab_closed: "Cửa sổ quét bị đóng giữa chừng",
+  diagnostic: "Báo cáo chẩn đoán do nhân sự bấm gửi",
+  partial: "Đọc chưa hết bài (quá giới hạn), chu kỳ sau quét lại",
+};
+
+function warnText(type: string, detail: unknown): { label: string; detail: string } {
+  const d = (detail && typeof detail === "object" ? detail : {}) as Record<string, unknown>;
+  const reason = typeof d.reason === "string" ? d.reason : d.complete === false ? "partial" : null;
+  const label = type === "SCAN_FAIL" && reason ? (REASON_LABEL[reason] ?? `Lỗi quét: ${reason}`) : (WARN_LABEL[type] ?? type);
+  const rest = Object.fromEntries(Object.entries(d).filter(([k]) => !["reason", "post_id"].includes(k)));
+  const text = Object.keys(rest).length ? JSON.stringify(rest) : "";
+  return { label, detail: text.length > 300 ? text.slice(0, 300) + "…" : text };
+}
 
 function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 3600_000);
@@ -28,9 +50,9 @@ export default async function FbConnectPage() {
     db.fbAccount.findMany({ where: own, orderBy: { createdAt: "asc" }, include: { user: { select: { name: true } } } }),
     db.extToken.findMany({ where: own, orderBy: { createdAt: "desc" }, include: { account: { select: { displayName: true } }, user: { select: { name: true } } } }),
     db.extLog.findMany({
-      where: { type: { in: ["SELECTOR_BROKEN", "CHECKPOINT"] }, createdAt: { gte: since }, token: own },
+      where: { type: { in: ["SELECTOR_BROKEN", "CHECKPOINT", "SCAN_FAIL"] }, createdAt: { gte: since }, token: own },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 30,
       include: { token: { select: { label: true, account: { select: { displayName: true } } } } },
     }),
     getFbConfig(),
@@ -43,7 +65,7 @@ export default async function FbConnectPage() {
       <div>
         <h1 className="text-2xl font-semibold">Kết nối extension</h1>
         <p className="text-muted-foreground">
-          Extension Chrome chỉ đọc comment trên bài do nick của mình đăng rồi gửi về đây. Địa chỉ web nhập vào extension: <code className="rounded bg-muted px-1.5 py-0.5 text-sm">{appUrl}</code>
+          Extension Chrome &quot;Data Lead Facebook&quot; chỉ đọc comment trên bài do nick của mình đăng rồi gửi về đây. Extension được build sẵn cho địa chỉ <code className="rounded bg-muted px-1.5 py-0.5 text-sm">{appUrl}</code>, nhân sự chỉ cần dán mã kết nối vào phần Cài đặt của extension.
         </p>
       </div>
 
@@ -52,7 +74,7 @@ export default async function FbConnectPage() {
           <CardHeader>
             <CardTitle>Cảnh báo từ extension (14 ngày gần đây)</CardTitle>
             <CardDescription>
-              Báo &quot;không tìm thấy phần tử&quot; nghĩa là Facebook đã đổi giao diện, cần sửa selector. Báo xác minh / hạn chế thì nick đã tự bị ngừng giao việc, quản trị viên xem lại nick rồi mới bật lại.
+              Dòng &quot;không đọc được trang&quot; hoặc &quot;báo cáo chẩn đoán&quot;: gửi nội dung cột Chi tiết cho người phát triển để chỉnh bộ đọc. Dòng &quot;xác minh / hạn chế&quot;: nick đã tự bị ngừng giao việc, quản trị viên xem lại nick rồi mới bật lại. Dòng &quot;trang đăng nhập&quot;: nhân sự cần đăng nhập lại Facebook trên Chrome của họ.
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -66,16 +88,21 @@ export default async function FbConnectPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {warnings.map((w) => (
-                  <TableRow key={w.id}>
-                    <TableCell className="whitespace-nowrap">{fmtDateTime(w.createdAt)}</TableCell>
-                    <TableCell>{WARN_LABEL[w.type as keyof typeof WARN_LABEL] ?? w.type}</TableCell>
-                    <TableCell>
-                      {w.token.account.displayName} · {w.token.label}
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate text-muted-foreground">{w.detail ? JSON.stringify(w.detail) : ""}</TableCell>
-                  </TableRow>
-                ))}
+                {warnings.map((w) => {
+                  const t = warnText(w.type, w.detail);
+                  return (
+                    <TableRow key={w.id}>
+                      <TableCell className="whitespace-nowrap">{fmtDateTime(w.createdAt)}</TableCell>
+                      <TableCell>{t.label}</TableCell>
+                      <TableCell>
+                        {w.token.account.displayName} · {w.token.label}
+                      </TableCell>
+                      <TableCell className="max-w-md break-all text-xs text-muted-foreground" title={t.detail}>
+                        {t.detail}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>

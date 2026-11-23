@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { authenticateExt, extError } from "@/lib/ext/auth";
 import { ingestPayloadSchema } from "@/lib/fb/comments";
 import { ingestComments } from "@/lib/fb/ingest";
+import { releaseScanLease } from "@/lib/fb/lease";
 
 /** Giới hạn kích thước một lần gửi (3000 comment, mỗi comment tối đa vài nghìn ký tự). */
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
@@ -18,7 +19,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ postId: st
   if (account.status !== "ACTIVE") return extError(403, "ACCOUNT_INACTIVE", "Nick đang tạm dừng hoặc bị hạn chế, không nhận dữ liệu.");
 
   const { postId } = await ctx.params;
-  const post = await db.fbPost.findUnique({ where: { id: postId }, select: { id: true, accountId: true, groupId: true, purpose: true } });
+  const post = await db.fbPost.findUnique({ where: { id: postId }, select: { id: true, url: true, accountId: true, groupId: true, purpose: true } });
   if (!post || post.accountId !== account.id) return extError(404, "NOT_FOUND", "Bài này không có trong danh sách theo dõi của nick.");
 
   const raw = await request.text();
@@ -36,6 +37,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ postId: st
   }
 
   const r = await ingestComments({ post, account, tokenId: token.id, payload: parsed.data });
+  if (parsed.data.complete) releaseScanLease(post.id, token.id); // quét xong thì trả chỗ cho máy khác cùng nick (nếu có)
   return Response.json(
     { new_comments: r.newComments, updated_comments: r.updatedComments, new_leads: r.newLeads, lead_sources: r.leadSources },
     { headers: { "Cache-Control": "no-store" } },

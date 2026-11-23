@@ -246,16 +246,16 @@ Trên máy cá nhân bạn bấm đăng bằng tay trong mục **Kịch bản ch
 ```
 
 ### Lead Facebook (thu comment trên bài của mình, tách số điện thoại)
-Phòng marketing đăng bài lên nhóm Facebook; extension Chrome **chỉ đọc** comment trên các bài do chính nick của mình đăng và gửi về web, web tách số điện thoại và tạo lead. Không tự đăng, không tự comment, không tự bấm gửi. Thiết kế: `docs/thiet-ke-module-lead-facebook.md`; quyết định: D91 trong `docs/DECISIONS.md`.
+Phòng marketing đăng bài lên nhóm Facebook; extension Chrome **Data Lead Facebook** **chỉ đọc** comment trên các bài do chính nick của mình đăng và gửi về web, web tách số điện thoại và tạo lead. Không tự đăng, không tự comment, không tự bấm gửi. Thiết kế: `docs/thiet-ke-module-lead-facebook.md`; hướng dẫn đọc hiểu: `docs/huong-dan-lead-facebook.md`; quyết định: D91, D92 trong `docs/DECISIONS.md`.
 1. Cập nhật mã và CSDL trên VPS: `git pull`, `npx prisma migrate deploy` (thêm vai trò Marketing và các bảng `fb_*`, `ext_*`; **sao lưu CSDL trước**), `npm run build`, nạp lại web.
 2. **Quản trị > Người dùng**: tạo tài khoản vai trò **Marketing** cho nhân sự (Sale chỉ thấy lead được gán cho mình).
 3. Menu **Lead Facebook**: Marketing thêm nick Facebook và tạo mã kết nối ở **Kết nối extension**, thêm bài ở **Bài đăng**.
-4. Cài extension cho từng nhân sự: xem `extension/README.md` (build bằng `npm run ext:build`, địa chỉ web cố định lúc build bằng `APP_ORIGIN`).
+4. Cài extension cho từng nhân sự: xem `extension/README.md` (build bằng `npm run ext:build`, địa chỉ web cố định lúc build bằng `APP_ORIGIN`). Mỗi máy một mã kết nối; nhiều máy chạy song song được, web tự giữ chỗ để hai máy cùng nick không quét trùng một bài.
 5. (Không bắt buộc) Dọn comment Khác/Spam quá hạn và nhật ký cũ: đặt `FB_CRON_SECRET` (16 ký tự trở lên) trong `.env` rồi thêm vào `crontab -e` dòng chạy mỗi ngày:
 ```
 30 3 * * * curl -fsS -X POST -H "x-cron-secret: KHÓA_CỦA_BẠN" https://tên-miền/api/jobs/fb-retention >> /root/truongminh/backups/fb-retention.log 2>&1
 ```
-Chưa kiểm chứng trên Facebook thật: xem mục "Chưa kiểm chứng" trong `extension/README.md`.
+Chưa kiểm chứng trên Facebook thật: xem mục "Chưa kiểm chứng" trong `extension/README.md`. Khi quét không ra comment, nhân sự bấm **Chẩn đoán trang này** trong popup; báo cáo (không chứa dữ liệu cá nhân) hiện ở **Kết nối extension > Cảnh báo** để người phát triển chỉnh bộ đọc.
 
 ### Sự cố thường gặp
 | Hiện tượng | Cách xử lý |

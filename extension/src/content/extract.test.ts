@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 // @vitest-environment-options {"url": "https://www.facebook.com/groups/123456789/posts/987654321012/"}
 import { beforeEach, describe, expect, it } from "vitest";
-import { commentArticles, findClickable, mainPostArticle, readAllComments, readPostInfo, seeMoreButtons } from "./extract";
+import { commentArticles, diagnose, findClickable, mainPostArticle, mainPostRoot, postAuthorLink, readAllComments, readPostInfo, seeMoreButtons } from "./extract";
 
 /**
- * Kiểm tra logic đọc trang trên một trang HTML MÔ PHỎNG cấu trúc Facebook (article lồng nhau, link thời gian có comment_id,
+ * Kiểm tra logic đọc trang trên các trang HTML MÔ PHỎNG cấu trúc Facebook (article lồng nhau, link thời gian có comment_id,
  * nút "Xem thêm bình luận"...). Đây là giả định của người viết, KHÔNG phải trang Facebook thật: test chỉ chứng minh logic nhất quán
- * với giả định đó. Phải chạy thử trên bài thật (xem README mục "Chưa kiểm chứng").
+ * với giả định đó. Phải chạy thử trên bài thật (nút "Chẩn đoán trang này" cho ra báo cáo để chỉnh).
  */
 const FIXTURE = `
 <div role="article" aria-label="Bài viết của Lan Trường Minh">
@@ -16,8 +16,10 @@ const FIXTURE = `
   <div role="button" id="sort">Phù hợp nhất</div>
 
   <div role="article" aria-label="Bình luận của Nguyễn Văn A">
-    <a role="link" href="https://www.facebook.com/groups/123456789/user/200000001/"><span>Nguyễn Văn A</span></a>
+    <a role="link" href="https://www.facebook.com/groups/123456789/user/200000001/?comment_id=555"><span>Nguyễn Văn A</span></a>
+    <span>Tác giả</span>
     <div dir="auto"><div dir="auto">ib giá em nhé 0912.345.678</div></div>
+    <div role="button">Thích</div><div role="button">Phản hồi</div>
     <a href="https://www.facebook.com/groups/123456789/posts/987654321012/?comment_id=555&amp;__cft__[0]=y">2 giờ</a>
     <div role="article" aria-label="Phản hồi của Lan Trường Minh">
       <a role="link" href="https://www.facebook.com/groups/123456789/user/100012345678/"><span>Lan Trường Minh</span></a>
@@ -37,21 +39,39 @@ const FIXTURE = `
   <div role="button" id="send">Gửi</div>
 </div>`;
 
+/** Trang không có link thời gian kèm comment_id (giả định xấu nhất): chỉ còn aria-label và chữ. */
+const FIXTURE_NO_LINKS = `
+<div role="main">
+  <div data-ad-comet-preview="message"><div dir="auto">Bài không có article</div></div>
+  <h2><a href="https://www.facebook.com/profile.php?id=61596612322186">Hương Hương</a></h2>
+  <span>2 bình luận</span>
+  <div role="article" aria-label="Bình luận của Khách Một">
+    <a href="https://www.facebook.com/khach.mot">Khách Một</a>
+    <div dir="auto">cần báo giá 0912 345 678</div>
+    <a href="#">3 giờ</a>
+  </div>
+  <div role="article" aria-label="Bình luận của Hương Hương">
+    <a href="https://www.facebook.com/profile.php?id=61596612322186">Hương Hương</a>
+    <div dir="auto">đã nhắn bạn nhé 0901 234 567</div>
+  </div>
+</div>`;
+
 const OWN = { profileUrl: "https://www.facebook.com/lan.truongminh", displayName: "Lan Trường Minh" };
 
 beforeEach(() => {
   document.body.innerHTML = FIXTURE;
   // jsdom không có bố cục nên mọi phần tử có kích thước 0: giả lập "đang hiện" để hàm tìm nút hoạt động
   Element.prototype.getBoundingClientRect = () => ({ width: 10, height: 10, top: 0, left: 0, right: 10, bottom: 10, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+  Element.prototype.scrollIntoView = () => undefined;
 });
 
 describe("đọc comment", () => {
-  it("chỉ lấy article có link thời gian riêng, không lấy bài chính", () => {
+  it("chỉ lấy article là bình luận, không lấy bài chính", () => {
     expect(commentArticles()).toHaveLength(3);
     expect(mainPostArticle()?.getAttribute("aria-label")).toContain("Bài viết");
   });
 
-  it("đọc đủ 3 comment, đúng mã, mã cha, tên, link, thời gian", () => {
+  it("đọc đủ 3 comment, đúng mã, mã cha, tên, link, thời gian; link tên người viết có comment_id không bị nhầm là link thời gian", () => {
     const all = readAllComments(OWN);
     expect(all.map((c) => c.fb_comment_id).sort()).toEqual(["555", "556", "777"]);
     const a = all.find((c) => c.fb_comment_id === "555")!;
@@ -62,6 +82,7 @@ describe("đọc comment", () => {
       text: "ib giá em nhé 0912.345.678",
       time_text: "2 giờ",
       is_own: false,
+      fallbackId: false,
     });
     const reply = all.find((c) => c.fb_comment_id === "556")!;
     expect(reply.parent_fb_comment_id).toBe("555");
@@ -80,15 +101,44 @@ describe("đọc comment", () => {
     expect(all.find((c) => c.fb_comment_id === "556")!.is_own).toBe(true);
   });
 
-  it("bỏ nhãn 'Xem thêm' và giữ chữ của comment có link bên trong", () => {
+  it("bỏ nhãn 'Xem thêm', 'Tác giả' và giữ chữ của comment có link bên trong", () => {
     const c = readAllComments(OWN).find((x) => x.fb_comment_id === "777")!;
     expect(c.text).toBe("Mình quan tâm link bạn tư vấn giúp");
     expect(c.author_profile_url).toBe("https://www.facebook.com/tran.thi.b");
+    expect(readAllComments(OWN).find((x) => x.fb_comment_id === "555")!.text).not.toContain("Tác giả");
   });
 
   it("comment trả lời không làm lẫn nội dung vào comment cha", () => {
     const parent = readAllComments(OWN).find((c) => c.fb_comment_id === "555")!;
     expect(parent.text).not.toContain("Dạ em đã nhắn");
+  });
+});
+
+describe("trang không có link thời gian kèm comment_id (dự phòng)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = FIXTURE_NO_LINKS;
+  });
+  const own = { profileUrl: "https://www.facebook.com/profile.php?id=61596612322186", displayName: "Hương Hương" };
+
+  it("vẫn đọc được bình luận nhờ aria-label, dùng mã tạm ổn định, vẫn nhận ra comment của mình", () => {
+    const all = readAllComments(own);
+    expect(all).toHaveLength(2);
+    const guest = all.find((c) => c.author_name === "Khách Một")!;
+    expect(guest.fallbackId).toBe(true);
+    expect(guest.fb_comment_id).toMatch(/^h[a-z0-9]+$/);
+    expect(guest.text).toBe("cần báo giá 0912 345 678");
+    expect(guest.time_text).toBe("3 giờ");
+    expect(guest.is_own).toBe(false);
+    const mine = all.find((c) => c.author_name === "Hương Hương")!;
+    expect(mine.is_own).toBe(true);
+    // quét lại ra cùng mã
+    expect(readAllComments(own).find((c) => c.author_name === "Khách Một")!.fb_comment_id).toBe(guest.fb_comment_id);
+  });
+
+  it("không có article bài chính thì vẫn tìm được tác giả bài và vùng bài", () => {
+    expect(mainPostArticle()).toBeNull();
+    expect(mainPostRoot().getAttribute("role")).toBe("main");
+    expect(postAuthorLink(mainPostRoot())?.textContent).toBe("Hương Hương");
   });
 });
 
@@ -136,5 +186,21 @@ describe("thông tin bài cho nút Theo dõi bài này", () => {
   it("không có bài trên trang thì từ chối", () => {
     document.body.innerHTML = "<div>trống</div>";
     expect(readPostInfo().ok).toBe(false);
+  });
+});
+
+describe("báo cáo chẩn đoán", () => {
+  it("có số đếm, nhãn nút, mẫu link; KHÔNG chứa tên người, nội dung comment hay số điện thoại", () => {
+    const r = diagnose(OWN);
+    expect(r.counts).toMatchObject({ articles: 4, articlesWithCommentLink: 3, articlesWithCommentLabel: 3, commentsRead: 3, commentsWithFallbackId: 0, ownComments: 1 });
+    expect(r.buttons.viewMoreComments).toEqual(["Xem thêm 2 bình luận"]);
+    expect(r.sortButtonLabel).toBe("Phù hợp nhất");
+    expect(r.commentCountText).toBe("3 bình luận");
+    expect(r.postAuthorFound).toBe(true);
+    expect(r.mainPostFound).toBe(true);
+    expect(r.isPostUrl).toBe(true);
+    expect(r.linkPatterns.some((p) => p.includes("comment_id"))).toBe(true);
+    const text = JSON.stringify(r);
+    for (const secret of ["Nguyễn Văn A", "Trần Thị B", "0912", "0987654321", "ib giá", "200000001", "100012345678"]) expect(text, secret).not.toContain(secret);
   });
 });

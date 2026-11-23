@@ -1,23 +1,25 @@
 {
   "manifest_version": 3,
-  "name": "Trường Minh - Lead Facebook",
-  "version": "0.1.0",
-  "description": "Đọc comment trên bài do chính nick của bạn đăng và gửi về webapp Trường Minh để tách số điện thoại. Không tự đăng, không tự comment, không tự bấm gửi bất cứ thứ gì lên Facebook.",
-  "permissions": ["storage", "alarms", "tabs"],
-  "host_permissions": ["https://www.facebook.com/*", "__APP_ORIGIN__/*"],
+  "name": "Data Lead Facebook",
+  "version": "0.2.0",
+  "description": "Đọc comment trên bài do chính nick của bạn đăng và gửi về webapp để tách số điện thoại thành lead. Không tự đăng, không tự comment, không tự bấm gửi bất cứ thứ gì lên Facebook.",
+  "permissions": ["storage", "alarms", "tabs", "scripting", "notifications"],
+  "host_permissions": ["https://*.facebook.com/*", "__APP_ORIGIN__/*"],
+  "icons": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png", "128": "icon128.png" },
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://www.facebook.com/*"],
+      "matches": ["https://*.facebook.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "Trường Minh - Lead Facebook",
-    "default_popup": "popup.html"
+    "default_title": "Data Lead Facebook",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png", "128": "icon128.png" }
   },
   "options_ui": {
     "page": "options.html",
