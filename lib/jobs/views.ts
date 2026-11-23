@@ -3,6 +3,7 @@ import type { SessionUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { canEditOwned } from "@/lib/permissions";
 import { fileUrl } from "@/lib/storage";
+import { hintForError } from "./error-hint";
 import { compareSessionImages } from "./order";
 import { expectedDurationMs } from "./progress";
 import type { LayoutSnapshot } from "./snapshot";
@@ -31,6 +32,7 @@ export async function loadSessionViews(sessionId: string, user: SessionUser): Pr
       finalUrl: img.status === "SUCCESS" ? fileUrl(img.finalPath) : null,
       downloadUrl: img.status === "SUCCESS" ? `/api/images/${img.id}/download` : null,
       errorDetail: user.role === "ADMIN" ? img.errorMessage : null,
+      errorHint: img.status === "FAILED" ? hintForError(img.errorMessage) : null,
       attempt: img.attempt,
       ageMs: Date.now() - img.createdAt.getTime(),
       expectedMs: expectedDurationMs(img.resolution),

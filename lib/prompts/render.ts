@@ -46,6 +46,14 @@ export function renderPrompt(template: string, values: Partial<Record<PromptVari
   });
 }
 
+/**
+ * Câu dặn AI khi lượt thiết kế có thêm một ảnh phong cách tham khảo (sale chọn từ Pinterest). `refIndex` là số thứ
+ * tự ảnh tham chiếu đó (ảnh thiết kế luôn có ảnh 1 = logo, ảnh 2 = chất liệu, nên ảnh phong cách luôn là ảnh 3).
+ */
+export function styleReferenceNote(refIndex: number): string {
+  return `Reference image ${refIndex} is a style/mood reference photo chosen by the sales team: use ONLY its overall visual style (colour palette, mood, lighting, composition, background setting) as inspiration. Do NOT copy its logo, text, specific object shape or any other content from it — the product and logo already described above always take priority over reference image ${refIndex}.`;
+}
+
 export type MaterialForPrompt = { printTech: string; technique?: string | null };
 
 /**

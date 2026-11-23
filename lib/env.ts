@@ -36,6 +36,15 @@ const schema = z.object({
   ZALO_CARE_CRON_SECRET: z.string().min(16).max(256).optional(),
   // Khóa để máy chủ (cron) gọi /api/jobs/fb-retention dọn dữ liệu cũ của module Lead Facebook. Bỏ trống = tắt đường gọi này.
   FB_CRON_SECRET: z.string().min(16).max(256).optional(),
+  // App Pinterest Developer (developers.pinterest.com), dùng để kết nối tài khoản Pinterest của xưởng và đọc board/pin
+  // đã lưu. Bỏ trống hai biến này = chưa thể kết nối/đồng bộ Pinterest, không ảnh hưởng phần còn lại. Redirect URI đăng ký ở Pinterest
+  // phải là đúng "<APP_URL>/api/pinterest/oauth/callback".
+  PINTEREST_CLIENT_ID: z.string().optional(),
+  PINTEREST_CLIENT_SECRET: z.string().optional(),
+  PINTEREST_INCLUDE_SECRET_BOARDS: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
 });
 
 export type Env = z.infer<typeof schema>;
@@ -78,6 +87,20 @@ export function getEnv(): Env {
   }
   cached = env;
   return env;
+}
+
+export type PinterestConfig = { clientId: string; clientSecret: string; redirectUri: string; scopes: readonly string[] };
+
+/** Cấu hình App Pinterest Developer; null = chưa cấu hình nên chưa thể kết nối/đồng bộ. */
+export function getPinterestConfig(env: Env = getEnv()): PinterestConfig | null {
+  if (!env.PINTEREST_CLIENT_ID || !env.PINTEREST_CLIENT_SECRET) return null;
+  const publicScopes = ["boards:read", "pins:read", "user_accounts:read"];
+  return {
+    clientId: env.PINTEREST_CLIENT_ID,
+    clientSecret: env.PINTEREST_CLIENT_SECRET,
+    redirectUri: `${env.APP_URL.replace(/\/+$/, "")}/api/pinterest/oauth/callback`,
+    scopes: env.PINTEREST_INCLUDE_SECRET_BOARDS ? [...publicScopes, "boards:read_secret", "pins:read_secret"] : publicScopes,
+  };
 }
 
 export type R2Config = { accountId: string; accessKeyId: string; secretAccessKey: string; bucket: string; publicUrl: string };

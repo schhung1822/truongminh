@@ -1,72 +1,59 @@
 import type { Metadata } from "next";
-import { SearchIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, InboxIcon, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import { getEnv } from "@/lib/env";
-import { canManageFb } from "@/lib/fb/access";
 import { fmtDateTime } from "@/lib/fb/format";
-import { zonedStartOfDay } from "@/lib/time";
-import { LeadDetailDialog, QuickStatus, STATUS_LABEL, type LeadRow } from "./leads-client";
+import { parseLeadFilters } from "@/lib/fb/lead-filters";
+import { pageWindow } from "@/lib/pagination";
+import { LeadFilterForm } from "./lead-filter-form";
+import { PAGE_SIZES, STATUS_LABEL, STATUS_TONE } from "./lead-status";
+import { LeadsTable, type LeadRow } from "./leads-client";
 
 export const metadata: Metadata = { title: "Lead Facebook" };
 
-const LIMIT = 200;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const STATUS_VALUES = Object.keys(STATUS_LABEL);
-
-type Params = { q?: string; status?: string; group?: string; assigned?: string; type?: string; from?: string; to?: string };
+type Params = { q?: string; status?: string; group?: string; assigned?: string; type?: string; from?: string; to?: string; page?: string; size?: string; sort?: string };
 
 export default async function FbLeadsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const user = await requireUser();
-  const manager = canManageFb(user.role);
   const params = await searchParams;
   const q = (params.q ?? "").trim();
-  const tz = getEnv().APP_TIMEZONE;
-  const fromDate = zonedStartOfDay(params.from ?? "", tz);
-  const toStart = zonedStartOfDay(params.to ?? "", tz);
-  const toEnd = toStart ? new Date(toStart.getTime() + DAY_MS) : null;
-  const status = STATUS_VALUES.includes(params.status ?? "") ? (params.status as LeadRow["status"]) : "";
   const type = params.type === "CUSTOMER" || params.type === "SUPPLIER" ? params.type : "";
   const group = params.group ?? "";
   const assigned = params.assigned ?? "";
-  const filtering = !!(q || status || type || group || assigned || fromDate || toEnd);
+  const oldestFirst = params.sort === "old";
+  const pageSize = PAGE_SIZES.find((n) => String(n) === params.size) ?? PAGE_SIZES[0];
+  const { where, base, status, manager, filtering } = parseLeadFilters(user, params);
 
-  const and: Prisma.FbLeadWhereInput[] = [];
-  if (!manager) and.push({ assignedToId: user.id }); // sale chỉ thấy lead được gán cho mình
-  else if (assigned === "me") and.push({ assignedToId: user.id });
-  else if (assigned === "none") and.push({ assignedToId: null });
-  else if (assigned) and.push({ assignedToId: assigned });
-  if (status) and.push({ status: status as Prisma.FbLeadWhereInput["status"] });
-  if (type) and.push({ leadType: type });
-  if (group) and.push({ groupId: group });
-  if (fromDate || toEnd) and.push({ createdAt: { ...(fromDate ? { gte: fromDate } : {}), ...(toEnd ? { lt: toEnd } : {}) } });
-  if (q) and.push({ OR: [{ name: { contains: q } }, { phone: { contains: q.replace(/[\s.\-]/g, "") } }, { email: { contains: q } }, { zalo: { contains: q.replace(/[\s.\-]/g, "") } }] });
-
-  const [leads, groups, users, newCount] = await Promise.all([
-    db.fbLead.findMany({
-      where: { AND: and },
-      orderBy: { createdAt: "desc" },
-      take: LIMIT,
-      include: {
-        group: { select: { name: true } },
-        post: { select: { url: true } },
-        customer: { select: { name: true } },
-        comment: { select: { text: true } },
-        _count: { select: { sources: true } },
-      },
-    }),
+  const [statusGroups, groups, users] = await Promise.all([
+    db.fbLead.groupBy({ by: ["status"], where: { AND: base }, _count: { _all: true } }),
     manager ? db.fbGroup.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }) : Promise.resolve([]),
     manager ? db.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : Promise.resolve(null),
-    db.fbLead.count({ where: { AND: [...and.filter((c) => !("status" in c)), { status: "NEW" }] } }),
   ]);
-  const userName = new Map((users ?? []).map((u) => [u.id, u.name]));
+  const countOf = new Map(statusGroups.map((g) => [g.status as string, g._count._all]));
+  const allCount = statusGroups.reduce((s, g) => s + g._count._all, 0);
+  const total = status ? (countOf.get(status) ?? 0) : allCount;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1), totalPages);
+
+  const leads = await db.fbLead.findMany({
+    where,
+    orderBy: [{ createdAt: oldestFirst ? "asc" : "desc" }, { id: "asc" }],
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    include: {
+      group: { select: { name: true } },
+      post: { select: { url: true } },
+      customer: { select: { name: true } },
+      comment: { select: { text: true } },
+      _count: { select: { sources: true } },
+    },
+  });
+  const userNames: Record<string, string> = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]));
 
   const rows: LeadRow[] = leads.map((l) => ({
     id: l.id,
@@ -83,40 +70,98 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
     note: l.note ?? "",
     groupName: l.group?.name ?? null,
     postUrl: l.post.url,
-    snippet: l.comment.text.slice(0, 120),
+    snippet: l.comment.text.slice(0, 160),
     createdAt: fmtDateTime(l.createdAt),
     sourceCount: l._count.sources,
   }));
 
+  /** Link giữ nguyên các bộ lọc đang chọn, chỉ đổi những khóa được truyền vào (giá trị rỗng = bỏ khóa đó). */
+  const href = (over: Record<string, string | undefined>) => {
+    const sp = new URLSearchParams();
+    const cur: Record<string, string | undefined> = {
+      q: q || undefined,
+      status: status || undefined,
+      type: type || undefined,
+      group: group || undefined,
+      assigned: assigned || undefined,
+      from: params.from || undefined,
+      to: params.to || undefined,
+      sort: oldestFirst ? "old" : undefined,
+      size: pageSize !== PAGE_SIZES[0] ? String(pageSize) : undefined,
+      ...over,
+    };
+    for (const [k, v] of Object.entries(cur)) if (v) sp.set(k, v);
+    const s = sp.toString();
+    return s ? `/fb/leads?${s}` : "/fb/leads";
+  };
+
+  /** Xuất CSV đúng theo bộ lọc đang xem (không phân trang). */
+  const exportHref = () => {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries({ q, status, type, group, assigned, from: params.from, to: params.to, sort: oldestFirst ? "old" : undefined })) {
+      if (v) sp.set(k, v);
+    }
+    const s = sp.toString();
+    return s ? `/api/fb/leads/export?${s}` : "/api/fb/leads/export";
+  };
+
+  const firstShown = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastShown = Math.min(total, page * pageSize);
+  const newCount = countOf.get("NEW") ?? 0;
+
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Lead Facebook</h1>
-        <p className="text-muted-foreground">
-          {manager ? "Khách để lại số điện thoại hoặc liên hệ trong comment trên các bài đang theo dõi." : "Các lead được gán cho bạn."}{" "}
-          {newCount > 0 && <Badge>{newCount} lead mới</Badge>}
-        </p>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Lead Facebook</h1>
+          <p className="text-muted-foreground">
+            {manager ? "Khách để lại số điện thoại hoặc liên hệ trong comment trên các bài đang theo dõi." : "Các lead được gán cho bạn."}
+          </p>
+        </div>
+        {newCount > 0 && status !== "NEW" && (
+          <Button variant="outline" render={<Link href={href({ status: "NEW", page: undefined })} />}>
+            Có {newCount} lead mới chưa xử lý
+          </Button>
+        )}
+      </div>
+
+      {/* Nút lọc nhanh theo trạng thái, kèm số lượng */}
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Lọc theo trạng thái">
+        <Link
+          href={href({ status: undefined, page: undefined })}
+          aria-current={status === "" ? "page" : undefined}
+          className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${status === "" ? "border-foreground bg-foreground text-background" : "hover:bg-muted"}`}
+        >
+          Tất cả <span className="ml-1 tabular-nums opacity-80">{allCount}</span>
+        </Link>
+        {Object.entries(STATUS_LABEL).map(([v, label]) => (
+          <Link
+            key={v}
+            href={href({ status: v, page: undefined })}
+            aria-current={status === v ? "page" : undefined}
+            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${status === v ? "border-foreground bg-foreground text-background" : `${STATUS_TONE[v]} hover:brightness-95`}`}
+          >
+            {label} <span className="ml-1 tabular-nums opacity-80">{countOf.get(v) ?? 0}</span>
+          </Link>
+        ))}
       </div>
 
       <Card>
         <CardContent>
-          <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" action="/fb/leads">
+          <LeadFilterForm>
+            <input type="hidden" name="status" value={status} />
             <div className="relative lg:col-span-2">
               <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input name="q" defaultValue={q} placeholder="Tìm theo tên, số điện thoại, Zalo, email" className="h-10 pl-9" />
+              <Input name="q" defaultValue={q} placeholder="Tìm theo tên, số điện thoại, Zalo, email, rồi nhấn Enter" className="h-10 pl-9" />
             </div>
-            <NativeSelect name="status" defaultValue={status} aria-label="Trạng thái">
-              <option value="">Mọi trạng thái</option>
-              {Object.entries(STATUS_LABEL).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </NativeSelect>
             <NativeSelect name="type" defaultValue={type} aria-label="Loại lead">
               <option value="">Khách và bên sản xuất</option>
               <option value="CUSTOMER">Tìm khách</option>
               <option value="SUPPLIER">Tìm bên sản xuất</option>
+            </NativeSelect>
+            <NativeSelect name="sort" defaultValue={oldestFirst ? "old" : "new"} aria-label="Sắp xếp">
+              <option value="new">Mới nhất trước</option>
+              <option value="old">Cũ nhất trước</option>
             </NativeSelect>
             {manager && (
               <>
@@ -140,79 +185,120 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
                 </NativeSelect>
               </>
             )}
-            <Input name="from" type="date" defaultValue={params.from ?? ""} aria-label="Từ ngày" className="h-10" />
-            <Input name="to" type="date" defaultValue={params.to ?? ""} aria-label="Đến ngày" className="h-10" />
+            <Input name="from" type="date" defaultValue={params.from ?? ""} aria-label="Từ ngày" title="Từ ngày" className="h-10" />
+            <Input name="to" type="date" defaultValue={params.to ?? ""} aria-label="Đến ngày" title="Đến ngày" className="h-10" />
+            <NativeSelect name="size" defaultValue={String(pageSize)} aria-label="Số dòng mỗi trang">
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n} dòng / trang
+                </option>
+              ))}
+            </NativeSelect>
             <div className="flex gap-2">
               <Button type="submit" className="h-10 px-4">
                 Lọc
               </Button>
               {filtering && (
-                <Button type="button" variant="outline" className="h-10 px-4" render={<a href="/fb/leads" />}>
+                <Button type="button" variant="outline" className="h-10 px-4" render={<Link href="/fb/leads" />}>
                   Xoá lọc
                 </Button>
               )}
             </div>
-          </form>
+          </LeadFilterForm>
         </CardContent>
       </Card>
 
       <Card>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+            <span>
+              {total === 0 ? "Không có lead nào" : `Đang xem ${firstShown}–${lastShown} trên ${total} lead`}
+              {filtering && total > 0 ? " (đã lọc)" : ""}
+            </span>
+            <div className="flex items-center gap-3">
+              {total > 0 && (
+                <a href={exportHref()} className="flex items-center gap-1 underline underline-offset-4 hover:text-foreground" title="Xuất danh sách đang xem ra file CSV (mở được bằng Excel)">
+                  <DownloadIcon className="size-3.5" /> Xuất Excel
+                </a>
+              )}
+              {totalPages > 1 && (
+                <span>
+                  Trang {page}/{totalPages}
+                </span>
+              )}
+            </div>
+          </div>
+
           {rows.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              {filtering ? "Không có lead nào khớp bộ lọc." : manager ? "Chưa có lead nào. Lead xuất hiện sau khi extension quét comment có số điện thoại." : "Chưa có lead nào được gán cho bạn."}
-            </p>
+            <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
+              <InboxIcon className="size-8 opacity-60" />
+              <p>
+                {filtering
+                  ? "Không có lead nào khớp bộ lọc."
+                  : manager
+                    ? "Chưa có lead nào. Lead xuất hiện sau khi extension quét được comment có số điện thoại."
+                    : "Chưa có lead nào được gán cho bạn."}
+              </p>
+              {filtering && (
+                <Button variant="outline" size="sm" render={<Link href="/fb/leads" />}>
+                  Xoá lọc
+                </Button>
+              )}
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Khách</TableHead>
-                  <TableHead>Liên hệ</TableHead>
-                  <TableHead>Nguồn</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead>Phụ trách</TableHead>
-                  <TableHead>Lúc</TableHead>
-                  <TableHead className="text-right">Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="max-w-48">
-                      <div className="truncate font-medium">{r.name}</div>
-                      <div className="truncate text-xs text-muted-foreground" title={r.snippet}>
-                        {r.snippet}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {r.phone && <div className="select-all font-medium">{r.phone}</div>}
-                      {r.zalo && r.zalo !== r.phone && <div className="text-xs">Zalo {r.zalo}</div>}
-                      {r.email && <div className="text-xs">{r.email}</div>}
-                    </TableCell>
-                    <TableCell className="max-w-44 text-sm">
-                      <div className="truncate">{r.groupName ?? "Trang cá nhân"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {r.leadType === "SUPPLIER" ? "Tìm bên sản xuất" : "Tìm khách"}
-                        {r.sourceCount > 1 ? ` · ${r.sourceCount} comment` : ""}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <QuickStatus id={r.id} status={r.status} note={r.note} />
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {r.assignedToId ? (userName.get(r.assignedToId) ?? (r.assignedToId === user.id ? user.name : "Đã gán")) : <span className="text-muted-foreground">Chưa gán</span>}
-                      {r.customerName && <div className="text-xs text-muted-foreground">Khách: {r.customerName}</div>}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm">{r.createdAt}</TableCell>
-                    <TableCell className="text-right">
-                      <LeadDetailDialog lead={r} assignable={users} canDelete={user.role === "ADMIN"} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <LeadsTable
+              rows={rows}
+              assignable={users}
+              canDelete={user.role === "ADMIN"}
+              currentUserId={user.id}
+              currentUserName={user.name}
+              userNames={userNames}
+            />
           )}
-          {rows.length === LIMIT && <p className="pt-3 text-xs text-muted-foreground">Đang hiện {LIMIT} lead mới nhất. Dùng bộ lọc để thu hẹp.</p>}
+
+          {totalPages > 1 && (
+            <nav aria-label="Phân trang" className="flex flex-wrap items-center justify-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                render={page <= 1 ? undefined : <Link href={href({ page: String(page - 1) })} />}
+                nativeButton={page <= 1}
+              >
+                <ChevronLeftIcon />
+                Trước
+              </Button>
+              {pageWindow(page, totalPages).map((n, i) =>
+                n === null ? (
+                  <span key={`gap-${i}`} className="px-1 text-muted-foreground">
+                    …
+                  </span>
+                ) : (
+                  <Button
+                    key={n}
+                    variant={n === page ? "default" : "outline"}
+                    size="sm"
+                    className="min-w-8 tabular-nums"
+                    aria-current={n === page ? "page" : undefined}
+                    render={<Link href={href({ page: n === 1 ? undefined : String(n) })} />}
+                    nativeButton={false}
+                  >
+                    {n}
+                  </Button>
+                ),
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                render={page >= totalPages ? undefined : <Link href={href({ page: String(page + 1) })} />}
+                nativeButton={page >= totalPages}
+              >
+                Sau
+                <ChevronRightIcon />
+              </Button>
+            </nav>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -4,7 +4,7 @@ import type { SessionUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { assignStyles, validateDesignRequest } from "@/lib/design/assign";
 import { finishRuleOf } from "@/lib/prompts/finish";
-import { renderDesignPrompt } from "@/lib/prompts/render";
+import { renderDesignPrompt, styleReferenceNote } from "@/lib/prompts/render";
 import { getSettings, type Settings } from "@/lib/settings";
 import type { BuiltImage } from "./built";
 import { assertQuota, todayKey } from "./limits";
@@ -24,6 +24,9 @@ type MaterialRow = {
 type StyleRow = { id: string; name: string; description: string };
 
 /** Dựng dữ liệu MỘT ảnh thiết kế: một chất liệu + một kiểu thiết kế + loại sản phẩm + ghi chú. Dùng cho tạo mới và tạo lại. */
+/** Ảnh thiết kế luôn có ảnh tham chiếu 1 = logo, 2 = chất liệu; ảnh phong cách tham khảo (nếu có) luôn là ảnh thứ 3. */
+const STYLE_REF_INDEX = 3;
+
 export function buildDesignImage(input: {
   material: MaterialRow;
   style: StyleRow;
@@ -33,6 +36,8 @@ export function buildDesignImage(input: {
   note: string;
   template: Template;
   settings: Settings;
+  /** PinterestPin.id dùng làm ảnh phong cách tham khảo thêm cho AI; không bắt buộc */
+  styleRefPinId?: string;
 }): { error: string } | { data: BuiltImage } {
   const { material, style, template, settings } = input;
   if (!material.referencePath) {
@@ -52,6 +57,7 @@ export function buildDesignImage(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Không sinh được prompt." };
   }
+  if (input.styleRefPinId) promptUsed += "\n\n" + styleReferenceNote(STYLE_REF_INDEX);
 
   const snapshot: LayoutSnapshot = {
     cols: 1,
@@ -67,7 +73,7 @@ export function buildDesignImage(input: {
         printTech: material.printTech,
       },
     ],
-    design: { productType: input.productType, styleName: style.name, note: input.note },
+    design: { productType: input.productType, styleName: style.name, note: input.note, ...(input.styleRefPinId ? { pinterestPinId: input.styleRefPinId } : {}) },
   };
 
   return {
@@ -93,7 +99,7 @@ export function buildDesignImage(input: {
  */
 export async function createDesignSession(
   user: SessionUser,
-  input: { parentSessionId: string; materialIds: string[]; productType: string; variants: number; note: string },
+  input: { parentSessionId: string; materialIds: string[]; productType: string; variants: number; note: string; styleRefPinId?: string },
 ): Promise<{ error?: string; sessionId?: string }> {
   const materialIds = [...new Set(input.materialIds)];
   const productType = input.productType.trim().slice(0, 200);
@@ -101,6 +107,11 @@ export async function createDesignSession(
 
   const invalid = validateDesignRequest({ materialCount: materialIds.length, variants: input.variants, productType });
   if (invalid) return { error: invalid };
+
+  if (input.styleRefPinId) {
+    const pin = await db.pinterestPin.findUnique({ where: { id: input.styleRefPinId }, select: { id: true } });
+    if (!pin) return { error: "Không tìm thấy ảnh phong cách tham khảo đã chọn. Hãy chọn lại." };
+  }
 
   const parent = await db.consultSession.findUnique({
     where: { id: input.parentSessionId },
@@ -155,6 +166,7 @@ export async function createDesignSession(
         note,
         template,
         settings,
+        styleRefPinId: input.styleRefPinId,
       });
       if ("error" in r) return { error: r.error };
       built.push(r.data);
@@ -220,6 +232,7 @@ export async function rebuildDesignImage(old: {
     note: session.note ?? "",
     template,
     settings,
+    styleRefPinId: snap.design?.pinterestPinId, // giữ nguyên ảnh phong cách tham khảo (nếu có) khi tạo lại
   });
   if ("error" in built || (!snap.labelPos && !snap.labelStyle)) return built;
   // giữ kiểu và vị trí nhãn người dùng đã chọn cho ảnh cũ

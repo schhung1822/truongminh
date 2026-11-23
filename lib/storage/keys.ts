@@ -59,6 +59,11 @@ export const safeExt = (ext: string) => {
   return EXTS.has(e) ? (e === "jpeg" ? "jpg" : e) : "bin";
 };
 
+/** Bản tải về của một pin Pinterest (ảnh phong cách tham khảo), tải một lần rồi dùng lại, xem lib/jobs/pinterest-reference.ts. */
+export function pinterestKey(pinterestPinId: string): string {
+  return `pinterest/${pinterestPinId}.jpg`;
+}
+
 export function logoKey(customerId: string, ext: string): string {
   return `logos/${customerId}/${randomId(16)}.${safeExt(ext)}`;
 }

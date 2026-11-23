@@ -71,8 +71,8 @@ model User {
   updatedAt    DateTime @updatedAt
 
   authSessions      AuthSession[]
-  ownedCustomers    Customer[]       @relation("CustomerOwner")
-  createdCustomers  Customer[]       @relation("CustomerCreator")
+  ownedCustomers    Customer[]         @relation("CustomerOwner")
+  createdCustomers  Customer[]         @relation("CustomerCreator")
   createdBrands     Brand[]
   createdLogos      Logo[]
   consultSessions   ConsultSession[]
@@ -84,8 +84,9 @@ model User {
   quotes            Quote[]
   fbAccounts        FbAccount[]
   extTokens         ExtToken[]
-  assignedFbLeads   FbLead[]         @relation("FbLeadAssignee")
-  registeredFbPosts FbPost[]         @relation("FbPostRegistrar")
+  assignedFbLeads   FbLead[]           @relation("FbLeadAssignee")
+  registeredFbPosts FbPost[]           @relation("FbPostRegistrar")
+  pinterestAccounts PinterestAccount[]
 
   @@map("users")
 }
@@ -1200,4 +1201,70 @@ model ExtLog {
   @@index([tokenId, createdAt])
   @@index([type, createdAt])
   @@map("ext_logs")
+}
+
+// Tài khoản Pinterest dùng chung của xưởng (chỉ admin kết nối). Token mã hóa bằng lib/crypto/secret-box (cùng khóa
+// ZALO_ACCOUNT_KEY/.secret-key đang dùng cho Zalo cá nhân — tên biến cũ nhưng dùng chung cho mọi bí mật của hệ thống).
+model PinterestAccount {
+  id                    String    @id @default(cuid())
+  pinterestUserId       String    @unique @db.VarChar(40)
+  username              String    @db.VarChar(100)
+  profileImageUrl       String?   @db.VarChar(500)
+  accessTokenEnc        String    @db.Text
+  refreshTokenEnc       String    @db.Text
+  accessTokenExpiresAt  DateTime
+  refreshTokenExpiresAt DateTime
+  scope                 String    @db.VarChar(300)
+  connectedById         String
+  lastSyncedAt          DateTime?
+  lastSyncError         String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  connectedBy User             @relation(fields: [connectedById], references: [id])
+  boards      PinterestBoard[]
+
+  @@map("pinterest_accounts")
+}
+
+model PinterestBoard {
+  id               String    @id @default(cuid())
+  accountId        String
+  pinterestBoardId String    @unique @db.VarChar(40)
+  name             String    @db.VarChar(200)
+  description      String?   @db.Text
+  privacy          String    @db.VarChar(20) // PUBLIC / PROTECTED / SECRET (nguyên văn Pinterest trả về)
+  pinCount         Int       @default(0)
+  coverImageUrl    String?   @db.VarChar(500)
+  lastSyncedAt     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  account PinterestAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  pins    PinterestPin[]
+
+  @@index([accountId])
+  @@map("pinterest_boards")
+}
+
+// Ảnh gốc (sourceImageUrl, trên i.pinimg.com) dùng để hiển thị; localPath/kieRefUrl chỉ tạo khi pin được chọn làm
+// ảnh phong cách tham khảo cho AI (tải về kho một lần, xem lib/jobs/pinterest-reference.ts).
+model PinterestPin {
+  id              String    @id @default(cuid())
+  boardId         String
+  pinterestPinId  String    @unique @db.VarChar(40)
+  title           String?   @db.VarChar(200)
+  description     String?   @db.Text
+  altText         String?   @db.VarChar(500)
+  sourceImageUrl  String    @db.VarChar(500)
+  localPath       String?   @db.VarChar(500)
+  kieRefUrl       String?   @db.VarChar(500)
+  kieRefExpiresAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  board PinterestBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId])
+  @@map("pinterest_pins")
 }

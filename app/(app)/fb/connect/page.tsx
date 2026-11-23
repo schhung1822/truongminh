@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import { AlertTriangleIcon, CheckCircle2Icon, CircleHelpIcon, TriangleAlertIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { getFbConfig } from "@/lib/ext/config";
@@ -40,6 +43,51 @@ function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 3600_000);
 }
 
+type Health = "empty" | "red" | "yellow" | "green";
+
+/**
+ * Ô tổng quan dạng "đèn tín hiệu" ở đầu trang: để người không rành kỹ thuật chỉ cần nhìn một ô là biết có cần làm
+ * gì không, không phải đọc hết bảng log phía dưới.
+ */
+function HealthBanner({ health, restrictedCount, warningCount }: { health: Health; restrictedCount: number; warningCount: number }) {
+  const styles: Record<Health, { box: string; icon: ReactNode; title: string; detail: string }> = {
+    empty: {
+      box: "border-muted-foreground/30 bg-muted/40 text-foreground",
+      icon: <CircleHelpIcon className="size-6 shrink-0 text-muted-foreground" />,
+      title: "Chưa kết nối nick Facebook nào",
+      detail: "Thêm nick Facebook ở mục \"Nick Facebook\" dưới đây rồi tạo mã kết nối để extension bắt đầu quét.",
+    },
+    red: {
+      box: "border-red-500/40 bg-red-500/10 text-red-900 dark:text-red-200",
+      icon: <AlertTriangleIcon className="size-6 shrink-0 text-red-600" />,
+      title: "Cần xử lý ngay",
+      detail: `${restrictedCount} nick đang bị Facebook hạn chế, không quét được. Xem mục "Nick Facebook" để kiểm tra lại.`,
+    },
+    yellow: {
+      box: "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200",
+      icon: <TriangleAlertIcon className="size-6 shrink-0 text-amber-600" />,
+      title: "Có cảnh báo cần xem",
+      detail: `${warningCount} cảnh báo trong 14 ngày qua (xem bảng "Cảnh báo từ extension" dưới đây). Việc quét vẫn chạy nhưng có thể bị thiếu.`,
+    },
+    green: {
+      box: "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200",
+      icon: <CheckCircle2Icon className="size-6 shrink-0 text-emerald-600" />,
+      title: "Mọi thứ ổn",
+      detail: "Không có nick nào bị hạn chế, không có cảnh báo nào trong 14 ngày qua.",
+    },
+  };
+  const s = styles[health];
+  return (
+    <div className={cn("flex items-start gap-3 rounded-xl border p-4", s.box)}>
+      {s.icon}
+      <div>
+        <p className="font-semibold">{s.title}</p>
+        <p className="text-sm opacity-90">{s.detail}</p>
+      </div>
+    </div>
+  );
+}
+
 export default async function FbConnectPage() {
   const user = await requireFbManager();
   const isAdmin = user.role === "ADMIN";
@@ -59,6 +107,8 @@ export default async function FbConnectPage() {
     isAdmin ? db.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : Promise.resolve(null),
   ]);
   const appUrl = getEnv().APP_URL.replace(/\/$/, "");
+  const restrictedCount = accounts.filter((a) => a.status === "RESTRICTED").length;
+  const health: Health = accounts.length === 0 ? "empty" : restrictedCount > 0 ? "red" : warnings.length > 0 ? "yellow" : "green";
 
   return (
     <div className="flex flex-col gap-6">
@@ -68,6 +118,8 @@ export default async function FbConnectPage() {
           Extension Chrome &quot;Data Lead Facebook&quot; đọc comment trên những bài người dùng chủ động theo dõi rồi gửi về đây. Extension được build sẵn cho địa chỉ <code className="rounded bg-muted px-1.5 py-0.5 text-sm">{appUrl}</code>, nhân sự chỉ cần dán mã kết nối vào phần Cài đặt của extension.
         </p>
       </div>
+
+      <HealthBanner health={health} restrictedCount={restrictedCount} warningCount={warnings.length} />
 
       {warnings.length > 0 && (
         <Card className="border-destructive/40">

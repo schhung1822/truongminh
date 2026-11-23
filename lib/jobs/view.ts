@@ -1,4 +1,5 @@
 import type { LabelPos, LabelStyle } from "@/lib/imaging/label-pos";
+import type { ErrorHint } from "./error-hint";
 
 /** Dạng dữ liệu ảnh gửi xuống trình duyệt (không có thông tin nhạy cảm). Dùng chung cho server và client. */
 export type ImageStatusValue = "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED";
@@ -22,6 +23,8 @@ export type ImageView = {
   downloadUrl: string | null;
   /** thông báo lỗi chi tiết, chỉ gửi cho admin */
   errorDetail: string | null;
+  /** diễn giải lỗi dễ hiểu cho mọi người xem (null khi ảnh chưa FAILED) */
+  errorHint: ErrorHint | null;
   attempt: number;
   /** thời gian đã trôi qua kể từ lúc ảnh được tạo (ms), tính lúc server trả lời; dùng cho thanh tiến trình */
   ageMs: number;

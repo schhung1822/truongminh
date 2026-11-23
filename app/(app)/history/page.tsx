@@ -8,6 +8,7 @@ import {
   FolderIcon,
   FolderOpenIcon,
   ImageOffIcon,
+  PaletteIcon,
   SearchIcon,
   SparklesIcon,
 } from "lucide-react";
@@ -71,6 +72,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
           orderBy: { createdAt: "asc" },
           select: { id: true, status: true, finalPath: true, costCredits: true },
         },
+        _count: { select: { children: true } },
       },
     }),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -232,6 +234,11 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
                                               <Badge>{done.length}/{s.images.length} ảnh xong</Badge>
                                               {running > 0 && <Badge variant="secondary">{running} đang tạo</Badge>}
                                               {failed > 0 && <Badge variant="destructive">{failed} lỗi</Badge>}
+                                              {s._count.children > 0 && (
+                                                <Badge variant="outline" className="gap-1">
+                                                  <PaletteIcon className="size-3" /> {s._count.children} lượt thiết kế
+                                                </Badge>
+                                              )}
                                               {isAdmin && credits > 0 && (
                                                 <Badge variant="outline" className="gap-1">
                                                   <CoinsIcon className="size-3" /> {nf.format(credits)} token

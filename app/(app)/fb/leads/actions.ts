@@ -47,6 +47,35 @@ export async function assignLeadAction(leadId: string, userId: string | null): P
   return { ok: userId ? "Đã gán sale phụ trách." : "Đã bỏ gán." };
 }
 
+const idsSchema = z.array(z.string().min(1)).min(1, "Chưa chọn lead nào.").max(500, "Chọn tối đa 500 lead một lần.");
+
+/** Đổi trạng thái nhiều lead cùng lúc. Sale chỉ đổi được lead gán cho mình. */
+export async function bulkUpdateStatusAction(ids: string[], status: string): Promise<LeadActionResult> {
+  const user = await requireUser();
+  const parsed = z.object({ ids: idsSchema, status: z.enum(STATUSES, "Trạng thái không hợp lệ.") }).safeParse({ ids, status });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const where = canManageFb(user.role) ? { id: { in: parsed.data.ids } } : { id: { in: parsed.data.ids }, assignedToId: user.id };
+  const result = await db.fbLead.updateMany({ where, data: { status: parsed.data.status } });
+  revalidatePath("/fb/leads");
+  if (result.count === 0) return { error: "Không đổi được lead nào (có thể không phải lead của bạn)." };
+  return { ok: `Đã đổi trạng thái cho ${result.count} lead.` };
+}
+
+/** Gán sale phụ trách cho nhiều lead cùng lúc: chỉ quản trị và marketing. */
+export async function bulkAssignAction(ids: string[], userId: string | null): Promise<LeadActionResult> {
+  const user = await requireUser();
+  if (!canManageFb(user.role)) return { error: "Chỉ quản trị viên và marketing gán được sale phụ trách." };
+  const parsed = z.object({ ids: idsSchema }).safeParse({ ids });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if (userId) {
+    const target = await db.user.findFirst({ where: { id: userId, isActive: true }, select: { id: true } });
+    if (!target) return { error: "Không tìm thấy người dùng được chọn." };
+  }
+  const result = await db.fbLead.updateMany({ where: { id: { in: parsed.data.ids } }, data: { assignedToId: userId } });
+  revalidatePath("/fb/leads");
+  return { ok: userId ? `Đã gán ${result.count} lead.` : `Đã bỏ gán ${result.count} lead.` };
+}
+
 /** Gắn lead vào một khách hàng có sẵn (hoặc bỏ gắn). */
 export async function linkCustomerAction(leadId: string, customerId: string | null): Promise<LeadActionResult> {
   const user = await requireUser();

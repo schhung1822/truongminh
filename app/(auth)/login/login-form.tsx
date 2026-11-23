@@ -37,6 +37,7 @@ export function LoginForm() {
         {pending && <Loader2Icon className="animate-spin" />}
         {pending ? "Đang đăng nhập..." : "Đăng nhập"}
       </Button>
+      <p className="text-center text-sm text-muted-foreground">Quên mật khẩu? Liên hệ quản trị viên để được đặt lại.</p>
     </form>
   );
 }

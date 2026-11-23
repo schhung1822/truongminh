@@ -31,6 +31,8 @@ export async function createDesignSessionAction(input: {
   productType: string;
   variants: number;
   note: string;
+  /** PinterestPin.id dùng làm ảnh phong cách tham khảo thêm cho AI; không bắt buộc */
+  styleRefPinId?: string;
 }): Promise<{ error?: string; sessionId?: string }> {
   const user = await requireUser();
   const r = await createDesignSession(user, input);

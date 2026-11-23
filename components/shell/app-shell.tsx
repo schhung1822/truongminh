@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDownIcon, CircleUserIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/generated/prisma/enums";
 import { roleLabel } from "@/lib/roles";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,7 +25,44 @@ import { activeHref, visibleNav, type NavGroup, type NavItem } from "./nav-confi
 
 type ShellUser = { name: string; email: string; role: Role };
 
-function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
+const BADGE_REFRESH_MS = 30_000;
+
+/** Số đếm việc cần chú ý cho từng mục menu, tải lại định kỳ (nhẹ, chỉ hỏi số lượng, không tải cả danh sách). */
+function useNavBadges(): Record<string, number> {
+  const [badges, setBadges] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/fb/leads/badge", { cache: "no-store" });
+        if (!alive || !res.ok) return;
+        const body = (await res.json()) as { count: number };
+        setBadges((prev) => ({ ...prev, "/fb/leads": body.count }));
+      } catch {
+        /* bỏ qua, lần sau thử lại */
+      }
+    };
+    void load();
+    const t = setInterval(load, BADGE_REFRESH_MS);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+  return badges;
+}
+
+function NavLink({
+  item,
+  active,
+  badgeCount,
+  onNavigate,
+}: {
+  item: NavItem;
+  active: boolean;
+  badgeCount?: number;
+  onNavigate?: () => void;
+}) {
   const Icon = item.icon;
   const base = "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors";
 
@@ -51,12 +89,27 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
     >
       <Icon className="size-4" strokeWidth={1.75} />
       {item.label}
+      {!!badgeCount && (
+        <Badge variant="destructive" className="ml-auto h-5 min-w-5 justify-center rounded-full px-1 tabular-nums">
+          {badgeCount > 99 ? "99+" : badgeCount}
+        </Badge>
+      )}
     </Link>
   );
 }
 
 /** Một nhóm menu: bấm tiêu đề để thu gọn/mở. Nhóm đang chứa trang hiện tại luôn mở. */
-function NavGroupBlock({ group, activePath, onNavigate }: { group: NavGroup; activePath: string | null; onNavigate?: () => void }) {
+function NavGroupBlock({
+  group,
+  activePath,
+  badges,
+  onNavigate,
+}: {
+  group: NavGroup;
+  activePath: string | null;
+  badges: Record<string, number>;
+  onNavigate?: () => void;
+}) {
   const hasActive = group.items.some((i) => i.href === activePath);
   const [open, setOpen] = useState(true);
   const shown = open || hasActive;
@@ -74,7 +127,7 @@ function NavGroupBlock({ group, activePath, onNavigate }: { group: NavGroup; act
       {shown && (
         <div className="mt-0.5 flex flex-col gap-0.5">
           {group.items.map((item) => (
-            <NavLink key={item.href} item={item} active={item.href === activePath} onNavigate={onNavigate} />
+            <NavLink key={item.href} item={item} active={item.href === activePath} badgeCount={badges[item.href]} onNavigate={onNavigate} />
           ))}
         </div>
       )}
@@ -86,10 +139,11 @@ function NavList({ role, onNavigate }: { role: ShellUser["role"]; onNavigate?: (
   const pathname = usePathname();
   const groups = visibleNav(role);
   const activePath = activeHref(pathname, groups);
+  const badges = useNavBadges();
   return (
     <nav className="flex flex-col" aria-label="Menu chính">
       {groups.map((g) => (
-        <NavGroupBlock key={g.id} group={g} activePath={activePath} onNavigate={onNavigate} />
+        <NavGroupBlock key={g.id} group={g} activePath={activePath} badges={badges} onNavigate={onNavigate} />
       ))}
     </nav>
   );

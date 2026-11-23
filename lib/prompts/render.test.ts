@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { FINISH_RULES } from "./finish";
-import { buildMaterialsList, extractVariables, renderDesignPrompt, renderPrompt, validateTemplate } from "./render";
+import { buildMaterialsList, extractVariables, renderDesignPrompt, renderPrompt, styleReferenceNote, validateTemplate } from "./render";
+
+describe("styleReferenceNote", () => {
+  it("nhắc đúng số thứ tự ảnh tham chiếu và dặn không chép nội dung", () => {
+    const note = styleReferenceNote(3);
+    expect(note).toContain("Reference image 3");
+    expect(note).toContain("Do NOT copy its logo, text, specific object shape");
+  });
+});
 
 describe("renderPrompt", () => {
   it("thay đủ các biến, kể cả khi có khoảng trắng trong ngoặc và lặp biến", () => {

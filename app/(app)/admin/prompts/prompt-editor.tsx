@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckIcon, Loader2Icon } from "lucide-react";
+import { CheckIcon, EyeIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,41 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { finishRuleOf } from "@/lib/prompts/finish";
+import { buildMaterialsList, renderDesignPrompt, renderPrompt, validateTemplate } from "@/lib/prompts/render";
 import { activatePromptAction, savePromptAction } from "./actions";
+
+/** Dữ liệu giả để xem thử prompt (không phải dữ liệu thật, chỉ để kiểm tra trước khi lưu). */
+const SAMPLE_MATERIALS = [
+  { printTech: "Khắc laser", technique: "khac-laser" },
+  { printTech: "Cắt laser", technique: "cat-laser" },
+  { printTech: "In UV", technique: "in-uv" },
+];
+const SAMPLE_GRID = { cols: 5, rows: 2 };
+
+/** Dựng prompt mẫu để xem trước; trả lỗi tiếng Việt nếu prompt có vấn đề (biến lạ, thiếu biến bắt buộc...). */
+function buildPreview(kind: "CATALOG" | "DESIGN", body: string): { ok: true; text: string } | { ok: false; error: string } {
+  const problem = validateTemplate(kind, body);
+  if (problem) return { ok: false, error: problem };
+  try {
+    if (kind === "CATALOG") {
+      return {
+        ok: true,
+        text: renderPrompt(body, { rows: SAMPLE_GRID.rows, cols: SAMPLE_GRID.cols, materials_list: buildMaterialsList(SAMPLE_MATERIALS, SAMPLE_GRID) }),
+      };
+    }
+    return {
+      ok: true,
+      text: renderDesignPrompt(
+        body,
+        { product_type: "Bình giữ nhiệt 500ml", design_style: "Tối giản, khắc tên viết tay ở giữa", note: "Khách muốn chữ nhỏ, không quá 3cm" },
+        finishRuleOf(SAMPLE_MATERIALS[0]),
+      ),
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
 
 export type PromptVersion = {
   id: string;
@@ -53,6 +87,7 @@ export function PromptEditor({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ReturnType<typeof buildPreview> | null>(null);
   const dirty = body.trim() !== (active?.body ?? "").trim();
 
   function save() {
@@ -98,11 +133,34 @@ export function PromptEditor({
 
         <Textarea
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => {
+            setBody(e.target.value);
+            setPreview(null);
+          }}
           rows={14}
           className="font-mono text-xs"
           aria-label={`Nội dung prompt ${title}`}
         />
+
+        <div>
+          <Button type="button" variant="outline" className="h-9" onClick={() => setPreview(buildPreview(kind, body))}>
+            <EyeIcon /> Xem thử với dữ liệu mẫu
+          </Button>
+          <p className="mt-1 text-xs text-muted-foreground">Dùng số liệu giả để kiểm tra prompt ra câu lệnh như thế nào trước khi lưu, không tốn token, không gọi AI.</p>
+        </div>
+
+        {preview &&
+          (preview.ok ? (
+            <div className="rounded-lg border bg-muted/40 p-3">
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Prompt sẽ gửi cho AI (dữ liệu mẫu, không phải khách thật):</p>
+              <pre className="max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs">{preview.text}</pre>
+            </div>
+          ) : (
+            <Alert variant="destructive">
+              <AlertDescription>{preview.error}</AlertDescription>
+            </Alert>
+          ))}
+
         <div className="flex flex-col gap-1.5 sm:max-w-md">
           <Label htmlFor={`note-${kind}`}>Ghi chú cho phiên bản mới (không bắt buộc)</Label>
           <Input id={`note-${kind}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} className="h-10" />

@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 import type { QuotaInfo } from "../../new/sheets-steps";
 import { createDesignSessionAction } from "../../actions";
 import { ImagePicker, type CatalogImage } from "./image-picker";
+import { PinterestStylePicker } from "./pinterest-picker";
+import type { PickerPin } from "./pinterest-actions";
 
 export function DesignForm({
   parentSessionId,
@@ -48,6 +50,7 @@ export function DesignForm({
   const [productType, setProductType] = useState("");
   const [variants, setVariants] = useState(DEFAULT_VARIANTS);
   const [note, setNote] = useState("");
+  const [styleRefPin, setStyleRefPin] = useState<PickerPin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -66,7 +69,7 @@ export function DesignForm({
     setError(null);
     startTransition(async () => {
       try {
-        const r = await createDesignSessionAction({ parentSessionId, materialIds: selected, productType, variants, note });
+        const r = await createDesignSessionAction({ parentSessionId, materialIds: selected, productType, variants, note, styleRefPinId: styleRefPin?.id });
         if (r.error || !r.sessionId) return setError(r.error ?? "Không tạo được lượt thiết kế.");
         toast.success("Đã bắt đầu thiết kế. Đang chuyển sang màn hình theo dõi tiến độ...");
         router.push(`/sessions/${r.sessionId}`);
@@ -160,6 +163,14 @@ export function DesignForm({
               />
             </div>
           </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Ảnh phong cách tham khảo (không bắt buộc)</Label>
+            <p className="text-xs text-muted-foreground">
+              Chọn một ảnh đã lưu trên Pinterest để AI tham khảo màu sắc, không khí, bối cảnh — logo và chất liệu vẫn vẽ đúng như đã chọn ở trên.
+            </p>
+            <PinterestStylePicker selected={styleRefPin} onSelect={setStyleRefPin} />
+          </div>
         </CardContent>
       </Card>
 
@@ -197,6 +208,7 @@ export function DesignForm({
               </span>
             )}
             {quota && <span className="text-muted-foreground"> · còn {quota.left} lượt hôm nay</span>}
+            {styleRefPin && <span className="text-muted-foreground"> · có ảnh phong cách tham khảo</span>}
           </p>
 
           {problem && (

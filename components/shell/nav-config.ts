@@ -16,11 +16,13 @@ import {
   NewspaperIcon,
   type LucideIcon,
   PaletteIcon,
+  PinIcon,
   PlugZapIcon,
   ScrollTextIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
   TargetIcon,
+  TrendingUpIcon,
   UsersIcon,
   UsersRoundIcon,
 } from "lucide-react";
@@ -72,6 +74,7 @@ export const navGroups: NavGroup[] = [
     label: "Lead Facebook",
     items: [
       { href: "/fb/leads", label: "Lead", icon: TargetIcon, ready: true },
+      { href: "/fb/leads/stats", label: "Thống kê Lead", icon: TrendingUpIcon, ready: true, roles: ["MKT"] },
       { href: "/fb/posts", label: "Bài đăng", icon: NewspaperIcon, ready: true, roles: ["MKT"] },
       { href: "/fb/groups", label: "Nhóm", icon: UsersRoundIcon, ready: true, roles: ["MKT"] },
       { href: "/fb/connect", label: "Kết nối extension", icon: PlugZapIcon, ready: true, roles: ["MKT"] },
@@ -97,10 +100,12 @@ export const navGroups: NavGroup[] = [
     id: "library",
     label: "Thư viện mẫu",
     items: [
+      { href: "/pinterest", label: "Mẫu Pinterest", icon: PinIcon, ready: true },
       { href: "/admin/materials", label: "Chất liệu", icon: BoxesIcon, ready: true, adminOnly: true },
       { href: "/admin/sheets", label: "Trang mẫu", icon: LayoutGridIcon, ready: true, adminOnly: true },
       { href: "/admin/design-styles", label: "Kiểu thiết kế", icon: PaletteIcon, ready: true, adminOnly: true },
       { href: "/admin/prompts", label: "Prompt", icon: ScrollTextIcon, ready: true, adminOnly: true },
+      { href: "/admin/pinterest", label: "Kết nối Pinterest", icon: PlugZapIcon, ready: true, adminOnly: true },
     ],
   },
   {

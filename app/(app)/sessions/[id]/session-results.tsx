@@ -450,6 +450,7 @@ function ImageCard({
   const pickedCount = picker ? picker.cells.filter((c) => picker.selected.includes(c.materialId)).length : 0;
 
   function retry() {
+    if (!window.confirm("Tạo lại ảnh này sẽ tốn thêm một lượt. Tiếp tục?")) return;
     startTransition(async () => {
       const r = await retryImageAction(img.id);
       if (r.error) return void toast.error(r.error);
@@ -495,10 +496,10 @@ function ImageCard({
         )}
 
         {img.status === "FAILED" && (
-          <Alert variant="destructive">
+          <Alert variant={img.errorHint?.kind === "admin" ? "default" : "destructive"} className={img.errorHint?.kind === "admin" ? "border-amber-500/40 bg-amber-500/10" : undefined}>
             <AlertTriangleIcon />
             <AlertDescription>
-              Không tạo được ảnh này. Bạn bấm &quot;Tạo lại&quot; để thử lần nữa.
+              {img.errorHint?.message ?? 'Không tạo được ảnh này. Bạn bấm "Tạo lại" để thử lần nữa.'}
               {img.errorDetail && <span className="mt-1 block text-xs opacity-80">Chi tiết (admin): {img.errorDetail}</span>}
             </AlertDescription>
           </Alert>

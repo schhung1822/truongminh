@@ -257,6 +257,14 @@ Phòng marketing đăng bài lên nhóm Facebook; extension Chrome **Data Lead F
 ```
 Chưa kiểm chứng trên Facebook thật: xem mục "Chưa kiểm chứng" trong `extension/README.md`. Khi quét không ra comment, nhân sự bấm **Chẩn đoán trang này** trong popup; báo cáo (không chứa dữ liệu cá nhân) hiện ở **Kết nối extension > Cảnh báo** để người phát triển chỉnh bộ đọc.
 
+### Pinterest (thư viện mẫu và ảnh phong cách cho AI)
+1. Tạo App tại Pinterest Developers, xin Trial access với các scope đọc: `boards:read`, `pins:read`, `user_accounts:read`; nếu cần board bí mật thì xin thêm `boards:read_secret`, `pins:read_secret` và đặt `PINTEREST_INCLUDE_SECRET_BOARDS="true"`.
+2. Đăng ký Redirect URI chính xác là `https://tên-miền/api/pinterest/oauth/callback`.
+3. Điền `PINTEREST_CLIENT_ID` và `PINTEREST_CLIENT_SECRET` vào `.env`, chạy migration/build rồi khởi động lại web.
+4. Admin vào **Thư viện mẫu > Kết nối Pinterest**, bấm kết nối và **Đồng bộ ngay**. Nhân viên xem/copy ảnh ở **Mẫu Pinterest**; khi tạo thiết kế ở Bước 2 có thể chọn một pin làm ảnh phong cách tham khảo.
+
+Token Pinterest chỉ lưu mã hóa trên máy chủ, không đưa vào trình duyệt hoặc Git. Sau mỗi lần thêm/xóa pin trên Pinterest, admin bấm **Đồng bộ ngay** để cập nhật thư viện trong ứng dụng.
+
 ### Sự cố thường gặp
 | Hiện tượng | Cách xử lý |
 |---|---|

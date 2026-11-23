@@ -1,0 +1,72 @@
+import "server-only";
+import { db } from "@/lib/db";
+import type { RankItem } from "@/lib/stats/queries";
+import { dayKey } from "@/lib/time";
+
+export const LEAD_STATUS_ORDER = ["NEW", "CONTACTED", "QUALIFIED", "WON", "LOST", "INVALID"] as const;
+export type LeadFunnel = Record<(typeof LEAD_STATUS_ORDER)[number], number>;
+
+export type SaleLeadRow = { id: string; name: string; total: number; won: number };
+
+export type LeadStats = {
+  total: number;
+  funnel: LeadFunnel;
+  /** lead tạo mỗi ngày, cùng thứ tự với `days` truyền vào */
+  byDay: { day: string; count: number }[];
+  topGroups: RankItem[];
+  /** theo sale ĐANG được gán hiện tại (không phải lịch sử gán), sắp theo tổng lead giảm dần */
+  bySale: SaleLeadRow[];
+};
+
+/**
+ * Số liệu Lead Facebook trong khoảng [start, end). Gom theo ngày tạo tính bằng JS (không bằng SQL) để tính đúng theo
+ * múi giờ cấu hình, vì bảng fb_leads không có cột "day" tính sẵn như usage_logs.
+ */
+export async function loadLeadStats(start: Date, end: Date, days: string[], tz: string): Promise<LeadStats> {
+  const where = { createdAt: { gte: start, lt: end } };
+  const [statusGroups, createdAts, groupRows, assignedLeads] = await Promise.all([
+    db.fbLead.groupBy({ by: ["status"], where, _count: { _all: true } }),
+    db.fbLead.findMany({ where, select: { createdAt: true } }),
+    db.fbLead.groupBy({ by: ["groupId"], where: { ...where, groupId: { not: null } }, _count: { _all: true } }),
+    db.fbLead.findMany({ where: { ...where, assignedToId: { not: null } }, select: { assignedToId: true, status: true } }),
+  ]);
+
+  const funnel = Object.fromEntries(LEAD_STATUS_ORDER.map((s) => [s, 0])) as LeadFunnel;
+  let total = 0;
+  for (const g of statusGroups) {
+    funnel[g.status as keyof LeadFunnel] = g._count._all;
+    total += g._count._all;
+  }
+
+  const dayCounts = new Map<string, number>();
+  for (const l of createdAts) {
+    const k = dayKey(l.createdAt, tz);
+    dayCounts.set(k, (dayCounts.get(k) ?? 0) + 1);
+  }
+  const byDay = days.map((day) => ({ day, count: dayCounts.get(day) ?? 0 }));
+
+  const groupIds = groupRows.map((g) => g.groupId).filter((id): id is string => !!id);
+  const groupNames = groupIds.length
+    ? new Map((await db.fbGroup.findMany({ where: { id: { in: groupIds } }, select: { id: true, name: true } })).map((g) => [g.id, g.name]))
+    : new Map<string, string>();
+  const topGroups: RankItem[] = groupRows
+    .map((g) => ({ id: g.groupId as string, label: groupNames.get(g.groupId as string) ?? "(đã xóa)", value: g._count._all }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+
+  const saleCounts = new Map<string, { total: number; won: number }>();
+  for (const l of assignedLeads) {
+    const id = l.assignedToId as string;
+    const cur = saleCounts.get(id) ?? { total: 0, won: 0 };
+    cur.total += 1;
+    if (l.status === "WON") cur.won += 1;
+    saleCounts.set(id, cur);
+  }
+  const saleIds = [...saleCounts.keys()];
+  const users = saleIds.length ? await db.user.findMany({ where: { id: { in: saleIds } }, select: { id: true, name: true } }) : [];
+  const bySale: SaleLeadRow[] = users
+    .map((u) => ({ id: u.id, name: u.name, ...(saleCounts.get(u.id) ?? { total: 0, won: 0 }) }))
+    .sort((a, b) => b.total - a.total);
+
+  return { total, funnel, byDay, topGroups, bySale };
+}

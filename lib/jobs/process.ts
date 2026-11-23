@@ -9,6 +9,7 @@ import { getStorage } from "@/lib/storage";
 import { mockupKey } from "@/lib/storage/keys";
 import { mapLimit } from "./async";
 import { renderFinal } from "./finish";
+import { ensurePinterestPinUrl, PinterestReferenceError } from "./pinterest-reference";
 import { ensureLogoUrl, ensureMaterialUrl, NoReferenceError } from "./references";
 import { MAX_ATTEMPTS, type LayoutSnapshot } from "./snapshot";
 import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
@@ -117,8 +118,9 @@ export async function submitImage(imageId: string): Promise<void> {
 
   try {
     const snapshot = img.layoutSnapshot as unknown as LayoutSnapshot;
-    if (1 + snapshot.cells.length > MAX_REFERENCE_IMAGES) {
-      throw new NoReferenceError(`(quá ${MAX_REFERENCE_IMAGES - 1} chất liệu)`);
+    const pinterestPinId = img.kind === "DESIGN" ? snapshot.design?.pinterestPinId : undefined;
+    if (1 + snapshot.cells.length + (pinterestPinId ? 1 : 0) > MAX_REFERENCE_IMAGES) {
+      throw new NoReferenceError(`(quá giới hạn ${MAX_REFERENCE_IMAGES} ảnh tham chiếu)`);
     }
     const materials = await db.material.findMany({ where: { id: { in: snapshot.cells.map((c) => c.materialId) } } });
     const byId = new Map(materials.map((m) => [m.id, m]));
@@ -132,10 +134,19 @@ export async function submitImage(imageId: string): Promise<void> {
       }),
     ]);
 
+    // Ảnh thiết kế có chọn ảnh phong cách tham khảo (Pinterest): thêm làm ảnh tham chiếu cuối cùng.
+    // Không được âm thầm bỏ qua vì prompt đang trỏ đúng tới ảnh này; thiếu ảnh thì kết quả sẽ sai phong cách đã chọn.
+    let styleRefUrl: string | null = null;
+    if (pinterestPinId) {
+      const pin = await db.pinterestPin.findUnique({ where: { id: pinterestPinId } });
+      if (!pin) throw new PinterestReferenceError("Ảnh phong cách Pinterest đã chọn không còn trong thư viện. Hãy chọn lại ảnh rồi tạo thiết kế mới.");
+      styleRefUrl = await ensurePinterestPinUrl(pin);
+    }
+
     const { taskId } = await getProvider().createTask({
       model: img.model,
       prompt: img.promptUsed,
-      inputUrls: [logoUrl, ...materialUrls], // ảnh 1 là logo, các ảnh sau theo đúng thứ tự ô
+      inputUrls: [logoUrl, ...materialUrls, ...(styleRefUrl ? [styleRefUrl] : [])], // ảnh 1 là logo, sau đó theo đúng thứ tự ô, cuối cùng là ảnh phong cách tham khảo nếu có
       aspectRatio: img.aspectRatio,
       resolution: img.resolution,
       callbackUrl: callbackUrl(),
@@ -154,7 +165,7 @@ export async function submitImage(imageId: string): Promise<void> {
       return;
     }
     console.error(`submitImage ${imageId} lỗi:`, errorText(e));
-    const retryable = !(e instanceof NoReferenceError || e instanceof ProviderFatalError);
+    const retryable = !(e instanceof NoReferenceError || e instanceof PinterestReferenceError || e instanceof ProviderFatalError);
     await failOrRetry(imageId, img.attempt, errorText(e), retryable);
   }
 }

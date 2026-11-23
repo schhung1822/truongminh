@@ -23,7 +23,13 @@ export type LayoutSnapshot = {
     groupName?: string;
     printTech?: string;
   }[];
-  design?: { productType: string; styleName: string; note: string };
+  design?: {
+    productType: string;
+    styleName: string;
+    note: string;
+    /** PinterestPin.id (CSDL của ta, không phải id của Pinterest) dùng làm ảnh phong cách tham khảo thêm cho AI; không chọn thì bỏ trống */
+    pinterestPinId?: string;
+  };
 };
 
 /** Số ảnh tối đa trong một phiên (một trang mẫu dài có thể ra nhiều ảnh). */

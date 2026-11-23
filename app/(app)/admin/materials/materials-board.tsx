@@ -110,7 +110,7 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
       <Link href={`/admin/materials/${m.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
         <PencilIcon /> Sửa
       </Link>
-      <ActiveToggle id={m.id} isActive={m.isActive} />
+      <ActiveToggle id={m.id} isActive={m.isActive} sheets={m.sheets} />
       {m.used ? (
         <span
           title="Đã từng dùng để tạo ảnh nên không xóa được. Hãy bấm Tắt để ẩn khỏi danh sách chọn."
