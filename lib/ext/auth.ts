@@ -14,7 +14,7 @@ export type ExtContext = {
   account: { id: string; displayName: string; profileUrl: string; status: FbAccountStatus };
 };
 
-export type ExtErrorCode = "NO_TOKEN" | "INVALID_TOKEN" | "TOKEN_REVOKED" | "USER_DISABLED" | "RATE_LIMITED" | "ACCOUNT_INACTIVE" | "NOT_OWN_POST" | "NOT_FOUND" | "BAD_REQUEST" | "TOO_LARGE";
+export type ExtErrorCode = "NO_TOKEN" | "INVALID_TOKEN" | "TOKEN_REVOKED" | "USER_DISABLED" | "RATE_LIMITED" | "ACCOUNT_INACTIVE" | "NOT_FOUND" | "BAD_REQUEST" | "TOO_LARGE";
 
 /** Mỗi mã tối đa 120 lần gọi / phút (extension chỉ hỏi vài chục lần mỗi giờ, quét tuần tự có chờ). */
 const perToken = createRateLimiter({ limit: 120, windowMs: 60_000 });

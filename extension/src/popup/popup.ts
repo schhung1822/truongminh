@@ -146,6 +146,37 @@ $("diagnose").addEventListener("click", async () => {
   }
 });
 
+$("deepRead").addEventListener("click", async () => {
+  const btn = $("deepRead") as HTMLButtonElement;
+  setMessage("Đang đọc sâu trang này (có thể mất tới vài phút, đừng đóng tab Facebook). Chỉ đếm, không lưu nội dung...");
+  busy(btn, true, "Thử đọc sâu (chỉ đếm)");
+  try {
+    const tabId = await activeTabId();
+    if (tabId === null) return setMessage("Không tìm thấy tab đang mở.", "error");
+    const r = await send<{ ok: boolean; message: string; report?: DiagnosticReport }>({ type: "DIAGNOSE_ACTIVE_TAB", tabId, deep: true });
+    if (r.ok && r.report) {
+      lastReport = r.report;
+      $("copyReport").hidden = false;
+      const c = r.report.counts;
+      const d = r.report.deep;
+      setMessage(
+        "Kết quả thử đọc sâu (chỉ số đếm):\n" +
+          "- Trang báo: " + (r.report.commentCountText ?? "không rõ") + "\n" +
+          "- Bộ đọc đọc được: " + c.commentsRead + " comment (" + c.repliesRead + " trả lời)\n" +
+          "- Có dạng số điện thoại: " + c.commentsWithPhone + "\n" +
+          "- Dùng mã thật: " + (c.commentsRead - c.commentsWithFallbackId) + ", mã tạm: " + c.commentsWithFallbackId + "\n" +
+          "- Bấm mở rộng " + (d?.steps ?? 0) + " lần trong " + (d?.seconds ?? 0) + " giây, " + (d?.complete ? "đã hết nút để bấm" : "dừng vì chạm giới hạn"),
+        "ok",
+      );
+    } else setMessage(r.message, "error");
+    void refresh();
+  } catch (e) {
+    setMessage(e instanceof Error ? e.message : String(e), "error");
+  } finally {
+    busy(btn, false, "Thử đọc sâu (chỉ đếm)");
+  }
+});
+
 $("copyReport").addEventListener("click", async () => {
   const report = lastReport ?? (await send<DiagnosticReport | null>({ type: "GET_LAST_DIAGNOSTIC" }));
   if (!report) return setMessage("Chưa có báo cáo nào. Bấm Chẩn đoán trang này trước.", "error");

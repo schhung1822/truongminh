@@ -20,7 +20,7 @@
       <ol>
         <li>Trên webapp: <b>Lead Facebook › Kết nối extension</b> → thêm nick Facebook của bạn → <b>Tạo mã kết nối</b>, sao chép mã.</li>
         <li>Bấm <b>Cài đặt</b> bên dưới, dán mã, bấm <b>Kết nối</b>.</li>
-        <li>Đăng nhập Facebook trên Chrome này bằng đúng nick đó. Mở một bài bạn đã đăng, bấm <b>Theo dõi bài này</b>.</li>
+        <li>Đăng nhập Facebook trên Chrome này bằng đúng nick đó. Mở bài của bạn hoặc người khác mà nick xem được, bấm <b>Theo dõi bài này</b>.</li>
       </ol>
     </section>
 
@@ -28,10 +28,11 @@
 
     <div class="actions">
       <button id="runNow" type="button" title="Quét ngay các bài đang theo dõi, bỏ qua lịch chờ">Quét ngay</button>
-      <button id="follow" type="button" class="secondary" title="Thêm bài đang mở ở tab này vào danh sách theo dõi (phải là bài do nick của bạn đăng, mở ở trang riêng của bài)">Theo dõi bài này</button>
+      <button id="follow" type="button" class="secondary" title="Thêm bài đang mở ở tab này vào danh sách theo dõi (có thể là bài của người khác, cần mở ở trang riêng của bài)">Theo dõi bài này</button>
     </div>
     <div class="actions">
       <button id="diagnose" type="button" class="secondary small" title="Đọc thử cấu trúc trang Facebook đang mở và tạo báo cáo (không chứa tên hay nội dung) để chỉnh bộ đọc">Chẩn đoán trang này</button>
+      <button id="deepRead" type="button" class="secondary small" title="Chạy bộ đọc thật trên trang đang mở (cuộn, bấm Xem thêm bình luận/phản hồi đến hết) và chỉ cho biết SỐ ĐẾM. Không lưu, không gửi tên, nội dung hay số điện thoại.">Thử đọc sâu (chỉ đếm)</button>
       <button id="copyReport" type="button" class="secondary small" hidden>Sao chép báo cáo</button>
       <button id="settings" type="button" class="link small">Cài đặt &amp; hướng dẫn</button>
     </div>
@@ -47,7 +48,7 @@
       <a id="lnkPosts" href="#" target="_blank" rel="noopener">Bài đăng</a> ·
       <a id="lnkConnect" href="#" target="_blank" rel="noopener">Kết nối extension</a>
     </nav>
-    <p class="hint">Extension chỉ đọc comment trên bài do chính nick của bạn đăng và gửi về webapp. Không tự đăng, không tự comment, không tự bấm gửi.</p>
+    <p class="hint">Extension chỉ đọc comment trên những bài bạn chủ động theo dõi và gửi về webapp. Bài có thể do người khác đăng. Không tự đăng, không tự comment, không tự bấm gửi.</p>
 
     <script src="popup.js"></script>
   </body>

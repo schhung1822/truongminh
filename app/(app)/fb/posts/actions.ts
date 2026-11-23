@@ -11,21 +11,15 @@ export type PostFormState = { error?: string; ok?: string };
 
 const addSchema = z.object({
   url: z.string().trim().min(1, "Vui lòng dán link bài đăng.").max(600),
-  accountId: z.string().min(1, "Vui lòng chọn nick đã đăng bài."),
+  accountId: z.string().min(1, "Vui lòng chọn nick dùng để quét bài."),
   purpose: z.enum(["FIND_CUSTOMER", "FIND_SUPPLIER"], "Vui lòng chọn mục đích của bài."),
   content: z.string().max(20000).optional(),
   postedDate: z.string().optional(),
 });
 
-/**
- * Dán link một bài để theo dõi. Bắt buộc tick xác nhận "bài do chính nick này đăng": hệ thống chỉ đọc comment trên bài của mình,
- * và server không thể tự kiểm chứng điều đó, nên người đăng ký chịu trách nhiệm.
- */
+/** Dán permalink một bài để nick Facebook đã kết nối mở và quét comment mà nick đó nhìn thấy. */
 export async function addPostAction(_prev: PostFormState, formData: FormData): Promise<PostFormState> {
   const user = await requireFbManager();
-  if (formData.get("confirmOwn") !== "on") {
-    return { error: "Hãy tick xác nhận: bài này do chính nick đã chọn đăng. Hệ thống chỉ đọc comment trên bài của mình." };
-  }
   const parsed = addSchema.safeParse({
     url: formData.get("url"),
     accountId: formData.get("accountId"),
@@ -37,7 +31,7 @@ export async function addPostAction(_prev: PostFormState, formData: FormData): P
 
   const account = await db.fbAccount.findUnique({ where: { id: parsed.data.accountId }, select: { id: true, userId: true } });
   if (!account) return { error: "Không tìm thấy nick." };
-  if (user.role !== "ADMIN" && account.userId !== user.id) return { error: "Bạn chỉ đăng ký được bài của nick mình." };
+  if (user.role !== "ADMIN" && account.userId !== user.id) return { error: "Bạn chỉ được dùng nick Facebook đã kết nối cho tài khoản của mình." };
 
   const postedAt = parsed.data.postedDate ? zonedStartOfDay(parsed.data.postedDate, "Asia/Ho_Chi_Minh") : null;
   const r = await registerPost({
@@ -60,7 +54,7 @@ export async function setPurposeAction(postId: string, purpose: "FIND_CUSTOMER" 
   if (purpose !== "FIND_CUSTOMER" && purpose !== "FIND_SUPPLIER") return { error: "Mục đích không hợp lệ." };
   const post = await db.fbPost.findUnique({ where: { id: postId }, include: { account: { select: { userId: true } } } });
   if (!post) return { error: "Không tìm thấy bài." };
-  if (user.role !== "ADMIN" && post.account.userId !== user.id) return { error: "Đây không phải bài của nick bạn." };
+  if (user.role !== "ADMIN" && post.account.userId !== user.id) return { error: "Bài này không thuộc danh sách theo dõi của bạn." };
 
   await db.fbPost.update({ where: { id: postId }, data: { purpose } });
   revalidatePath("/fb/posts");
@@ -71,7 +65,7 @@ export async function setTrackingAction(postId: string, status: "TRACKING" | "PA
   const user = await requireFbManager();
   const post = await db.fbPost.findUnique({ where: { id: postId }, include: { account: { select: { userId: true } } } });
   if (!post) return { error: "Không tìm thấy bài." };
-  if (user.role !== "ADMIN" && post.account.userId !== user.id) return { error: "Đây không phải bài của nick bạn." };
+  if (user.role !== "ADMIN" && post.account.userId !== user.id) return { error: "Bài này không thuộc danh sách theo dõi của bạn." };
 
   await db.fbPost.update({ where: { id: postId }, data: { trackingStatus: status } });
   revalidatePath("/fb/posts");

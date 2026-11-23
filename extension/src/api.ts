@@ -1,7 +1,7 @@
 import { APP_ORIGIN } from "./config";
 import type { CommentPayload, IngestResponse, JobsResponse, MeResponse } from "./types";
 
-/** Lỗi khi gọi webapp. status = 0 là lỗi mạng. `code` khớp các mã lỗi của /api/ext (TOKEN_REVOKED, INVALID_TOKEN, NOT_OWN_POST...). */
+/** Lỗi khi gọi webapp. status = 0 là lỗi mạng. `code` khớp các mã lỗi của /api/ext (TOKEN_REVOKED, INVALID_TOKEN...). */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -51,7 +51,7 @@ export const api = {
     call<IngestResponse>(token, `/api/ext/posts/${encodeURIComponent(postId)}/comments`, { method: "POST", body: payload }),
   registerPost: (
     token: string,
-    body: { url: string; group_url: string | null; content_snapshot: string; author_profile_url: string; author_name: string | null },
+    body: { url: string; group_url: string | null; content_snapshot: string; author_profile_url: string | null; author_name: string | null },
   ) => call<{ post_id: string; created: boolean }>(token, "/api/ext/posts", { method: "POST", body }),
   log: (token: string, type: "selector_broken" | "checkpoint" | "scan_fail", detail: Record<string, unknown>) =>
     call<{ ok: boolean; account_restricted: boolean }>(token, "/api/ext/logs", { method: "POST", body: { type, detail } }),

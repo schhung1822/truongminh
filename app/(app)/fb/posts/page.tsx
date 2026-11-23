@@ -30,13 +30,13 @@ export default async function FbPostsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Bài đăng theo dõi</h1>
-        <p className="text-muted-foreground">Bài do nick của mình đăng. Extension quét comment của đúng những bài trong danh sách này, tách số điện thoại và đưa vào mục Lead.</p>
+        <p className="text-muted-foreground">Bài do bạn hoặc người khác đăng mà bạn chủ động theo dõi. Extension quét comment đang hiển thị cho nick đã chọn, tách số điện thoại và đưa vào mục Lead.</p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Thêm bài</CardTitle>
-          <CardDescription>Dán link bài vừa đăng. Nhóm chưa có trong danh sách sẽ được tạo tự động (đặt lại tên ở trang Nhóm).</CardDescription>
+          <CardDescription>Dán permalink của bài cần theo dõi. Nhóm chưa có trong danh sách sẽ được tạo tự động (đặt lại tên ở trang Nhóm).</CardDescription>
         </CardHeader>
         <CardContent>
           <AddPostForm accounts={accounts} />
@@ -56,7 +56,7 @@ export default async function FbPostsPage() {
                 <TableRow>
                   <TableHead>Bài</TableHead>
                   <TableHead>Nhóm</TableHead>
-                  <TableHead>Nick</TableHead>
+                  <TableHead>Nick quét</TableHead>
                   <TableHead className="text-right">Comment</TableHead>
                   <TableHead className="text-right">Lead</TableHead>
                   <TableHead>Quét cuối</TableHead>

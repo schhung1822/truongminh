@@ -31,7 +31,7 @@ Phòng marketing đăng bài lên các nhóm Facebook để tìm khách hoặc t
 
 Hệ thống làm thay đúng **phần đọc và ghi chép**:
 
-1. Tự đọc comment trên **các bài do chính nick của mình đăng**.
+1. Tự đọc comment trên **các bài người dùng chủ động theo dõi**, kể cả bài do người khác đăng nếu nick đã kết nối xem được.
 2. Tách số điện thoại, Zalo, email ra khỏi comment.
 3. Đưa vào danh sách **Lead** trên webapp để sale gọi lại.
 
@@ -189,9 +189,9 @@ Danh sách người đã để lại liên hệ. Mỗi dòng: tên, số điện
   - **xóa lead và comment liên quan** (chỉ quản trị): dùng khi khách yêu cầu xóa dữ liệu.
 
 ### 4.2. Bài đăng
-Danh sách bài đang theo dõi: bài, nhóm, nick, số comment, số lead, lần quét cuối, trạng thái.
+Danh sách bài đang theo dõi: bài, nhóm, nick dùng để quét, số comment, số lead, lần quét cuối, trạng thái.
 
-- **Thêm bài bằng cách dán link** (permalink). Bắt buộc tick ô xác nhận "bài này do chính nick này đăng".
+- **Thêm bài bằng cách dán link** (permalink) rồi chọn nick dùng để mở và quét bài. Bài có thể do người khác đăng.
 - Mỗi bài có **Mục đích** (Tìm khách / Tìm bên sản xuất): quyết định lead sinh ra là "khách" hay "bên sản xuất". Đổi mục đích chỉ ảnh hưởng lead sinh ra *từ lần quét sau*.
 - **Tạm dừng / Theo dõi lại / Kết thúc** từng bài.
 
@@ -283,19 +283,19 @@ Khách comment kèm số ──► Extension đọc ──► Webapp tạo LEAD 
 
 ## 8. Những gì extension KHÔNG làm (và được đảm bảo thế nào)
 
-Đây là giới hạn cố ý, theo mục "Ngoài phạm vi" của bản thiết kế. Không chỉ ghi thành quy ước mà còn **ép bằng code**:
+Đây là các giới hạn cố ý. Không chỉ ghi thành quy ước mà còn **ép bằng code**:
 
 | Không làm | Được đảm bảo bằng |
 |---|---|
 | Tự đăng bài, tự comment, tự bấm gửi | Extension chỉ bấm các nút *mở rộng nội dung đã có*. Có một **test tự động** (`extension/src/guard.test.ts`) sẽ báo đỏ nếu code có giả lập bàn phím, gõ chữ vào ô, gửi form |
-| Đọc bài của người khác | Webapp chỉ giao link bài của đúng nick; chỉ nhận comment cho bài của đúng nick (bài khác bị từ chối 404); khi đăng ký bài, tác giả đọc từ trang phải khớp nick (khác thì từ chối 403) |
+| Tự tìm hoặc quét bài chưa được đăng ký | Webapp chỉ giao đúng permalink người dùng đã chủ động thêm; API chỉ nhận comment cho bài thuộc danh sách theo dõi của nick quét gắn với mã, bài khác bị từ chối 404 |
 | Đọc cookie, token đăng nhập Facebook, tin nhắn | Extension không xin quyền đọc cookie; chỉ có quyền ở `facebook.com` và webapp; test chặn dùng `document.cookie` |
 | Che giấu việc tự động hóa (độ trễ ngẫu nhiên, đổi user-agent, proxy, vân tay trình duyệt, tài khoản mua lại) | Mọi độ trễ là **số cố định**; test chặn `Math.random`, đụng `navigator.userAgent`, proxy... |
 | Lưu comment/số điện thoại trên máy nhân sự | Dữ liệu chỉ nằm trong bộ nhớ khi quét rồi gửi đi. Chỉ lưu mã kết nối và kết quả vòng gần nhất |
 | Quét thành viên nhóm, đổi UID ra số điện thoại | Không có chức năng nào như vậy |
 
 **Hai điểm cần hiểu đúng:**
-1. Webapp **không tự kiểm chứng được** bài có phải của mình không (chỉ Facebook biết). Nên nó đòi hai thứ: người thêm bài tick xác nhận trên web, và extension đưa "bằng chứng" (tên/link tác giả đọc từ chính trang bài) phải khớp nick. Đây là hàng rào chống nhầm lẫn, không phải bảo vệ tuyệt đối trước người cố tình gian.
+1. Nick gắn với mã kết nối là **nick dùng để quét**, không nhất thiết là tác giả bài. Nick phải có quyền xem bài và comment; nội dung Facebook không hiển thị cho nick thì extension cũng không đọc được.
 2. "Che giấu tự động hóa" bị cấm, *không có nghĩa là Facebook không phát hiện được*. Xem mục 12.
 
 ---
@@ -381,7 +381,7 @@ Lần thử đầu tiên (21/11/2026) cho thấy extension nói chuyện đượ
   - dùng nick *ổn định, lâu năm*, không dùng nick quan trọng nhất cho lần thử đầu;
   - bắt đầu với ít bài, chu kỳ dài;
   - nếu nick bị checkpoint, dừng lại và xử lý bằng tay trước khi tiếp.
-- **Điều khoản của Meta** hạn chế việc thu thập tự động. Bản thiết kế chọn đường *an toàn nhất có thể*: chỉ bài của chính mình, không che giấu, dừng khi bị yêu cầu xác minh. Vẫn là rủi ro cần anh/chị chấp nhận có ý thức.
+- **Điều khoản của Meta** hạn chế việc thu thập tự động. Hệ thống chỉ quét permalink được thêm chủ động, không che giấu và dừng khi bị yêu cầu xác minh, nhưng theo dõi bài người khác vẫn làm tăng rủi ro tuân thủ và dữ liệu cá nhân; cần sử dụng có mục đích hợp pháp và xem lại chính sách áp dụng.
 - **Dữ liệu cá nhân:** xem lưu ý ở mục 9.
 
 ---
@@ -397,7 +397,7 @@ Làm theo thứ tự. Mỗi bài tập nhỏ, an toàn.
 5. **Hiểu gộp lead.** Tạo hai comment từ hai nick khác nhau cùng ghi số `0912 345 678` và `+84912345678`. Kết quả là **một lead**, hiện "2 comment" ở cột Nguồn.
 6. **Hiểu comment của chính mình.** Dùng chính nick đăng bài, tự comment `liên hệ 0987654321`. Quét xong, số này **không thành lead**.
 7. **Hiểu phân quyền.** Tạo một tài khoản Sale thử. Đăng nhập: chỉ thấy mục Lead và danh sách trống. Gán một lead cho Sale đó: giờ Sale thấy đúng lead đó và không thấy lead khác.
-8. **Hiểu giới hạn bài của người khác.** Thử thêm link một bài *không phải của nick* ở trang Bài đăng khi không tick xác nhận: bị từ chối. Thử "Theo dõi bài này" trên bài của người khác: extension/webapp từ chối.
+8. **Thử bài của người khác.** Mở permalink một bài công khai hoặc bài trong nhóm mà nick đã kết nối xem được, bấm "Theo dõi bài này", rồi bấm "Quét ngay". Bài phải xuất hiện ở trang Bài đăng và comment đọc được phải tăng; nếu bằng 0, dùng "Thử đọc sâu" hoặc "Chẩn đoán trang này".
 9. **Xem dữ liệu thô** (cho ai muốn): mở Chrome DevTools (F12) ở tab webapp > Network, hoặc ở `chrome://extensions` bấm "service worker" của extension > Console/Network, để xem extension gọi `/api/ext/...` thế nào.
 
 ---

@@ -93,7 +93,7 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
       <div>
         <h1 className="text-2xl font-semibold">Lead Facebook</h1>
         <p className="text-muted-foreground">
-          {manager ? "Khách để lại số điện thoại hoặc liên hệ trong comment trên các bài của mình." : "Các lead được gán cho bạn."}{" "}
+          {manager ? "Khách để lại số điện thoại hoặc liên hệ trong comment trên các bài đang theo dõi." : "Các lead được gán cho bạn."}{" "}
           {newCount > 0 && <Badge>{newCount} lead mới</Badge>}
         </p>
       </div>

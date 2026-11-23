@@ -65,7 +65,7 @@ export default async function FbConnectPage() {
       <div>
         <h1 className="text-2xl font-semibold">Kết nối extension</h1>
         <p className="text-muted-foreground">
-          Extension Chrome &quot;Data Lead Facebook&quot; chỉ đọc comment trên bài do nick của mình đăng rồi gửi về đây. Extension được build sẵn cho địa chỉ <code className="rounded bg-muted px-1.5 py-0.5 text-sm">{appUrl}</code>, nhân sự chỉ cần dán mã kết nối vào phần Cài đặt của extension.
+          Extension Chrome &quot;Data Lead Facebook&quot; đọc comment trên những bài người dùng chủ động theo dõi rồi gửi về đây. Extension được build sẵn cho địa chỉ <code className="rounded bg-muted px-1.5 py-0.5 text-sm">{appUrl}</code>, nhân sự chỉ cần dán mã kết nối vào phần Cài đặt của extension.
         </p>
       </div>
 
@@ -113,7 +113,7 @@ export default async function FbConnectPage() {
         <CardHeader>
           <CardTitle>Nick Facebook ({accounts.length})</CardTitle>
           <CardDescription>
-            Nick dùng để đăng bài. Extension chỉ đọc bài của đúng nick này. {isAdmin ? "" : "Bạn chỉ thấy nick của mình."}
+            Nick Facebook dùng để mở và quét các bài đã theo dõi. Nick phải xem được bài và comment. {isAdmin ? "" : "Bạn chỉ thấy nick của mình."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">

@@ -1,9 +1,10 @@
 # Các quyết định kỹ thuật
 
-Ghi lại những điểm kỹ thuật nhỏ đã tự quyết (không ảnh hưởng nghiệp vụ). Điểm nào ảnh hưởng nghiệp vụ thì đã hỏi chủ dự án, xem `docs/PLAN.md`.
+Ghi lại những điểm kỹ thuật nhỏ đã tự quyết (không ảnh hưởng nghiệp vụ). Điểm nào ảnh hưởng nghiệp vụ thì đã hỏi chủ dự án, xem `docs/PLAN.md`. Quyết định mới nhất có thể được ghim ở đầu bảng để dễ thấy phần thay thế quyết định cũ.
 
 | # | Quyết định | Lý do |
 |---|---|---|
+| D93 | Cho phép theo dõi bài do người khác đăng. `FbPost.accountId` từ đây là **nick dùng để mở/quét bài**, không phải tác giả. Bỏ kiểm tra tác giả khớp nick ở `POST /api/ext/posts`, bỏ ô xác nhận "bài của chính nick" trên web và cho phép metadata tác giả bị thiếu; vẫn chỉ giao/nhận dữ liệu cho đúng permalink người dùng đã chủ động đăng ký và đúng nick quét gắn với mã. Comment do chính nick quét viết vẫn là `OTHER` và không sinh lead. Extension không tự tìm bài, không đọc tin nhắn/cookie, không tự đăng/comment/bấm gửi. | Nhu cầu thực tế là theo dõi thông tin liên hệ trong comment của các bài liên quan do tài khoản khác đăng; quyền xem bài/comment vẫn do Facebook của nick quét quyết định. |
 | D1 | Phiên đăng nhập lưu trong CSDL (`auth_sessions`), cookie chứa token ngẫu nhiên, DB chỉ lưu bản băm. Không dùng JWT/cookie không trạng thái | Admin khóa tài khoản sale thì mất quyền ngay; đơn giản, không cần thư viện phiên |
 | D2 | Băm mật khẩu bằng `bcryptjs` | Thuần JavaScript, không cần biên dịch, chạy ổn trên Windows và hosting |
 | D3 | Đổi tên để tránh nhầm: phiên đăng nhập = `auth_sessions`, phiên tạo ảnh = `consult_sessions` (hiển thị "Phiên tư vấn") | Brief dùng chữ "session" cho cả hai |

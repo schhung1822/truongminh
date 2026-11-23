@@ -1,7 +1,7 @@
 /**
  * Service worker của extension (docs/thiet-ke-module-lead-facebook.md mục 8.2). Hẹn giờ, hỏi webapp có việc gì, quét TUẦN TỰ từng bài
  * (một cửa sổ/tab một lúc), gửi kết quả về. Extension KHÔNG tự đăng, tự comment hay tự bấm gửi gì lên Facebook: chỉ mở đúng các
- * link bài mà webapp giao (bài của chính nick), đọc comment, rồi đóng.
+ * link bài mà webapp giao (do người dùng chủ động theo dõi), đọc comment, rồi đóng.
  *
  * Độ trễ giữa các bài là số cố định lấy từ cấu hình của webapp (không ngẫu nhiên hoá): chỉ để không tạo tải bất thường lên tài khoản.
  */
@@ -311,13 +311,13 @@ async function followActiveTab(tabId: number): Promise<SimpleResult> {
     await store.addEvent("ok", `Theo dõi bài ${shortUrl(info.url)}: ${r.created ? "đã thêm" : "đã có từ trước"}.`);
     return { ok: true, message: msg };
   } catch (e) {
-    const msg = e instanceof ApiError && e.code === "NOT_OWN_POST" ? `${e.message} Nick đang kết nối là "${(await api.me(token).catch(() => null))?.account.display_name ?? "?"}".` : errText(e);
+    const msg = errText(e);
     await store.addEvent("warn", `Theo dõi bài thất bại: ${msg}`);
     return { ok: false, message: msg };
   }
 }
 
-async function diagnoseActiveTab(tabId: number): Promise<{ ok: boolean; message: string; report?: DiagnosticReport }> {
+async function diagnoseActiveTab(tabId: number, deep = false): Promise<{ ok: boolean; message: string; report?: DiagnosticReport }> {
   const token = await store.getToken();
   const t = await activeFacebookTab(tabId);
   if (!t.ok) return t;
@@ -325,13 +325,13 @@ async function diagnoseActiveTab(tabId: number): Promise<{ ok: boolean; message:
   if (token) me = await api.me(token).catch(() => null);
   let report: DiagnosticReport;
   try {
-    report = await sendToContent<DiagnosticReport>(tabId, { type: "DIAGNOSE", ownProfileUrl: me?.account.profile_url ?? "", ownDisplayName: me?.account.display_name ?? "" }, 40_000);
+    report = await sendToContent<DiagnosticReport>(tabId, { type: "DIAGNOSE", ownProfileUrl: me?.account.profile_url ?? "", ownDisplayName: me?.account.display_name ?? "", deep }, deep ? 5 * 60_000 : 40_000);
   } catch (e) {
     return { ok: false, message: `Không chạy được chẩn đoán trên tab này: ${errText(e)}` };
   }
   await store.setLastDiagnostic(report);
   if (token) await api.log(token, "scan_fail", { reason: "diagnostic", ...report }).catch(() => undefined);
-  await store.addEvent("info", `Đã chẩn đoán trang ${report.host}: ${report.counts.articles} article, đọc được ${report.counts.commentsRead} comment${token ? ", đã gửi báo cáo về webapp" : ""}.`);
+  await store.addEvent("info", `${deep ? "Thử đọc sâu" : "Chẩn đoán"} trang ${report.host}: ${report.counts.articles} article, đọc được ${report.counts.commentsRead} comment (${report.counts.repliesRead} trả lời, ${report.counts.commentsWithPhone} có dạng số điện thoại)${token ? "; chỉ số đếm được gửi về webapp" : ""}.`);
   return { ok: true, message: `Đã chẩn đoán xong: ${report.counts.commentsRead} comment đọc được, ${report.counts.articles} khối article. Báo cáo đã lưu${token ? " và gửi về webapp" : ""}; bấm "Sao chép báo cáo" để gửi cho người phát triển.`, report };
 }
 
@@ -363,7 +363,7 @@ async function handle(msg: BackgroundMessage): Promise<unknown> {
     case "FOLLOW_ACTIVE_TAB":
       return followActiveTab(msg.tabId);
     case "DIAGNOSE_ACTIVE_TAB":
-      return diagnoseActiveTab(msg.tabId);
+      return diagnoseActiveTab(msg.tabId, msg.deep === true);
     case "CONNECT": {
       const token = msg.token.trim();
       if (!/^tmx_[A-Za-z0-9_-]{43}$/.test(token)) return { ok: false, message: "Mã không đúng dạng. Mã kết nối bắt đầu bằng tmx_ và dài 47 ký tự; hãy sao chép đủ cả mã." } satisfies SimpleResult;

@@ -40,7 +40,7 @@
       <h1>Data Lead Facebook</h1>
       <span id="version" class="muted"></span>
     </header>
-    <p class="muted">Đọc comment trên bài do chính nick của bạn đăng và gửi về webapp để tách số điện thoại thành lead. Không tự đăng, không tự comment, không tự bấm gửi.</p>
+    <p class="muted">Đọc comment trên những bài bạn chủ động theo dõi và gửi về webapp để tách số điện thoại thành lead. Bài có thể do người khác đăng. Không tự đăng, không tự comment, không tự bấm gửi.</p>
     <nav class="toc">
       <a href="#ketnoi">Kết nối</a><a href="#thietlap">Thiết lập</a><a href="#huongdan">Hướng dẫn</a><a href="#suco">Khi có sự cố</a><a href="#chandoan">Chẩn đoán</a><a href="#thongtin">Thông tin</a>
     </nav>
@@ -78,8 +78,8 @@
       </ol>
       <h3>Hằng ngày</h3>
       <ol>
-        <li>Đăng bài lên nhóm như bình thường (extension không đăng hộ).</li>
-        <li>Mở bài vừa đăng ở <b>trang riêng của bài</b> (bấm vào dòng thời gian đăng, ví dụ "2 giờ"), bấm biểu tượng extension → <b>Theo dõi bài này</b>. Hoặc dán link bài ở webapp: <b>Lead Facebook › Bài đăng</b>.</li>
+        <li>Mở bài cần theo dõi ở <b>trang riêng của bài</b> (bấm vào dòng thời gian đăng, ví dụ "2 giờ"). Bài có thể do bạn hoặc người khác đăng, miễn là nick đang kết nối xem được bài và comment.</li>
+        <li>Bấm biểu tượng extension → <b>Theo dõi bài này</b>. Hoặc dán link bài ở webapp: <b>Lead Facebook › Bài đăng</b>.</li>
         <li>Extension tự quét theo chu kỳ (mặc định 10 phút). Muốn quét ngay: bấm <b>Quét ngay</b>. Khi quét, một cửa sổ Facebook nhỏ tự mở rồi tự đóng; đừng đóng tay.</li>
         <li>Lead xuất hiện ở webapp <b>Lead Facebook › Lead</b>. Sale được gán lead sẽ thấy ở đó.</li>
       </ol>
@@ -87,7 +87,7 @@
       <ul>
         <li>Chrome phải đang mở (thu nhỏ được) và máy không ngủ thì mới quét theo chu kỳ.</li>
         <li>Mỗi máy một mã kết nối, mỗi mã gắn một nick. Nhiều nhân sự, nhiều máy dùng song song được; webapp tự chia việc để hai máy không quét trùng một bài.</li>
-        <li>Chỉ theo dõi được bài do chính nick đã kết nối đăng. Bài của người khác bị từ chối.</li>
+        <li>Có thể theo dõi bài của người khác. Extension chỉ quét đúng những permalink bạn chủ động thêm và chỉ đọc nội dung nick đang kết nối nhìn thấy.</li>
         <li>Comment do chính nick mình viết không bao giờ thành lead (tránh số của xưởng lọt vào danh sách).</li>
       </ul>
       <h3>Extension KHÔNG làm gì</h3>
@@ -109,7 +109,7 @@
           <tr><td>"Facebook đang yêu cầu xác minh nick"</td><td>Vào Facebook xử lý xác minh bằng tay. Nick tạm ngừng được giao việc; sau khi nick ổn, nhờ quản trị viên bấm "Bật lại nick" trên webapp.</td></tr>
           <tr><td>Quét xong nhưng 0 comment dù bài có comment, hoặc "Không đọc được trang Facebook"</td><td>Facebook có thể đã đổi giao diện. Mở bài đó, bấm <b>Chẩn đoán trang này</b>, rồi <b>Sao chép báo cáo</b> và gửi cho người phát triển (báo cáo không chứa tên hay nội dung comment). Thử đổi "Cách mở bài khi quét" sang cửa sổ nhỏ riêng.</td></tr>
           <tr><td>"Theo dõi bài này" báo không phải trang bài đăng</td><td>Đang ở trang chủ, trang cá nhân hoặc nhóm. Bấm vào dòng thời gian đăng của bài để mở bài ở trang riêng, rồi bấm lại.</td></tr>
-          <tr><td>"Theo dõi bài này" báo không phải bài của nick</td><td>Nick đang đăng nhập Facebook khác với nick đã kết nối, hoặc tên/link nick trên webapp nhập chưa đúng. Sửa ở webapp › Kết nối extension.</td></tr>
+          <tr><td>Bài của người khác quét được 0 comment</td><td>Kiểm tra nick đang kết nối có xem được đầy đủ bài và comment hay không. Mở bài đó, chọn "Tất cả bình luận", rồi dùng <b>Thử đọc sâu</b> hoặc <b>Chẩn đoán trang này</b>.</td></tr>
           <tr><td>Bấm nút mà không thấy gì</td><td>Vào <code>chrome://extensions</code>, bấm nút tải lại của Data Lead Facebook, tải lại trang Facebook (F5), thử lại.</td></tr>
         </tbody>
       </table>

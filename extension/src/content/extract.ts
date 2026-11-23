@@ -4,6 +4,7 @@
  * Cách tìm phần tử nằm ở selectors.ts; Facebook đổi giao diện thì sửa ở đó.
  */
 import { canonicalGroupUrl, isPostHref, parsePostUrl, profileUrlFromAnyLink } from "../../../lib/fb/urls";
+import { extractContacts } from "../../../lib/fb/phone";
 import { EXT_VERSION } from "../config";
 import type { CommentPayload, DiagnosticReport, PostInfo } from "../types";
 import {
@@ -192,26 +193,25 @@ export function postAuthorLink(root: HTMLElement): HTMLAnchorElement | null {
   return null;
 }
 
-/**
- * Thông tin bài đang mở, cho nút "Theo dõi bài này". Cần đọc được TÁC GIẢ của bài từ trang: không đọc được thì từ chối,
- * vì hệ thống chỉ theo dõi bài do chính nick của mình đăng.
- */
+/** Thông tin bài đang mở cho nút "Theo dõi bài này". Tác giả là metadata tùy chọn; permalink mới là điều bắt buộc. */
 export function readPostInfo(): PostInfo {
   const parsed = parsePostUrl(location.href);
   if (!parsed) {
     return { ok: false, error: "Trang này không phải link của một bài đăng. Mở bài ở trang riêng của nó (bấm vào thời gian đăng của bài) rồi bấm lại." };
   }
+  if (!mainPostArticle() && !document.querySelector(MESSAGE)) {
+    return { ok: false, error: "Chưa thấy nội dung bài đăng trên trang. Hãy chờ Facebook tải xong hoặc tải lại trang (F5), rồi bấm lại." };
+  }
   const root = mainPostRoot();
   const author = postAuthorLink(root);
-  if (!author) return { ok: false, error: "Không đọc được tên tác giả của bài (Facebook có thể đã đổi giao diện), nên chưa xác nhận được đây là bài của nick. Bấm \"Chẩn đoán trang này\" và gửi báo cáo cho người phát triển." };
 
   const groupLink = [...document.querySelectorAll<HTMLAnchorElement>('a[href*="/groups/"]')].map((a) => canonicalGroupUrl(a.href)).find((u) => u !== null) ?? null;
   const message = root.querySelector<HTMLElement>(MESSAGE);
   return {
     ok: true,
     url: parsed.url,
-    authorProfileUrl: profileUrlFromAnyLink(author.href)!,
-    authorName: textOf(author).trim() || null,
+    authorProfileUrl: author ? profileUrlFromAnyLink(author.href) : null,
+    authorName: author ? textOf(author).trim() || null : null,
     groupUrl: parsed.groupUrl ?? groupLink,
     content: (message ? textOf(message) : "").trim().slice(0, 2000),
   };
@@ -246,7 +246,7 @@ const summarizeStructure = (a: HTMLElement): string => {
 };
 
 /** Báo cáo cấu trúc trang, không chứa dữ liệu cá nhân (xem DiagnosticReport). */
-export function diagnose(own: { profileUrl: string; displayName: string }): DiagnosticReport {
+export function diagnose(own: { profileUrl: string; displayName: string }, deep: DiagnosticReport["deep"] = null): DiagnosticReport {
   const articles = [...document.querySelectorAll<HTMLElement>(ARTICLE)];
   const comments = readAllComments(own);
   const buttons: Record<string, string[]> = {};
@@ -274,7 +274,10 @@ export function diagnose(own: { profileUrl: string; displayName: string }): Diag
       commentsRead: comments.length,
       commentsWithFallbackId: comments.filter((c) => c.fallbackId).length,
       ownComments: comments.filter((c) => c.is_own).length,
+      repliesRead: comments.filter((c) => c.parent_fb_comment_id !== null).length,
+      commentsWithPhone: comments.filter((c) => extractContacts(c.text).phones.length > 0).length,
     },
+    deep,
     buttons,
     sortButtonLabel: sort ? labelOf(sort).split(/\r?\n/)[0].slice(0, 40) : null,
     commentCountText: countText,

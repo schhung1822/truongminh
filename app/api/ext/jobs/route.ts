@@ -9,7 +9,7 @@ const MAX_KNOWN_IDS = 3000;
 
 /**
  * Việc cần làm cho nick của mã này. Giai đoạn 1 chỉ có `scan` (đọc comment); `replies` và `post_tasks` luôn rỗng.
- * Chỉ giao bài có trong danh sách theo dõi của chính nick này, nên extension không bao giờ được bảo mở bài của ai khác.
+ * Chỉ giao bài đã được người dùng chủ động thêm vào danh sách theo dõi của nick quét này.
  * Nick tạm dừng hoặc bị hạn chế (checkpoint) thì không giao việc.
  */
 export async function GET(request: Request) {

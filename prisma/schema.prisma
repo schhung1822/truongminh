@@ -960,7 +960,7 @@ model MachineTimeLog {
 
 // ============================================================================================
 // Module Lead Facebook (docs/thiet-ke-module-lead-facebook.md, quyết định D91).
-// Giai đoạn 1: thu thập comment trên bài do CHÍNH nick của mình đăng, tách số điện thoại, tạo lead.
+// Giai đoạn 1: thu thập comment trên những bài người dùng chủ động theo dõi, tách số điện thoại, tạo lead.
 // Extension chỉ ĐỌC trang và báo về; không có bảng hay trường nào dùng để tự gửi comment hay tự đăng bài.
 // ============================================================================================
 
@@ -1024,7 +1024,7 @@ enum ExtLogType {
   POST_DONE
 }
 
-// Nick Facebook của nhân sự dùng để đăng bài (và là nick duy nhất extension đọc bài cho).
+// Nick Facebook của nhân sự dùng để mở và quét các bài đã đăng ký theo dõi.
 model FbAccount {
   id          String          @id @default(cuid())
   userId      String
@@ -1073,7 +1073,7 @@ model FbPost {
   lastCommentAt   DateTime? // lần cuối thấy comment mới; quá N ngày không có thì tự chuyển DONE
   commentCount    Int              @default(0)
   leadCount       Int              @default(0)
-  registeredById  String? // người đã đăng ký bài này vào danh sách theo dõi (đã xác nhận là bài của nick)
+  registeredById  String? // người đã chủ động đăng ký bài này vào danh sách theo dõi
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 

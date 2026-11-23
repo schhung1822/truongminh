@@ -38,7 +38,7 @@ export function AddPostForm({ accounts }: { accounts: { id: string; displayName:
         <Input id="post-url" name="url" required maxLength={600} className="h-10" placeholder="https://www.facebook.com/groups/.../posts/..." />
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="post-acc">Nick đã đăng bài</Label>
+        <Label htmlFor="post-acc">Nick dùng để quét bài</Label>
         <NativeSelect id="post-acc" name="accountId" required defaultValue={accounts[0].id}>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
@@ -62,10 +62,9 @@ export function AddPostForm({ accounts }: { accounts: { id: string; displayName:
         <Label htmlFor="post-content">Nội dung bài (không bắt buộc, để đối chiếu sau này)</Label>
         <Textarea id="post-content" name="content" rows={3} maxLength={20000} />
       </div>
-      <label className="flex items-start gap-2 text-sm sm:col-span-2">
-        <input type="checkbox" name="confirmOwn" className="mt-1 size-4" required />
-        <span>Tôi xác nhận bài này do <b>chính nick đã chọn</b> đăng. Hệ thống chỉ đọc comment trên bài của mình, không đọc bài của người khác.</span>
-      </label>
+      <p className="text-sm text-muted-foreground sm:col-span-2">
+        Bài có thể do người khác đăng. Nick đã chọn cần có quyền xem bài và comment; extension chỉ quét những nội dung đang hiển thị cho nick đó.
+      </p>
       <div className="sm:col-span-2">
         <Button type="submit" className="h-10 px-4" disabled={pending}>
           {pending && <Loader2Icon className="animate-spin" />}

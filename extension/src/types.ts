@@ -30,7 +30,7 @@ export type ScanResult =
   | { state: "selector_broken"; item: string; detail?: string; resolvedUrl: string };
 
 export type PostInfo =
-  | { ok: true; url: string; authorProfileUrl: string; authorName: string | null; groupUrl: string | null; content: string }
+  | { ok: true; url: string; authorProfileUrl: string | null; authorName: string | null; groupUrl: string | null; content: string }
   | { ok: false; error: string };
 
 /**
@@ -51,7 +51,12 @@ export type DiagnosticReport = {
     commentsRead: number;
     commentsWithFallbackId: number;
     ownComments: number;
+    /** Chỉ là SỐ ĐẾM: bao nhiêu comment là trả lời, bao nhiêu có dạng số điện thoại hợp lệ. Không có chính các số đó. */
+    repliesRead: number;
+    commentsWithPhone: number;
   };
+  /** Chế độ thử đọc sâu: có bấm mở rộng hết các nút "Xem thêm" không, bao nhiêu lần bấm, có đọc trọn vẹn không. */
+  deep: { expanded: boolean; steps: number; complete: boolean; seconds: number } | null;
   buttons: Record<string, string[]>;
   sortButtonLabel: string | null;
   commentCountText: string | null;
@@ -68,7 +73,7 @@ export type ContentMessage =
   | { type: "PING" }
   | { type: "SCAN"; ownProfileUrl: string; ownDisplayName: string }
   | { type: "GET_POST_INFO" }
-  | { type: "DIAGNOSE"; ownProfileUrl: string; ownDisplayName: string };
+  | { type: "DIAGNOSE"; ownProfileUrl: string; ownDisplayName: string; deep?: boolean };
 
 export type ScanMode = "window" | "tab";
 
@@ -86,7 +91,7 @@ export type BackgroundMessage =
   | { type: "GET_STATUS" }
   | { type: "RUN_NOW" }
   | { type: "FOLLOW_ACTIVE_TAB"; tabId: number }
-  | { type: "DIAGNOSE_ACTIVE_TAB"; tabId: number }
+  | { type: "DIAGNOSE_ACTIVE_TAB"; tabId: number; deep?: boolean }
   | { type: "CONNECT"; token: string }
   | { type: "DISCONNECT" }
   | { type: "GET_SETTINGS" }

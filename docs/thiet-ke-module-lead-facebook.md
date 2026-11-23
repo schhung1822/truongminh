@@ -1,6 +1,6 @@
 # Thiết kế module Lead Facebook (webapp Trường Minh + Chrome extension)
 
-Phiên bản: 1.0, ngày 20/11/2026
+Phiên bản: 1.1, cập nhật ngày 23/11/2026
 Người yêu cầu: Ngô Hồng Sơn
 Mục đích tài liệu: đưa cho Claude Code trong VS Code để dựng cả phần webapp lẫn extension trong cùng một dự án.
 
@@ -10,7 +10,7 @@ Mục đích tài liệu: đưa cho Claude Code trong VS Code để dựng cả 
 
 Phòng MKT đăng bài lên các nhóm Facebook và trang cá nhân để tìm khách hoặc tìm bên sản xuất. Module này làm 3 việc:
 
-1. Thu thập comment trên **các bài do chính nhân sự của mình đăng**, tách số điện thoại và thông tin liên hệ, đưa vào danh sách lead trong webapp.
+1. Thu thập comment trên **các bài người dùng chủ động thêm vào danh sách theo dõi**, kể cả bài do người khác đăng, tách số điện thoại và thông tin liên hệ, đưa vào danh sách lead trong webapp.
 2. Với comment dạng "ib", "quan tâm", "cần tư vấn": soạn sẵn câu trả lời dẫn khách về inbox fanpage, nhân sự duyệt và bấm gửi.
 3. Hỗ trợ đăng bài lên nhiều nhóm: điền sẵn nội dung, nhân sự bấm đăng, link bài tự ghi về webapp.
 
@@ -18,7 +18,7 @@ Phòng MKT đăng bài lên các nhóm Facebook và trang cá nhân để tìm k
 
 ### Trong phạm vi
 
-- Đọc comment trên bài có trong danh sách `fb_posts` của webapp (bài do nick của mình đăng).
+- Đọc comment trên bài có trong danh sách `fb_posts` của webapp, trong phạm vi nick Facebook đã kết nối nhìn thấy.
 - Tách số điện thoại, Zalo, email từ nội dung comment.
 - Phân loại comment và soạn câu trả lời gợi ý.
 - Điền sẵn câu trả lời hoặc nội dung bài đăng vào Facebook, **người bấm nút gửi cuối cùng**.
@@ -27,7 +27,7 @@ Phòng MKT đăng bài lên các nhóm Facebook và trang cá nhân để tìm k
 ### Ngoài phạm vi (không dựng, kể cả khi được yêu cầu thêm sau)
 
 - Tự động đăng bài hoặc gửi comment mà không có người bấm nút cuối.
-- Đọc hoặc thu thập comment trên bài của người khác.
+- Tự tìm kiếm, tự phát hiện hoặc quét hàng loạt bài chưa được người dùng chủ động thêm vào danh sách theo dõi.
 - Tự comment vào bài của người khác.
 - Dùng tài khoản mua lại (via), proxy, giả lập vân tay trình duyệt, hoặc bất kỳ kỹ thuật nào nhằm che giấu việc tự động hoá.
 - Quét danh sách thành viên nhóm, đổi UID ra số điện thoại.
@@ -89,7 +89,7 @@ Tên bảng có tiền tố `fb_` để tách khỏi phần hiện có. Tất c�
 
 | Cột | Kiểu | Ghi chú |
 |---|---|---|
-| account_id | FK fb_accounts | Nick đã đăng |
+| account_id | FK fb_accounts | Nick dùng để mở và quét bài |
 | group_id | FK fb_groups, nullable | Null nếu đăng trang cá nhân |
 | url | varchar, unique | Link bài (permalink) |
 | content_snapshot | text | Nội dung bài lúc đăng |
@@ -141,7 +141,7 @@ Chống trùng: cùng `phone` thì không tạo lead mới, chỉ ghi thêm ngu�
 | Cột | Kiểu | Ghi chú |
 |---|---|---|
 | comment_id | FK fb_comments | |
-| account_id | FK fb_accounts | Nick sẽ trả lời (nick đã đăng bài) |
+| account_id | FK fb_accounts | Nick dự kiến trả lời; chưa dùng ở giai đoạn thu thập |
 | draft_text | text | Câu soạn sẵn |
 | final_text | text, nullable | Sau khi nhân sự sửa |
 | status | enum: draft, approved, filled, sent, skipped, failed | |
@@ -429,7 +429,7 @@ Thêm một mục menu "Lead Facebook" với các trang con. Dùng component sha
 - Mã kết nối: sinh ngẫu nhiên đủ dài, chỉ lưu hash, hiện cho người dùng một lần, thu hồi được.
 - Extension không lưu comment hay số điện thoại lâu dài trên máy nhân sự, chỉ giữ tạm trong bộ nhớ khi quét.
 - Extension không đọc cookie, token đăng nhập Facebook, tin nhắn, hay bất kỳ trang nào ngoài bài nằm trong danh sách việc.
-- Chỉ thu thập comment trên bài của mình. Mục đích sử dụng: liên hệ tư vấn theo đúng nhu cầu khách đã nêu.
+- Chỉ thu thập comment trên các permalink người dùng chủ động theo dõi và nick đã kết nối có quyền xem. Mục đích sử dụng: liên hệ tư vấn theo đúng nhu cầu người bình luận đã nêu.
 - Có chức năng xoá lead và comment liên quan khi khách yêu cầu.
 - Đặt thời hạn lưu: comment loại `other` và `spam` tự xoá sau 90 ngày (con số đề xuất, anh Sơn quyết định).
 - Nên hỏi luật sư về nghĩa vụ theo Luật Bảo vệ dữ liệu cá nhân trước khi chạy quy mô lớn.

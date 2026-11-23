@@ -32,26 +32,9 @@ async function switchToAllComments(): Promise<void> {
   }
 }
 
-async function scan(msg: Extract<ContentMessage, { type: "SCAN" }>): Promise<ScanResult> {
-  const started = Date.now();
-  const own = { profileUrl: msg.ownProfileUrl, displayName: msg.ownDisplayName };
-  const resolvedUrl = location.href;
-
-  let state = pageState();
-  if (state !== "ok") return { state };
-  // Trang vẽ xong khi có bài (article) hoặc có nội dung bài, hoặc có bất kỳ nút nào về bình luận
-  const ready = await waitFor(
-    () => document.querySelector('[role="article"], [data-ad-comet-preview="message"], [data-ad-preview="message"]') !== null || pageState() !== "ok",
-    PAGE_READY_TIMEOUT_MS,
-  );
-  state = pageState();
-  if (state !== "ok") return { state };
-  if (!ready) return { state: "selector_broken", item: "post_article", detail: `Không thấy phần tử bài đăng sau ${PAGE_READY_TIMEOUT_MS / 1000} giây (host ${location.hostname}, trang ${document.visibilityState})`, resolvedUrl };
-
-  await scrollToLoad();
-  await switchToAllComments();
-
-  // Mở rộng: nút nào bấm xong mà số comment không tăng thì ghi là "chết" và bỏ qua, tránh bấm lặp mãi một nút
+/** Bấm các nút mở rộng cho tới khi hết (có giới hạn). Dùng cho cả quét thật lẫn thử đọc sâu. */
+async function expandAll(started: number): Promise<{ complete: boolean; steps: number; note?: string }> {
+  // Nút nào bấm xong mà số comment không tăng thì ghi là "chết" và bỏ qua, tránh bấm lặp mãi một nút
   const dead = new Set<Element>();
   let steps = 0;
   let count = commentArticles().length;
@@ -74,11 +57,35 @@ async function scan(msg: Extract<ContentMessage, { type: "SCAN" }>): Promise<Sca
     else dead.add(target);
     if (steps % 10 === 0) await scrollToLoad(1);
   }
-
   // Mở phần nội dung bị cắt ngắn ("Xem thêm") của từng bình luận
   const more = seeMoreButtons();
   for (const b of more) b.click();
   if (more.length > 0) await sleep(STEP_DELAY_MS);
+  return { complete, steps, note };
+}
+
+async function scan(msg: Extract<ContentMessage, { type: "SCAN" }>): Promise<ScanResult> {
+  const started = Date.now();
+  const own = { profileUrl: msg.ownProfileUrl, displayName: msg.ownDisplayName };
+  const resolvedUrl = location.href;
+
+  let state = pageState();
+  if (state !== "ok") return { state };
+  // Trang vẽ xong khi có bài (article) hoặc có nội dung bài, hoặc có bất kỳ nút nào về bình luận
+  const ready = await waitFor(
+    () => document.querySelector('[role="article"], [data-ad-comet-preview="message"], [data-ad-preview="message"]') !== null || pageState() !== "ok",
+    PAGE_READY_TIMEOUT_MS,
+  );
+  state = pageState();
+  if (state !== "ok") return { state };
+  if (!ready) return { state: "selector_broken", item: "post_article", detail: `Không thấy phần tử bài đăng sau ${PAGE_READY_TIMEOUT_MS / 1000} giây (host ${location.hostname}, trang ${document.visibilityState})`, resolvedUrl };
+
+  await scrollToLoad();
+  await switchToAllComments();
+
+  const exp = await expandAll(started);
+  const complete = exp.complete;
+  let note = exp.note;
 
   const comments = readAllComments(own);
   const fallback = comments.filter((c) => c.fallbackId).length;
@@ -115,9 +122,19 @@ if (!window.__dataLeadContent) {
       case "GET_POST_INFO":
         sendResponse(readPostInfo());
         return false;
-      case "DIAGNOSE":
-        void scrollToLoad(2).then(() => sendResponse(diagnose({ profileUrl: msg.ownProfileUrl, displayName: msg.ownDisplayName })));
+      case "DIAGNOSE": {
+        const own = { profileUrl: msg.ownProfileUrl, displayName: msg.ownDisplayName };
+        void (async () => {
+          await scrollToLoad(2);
+          if (!msg.deep) return sendResponse(diagnose(own));
+          // Thử đọc sâu: chạy đúng phần mở rộng của bộ đọc thật, nhưng chỉ trả về số đếm (không gửi gì ra ngoài trang)
+          const t0 = Date.now();
+          await switchToAllComments();
+          const exp = await expandAll(t0);
+          sendResponse(diagnose(own, { expanded: true, steps: exp.steps, complete: exp.complete, seconds: Math.round((Date.now() - t0) / 1000) }));
+        })();
         return true;
+      }
     }
     return false;
   });

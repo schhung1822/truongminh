@@ -177,10 +177,10 @@ describe("thông tin bài cho nút Theo dõi bài này", () => {
     });
   });
 
-  it("không đọc được tác giả thì từ chối, không đoán", () => {
+  it("vẫn cho theo dõi bài của người khác hoặc khi Facebook không hiển thị tác giả", () => {
     document.body.innerHTML = '<div role="article"><div dir="auto">bài không có tên tác giả</div></div>';
     const info = readPostInfo();
-    expect(info.ok).toBe(false);
+    expect(info).toMatchObject({ ok: true, authorProfileUrl: null, authorName: null });
   });
 
   it("không có bài trên trang thì từ chối", () => {
@@ -192,7 +192,11 @@ describe("thông tin bài cho nút Theo dõi bài này", () => {
 describe("báo cáo chẩn đoán", () => {
   it("có số đếm, nhãn nút, mẫu link; KHÔNG chứa tên người, nội dung comment hay số điện thoại", () => {
     const r = diagnose(OWN);
-    expect(r.counts).toMatchObject({ articles: 4, articlesWithCommentLink: 3, articlesWithCommentLabel: 3, commentsRead: 3, commentsWithFallbackId: 0, ownComments: 1 });
+    expect(r.counts).toMatchObject({ articles: 4, articlesWithCommentLink: 3, articlesWithCommentLabel: 3, commentsRead: 3, commentsWithFallbackId: 0, ownComments: 1, repliesRead: 1, commentsWithPhone: 2 });
+    expect(r.deep).toBeNull();
+    const deep = diagnose(OWN, { expanded: true, steps: 3, complete: true, seconds: 5 });
+    expect(deep.deep).toEqual({ expanded: true, steps: 3, complete: true, seconds: 5 });
+    for (const secret of ["0912", "0987654321", "Nguyễn Văn A"]) expect(JSON.stringify(deep), secret).not.toContain(secret);
     expect(r.buttons.viewMoreComments).toEqual(["Xem thêm 2 bình luận"]);
     expect(r.sortButtonLabel).toBe("Phù hợp nhất");
     expect(r.commentCountText).toBe("3 bình luận");

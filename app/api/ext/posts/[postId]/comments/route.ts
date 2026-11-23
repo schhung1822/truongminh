@@ -9,8 +9,8 @@ const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
 /**
  * Extension gửi toàn bộ comment đọc được trong một lần quét một bài (docs/thiet-ke-module-lead-facebook.md mục 7.3).
- * Chỉ nhận cho bài có trong danh sách theo dõi của CHÍNH nick gắn với mã: bài của nick khác hoặc bài không có trong
- * danh sách đều trả 404, nên không có đường nào để đẩy dữ liệu của bài người khác vào hệ thống.
+ * Chỉ nhận cho bài có trong danh sách theo dõi của nick quét gắn với mã. Bài không được người dùng đăng ký hoặc được
+ * đăng ký cho nick quét khác vẫn trả 404.
  */
 export async function POST(request: Request, ctx: { params: Promise<{ postId: string }> }) {
   const auth = await authenticateExt(request);

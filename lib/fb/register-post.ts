@@ -18,9 +18,9 @@ export type RegisterPostInput = {
 export type RegisterPostResult = { ok: true; postId: string; created: boolean } | { ok: false; error: string };
 
 /**
- * Đưa một bài vào danh sách theo dõi (dùng cho cả trang web và API của extension). Việc XÁC NHẬN bài do chính nick đăng
- * là của người gọi (ô tick trên web, kiểm tra tác giả trong extension); hàm này chỉ bảo đảm link đúng dạng bài đăng,
- * không trùng, và nick tồn tại. Đã có bài cùng link của cùng nick thì trả về bài đó (created=false), khác nick thì từ chối.
+ * Đưa một bài vào danh sách theo dõi (dùng cho cả trang web và API của extension). Nick được chọn là nick dùng để mở
+ * và quét bài; bài có thể do người khác đăng. Hàm này bảo đảm link đúng dạng, không trùng và nick tồn tại.
+ * Đã có bài cùng link của cùng nick thì trả về bài đó (created=false), khác nick thì từ chối.
  */
 export async function registerPost(input: RegisterPostInput): Promise<RegisterPostResult> {
   const parsed = parsePostUrl(input.url);
