@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDue, isFresh, pickPostsToScan, shouldMarkDone, type ScheduleConfig, type SchedulePost } from "./schedule";
+import { isDue, isFresh, needsFullScan, pickPostsToScan, shouldMarkDone, type ScheduleConfig, type SchedulePost } from "./schedule";
 
 const H = 3600_000;
 const M = 60_000;
@@ -97,5 +97,13 @@ describe("pickPostsToScan: force (bấm Quét ngay)", () => {
     const posts = ["a", "b", "c", "d"].map((id) => post(id, { lastScannedAt: ago(1 * M) }));
     expect(pickPostsToScan(posts, NOW, cfg)).toEqual([]);
     expect(pickPostsToScan(posts, NOW, cfg, { force: true })).toHaveLength(3);
+  });
+});
+
+describe("needsFullScan", () => {
+  it("quét đầy đủ khi chưa có mốc hoặc đã đủ 24 giờ", () => {
+    expect(needsFullScan(null, NOW)).toBe(true);
+    expect(needsFullScan(ago(23 * H), NOW)).toBe(false);
+    expect(needsFullScan(ago(24 * H), NOW)).toBe(true);
   });
 });

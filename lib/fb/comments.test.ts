@@ -81,8 +81,13 @@ describe("ingestPayloadSchema", () => {
   });
 
   it("complete mặc định là true; thiếu comments thì lỗi", () => {
-    expect(ingestPayloadSchema.parse({ comments: [] }).complete).toBe(true);
+    expect(ingestPayloadSchema.parse({ comments: [] })).toMatchObject({ complete: true, unchanged: false });
     expect(ingestPayloadSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("nhận lần kiểm tra nhanh khi tổng comment không đổi", () => {
+    expect(ingestPayloadSchema.parse({ comments: [], reported_comment_count: 75, unchanged: true })).toMatchObject({ reported_comment_count: 75, unchanged: true });
+    expect(ingestPayloadSchema.safeParse({ comments: [], reported_comment_count: -1 }).success).toBe(false);
   });
 
   it("từ chối mã comment lạ và quá 3000 comment", () => {

@@ -57,7 +57,7 @@ export default async function FbPostsPage() {
                   <TableHead>Bài</TableHead>
                   <TableHead>Nhóm</TableHead>
                   <TableHead>Nick quét</TableHead>
-                  <TableHead className="text-right">Comment</TableHead>
+                  <TableHead className="text-right">Đã lưu / Facebook</TableHead>
                   <TableHead className="text-right">Lead</TableHead>
                   <TableHead>Quét cuối</TableHead>
                   <TableHead>Trạng thái</TableHead>
@@ -78,7 +78,9 @@ export default async function FbPostsPage() {
                     </TableCell>
                     <TableCell>{p.group?.name ?? <span className="text-muted-foreground">Trang cá nhân</span>}</TableCell>
                     <TableCell>{p.account.displayName}</TableCell>
-                    <TableCell className="text-right tabular-nums">{p.commentCount}</TableCell>
+                    <TableCell className="text-right tabular-nums" title="Số comment đã lưu / tổng Facebook hiển thị">
+                      {p.commentCount}{p.reportedCommentCount != null ? ` / ${p.reportedCommentCount}` : ""}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{p.leadCount}</TableCell>
                     <TableCell title={fmtDateTime(p.lastScannedAt)}>{fmtAgo(p.lastScannedAt)}</TableCell>
                     <TableCell>

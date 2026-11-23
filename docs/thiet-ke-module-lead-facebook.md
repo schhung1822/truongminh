@@ -1,6 +1,6 @@
 # Thiết kế module Lead Facebook (webapp Trường Minh + Chrome extension)
 
-Phiên bản: 1.1, cập nhật ngày 23/11/2026
+Phiên bản: 1.3, cập nhật ngày 23/11/2026
 Người yêu cầu: Ngô Hồng Sơn
 Mục đích tài liệu: đưa cho Claude Code trong VS Code để dựng cả phần webapp lẫn extension trong cùng một dự án.
 
@@ -97,6 +97,8 @@ Tên bảng có tiền tố `fb_` để tách khỏi phần hiện có. Tất c�
 | posted_at | datetime | |
 | tracking_status | enum: tracking, paused, done | `done` sau N ngày không có comment mới |
 | last_scanned_at | datetime | |
+| last_full_scanned_at | datetime, nullable | Lần gần nhất thực sự mở rộng và đọc comment; dùng để ép quét đầy đủ mỗi 24 giờ |
+| reported_comment_count | int, nullable | Tổng comment Facebook công bố ở lần quét đầy đủ đủ tin cậy |
 | comment_count | int | |
 | lead_count | int | |
 
@@ -355,13 +357,13 @@ Quyền trong manifest: `storage`, `alarms`, `tabs`, `scripting`; host: `https:/
 1. `chrome.alarms` kích hoạt theo `poll_minutes`.
 2. Gọi `GET /jobs`. Không có việc thì dừng.
 3. Với từng bài trong `scan`, xử lý **tuần tự, một tab một lúc**:
-   1. Mở link bài trong tab nền.
-   2. Chờ trang tải xong. Nếu thấy trang đăng nhập hoặc checkpoint: gửi log `checkpoint`, dừng toàn bộ chu kỳ.
-   3. Đổi bộ lọc bình luận sang "Tất cả bình luận".
-   4. Bấm "Xem thêm bình luận" và "Xem phản hồi" cho tới khi hết, có giới hạn số lần và thời gian tối đa mỗi bài.
-   5. Đọc từng comment: ID (lấy từ tham số `comment_id` trong link thời gian của comment), tên, link profile, nội dung (bấm "Xem thêm" nếu bị cắt), chuỗi thời gian, comment cha.
-   6. Gửi `POST /posts/{id}/comments`.
-   7. Đóng tab, chờ `delay_seconds_between_posts` rồi sang bài kế.
+   1. Mở link bài trong tab nền không lấy focus, đọc nhanh tổng comment từ chữ hoặc `aria-label`.
+   2. Nếu tổng bằng mốc của lần đầy đủ trước và chưa tới hạn quét đầy đủ 24 giờ: báo `unchanged`, cập nhật lịch, đóng tab ngay.
+   3. Nếu tổng đổi/chưa có mốc: chuyển chính tab sang cửa sổ nhỏ `focused:false` (hoặc giữ tab nền nếu người dùng chọn chế độ đó). Chờ trang tải xong; gặp đăng nhập/checkpoint thì dừng.
+   4. Đổi bộ lọc bình luận sang "Tất cả bình luận".
+   5. Bấm "Xem thêm bình luận" và "Xem phản hồi" cho tới khi hết; dùng `MutationObserver` chờ DOM tải xong, thử lại nút chậm tối đa hai lần và có giới hạn thích ứng theo độ lớn bài.
+   6. Tìm div cuộn thật của dialog (`overflow-y`) và cuộn nó qua đầu/giữa/cuối. Sau từng lần cuộn/mở rộng, đọc và cộng dồn comment theo ID để không mất comment cũ khi Facebook virtualization danh sách.
+   7. Chỉ lưu mốc tổng khi đã đọc ít nhất 95% số Facebook báo; gửi `POST /posts/{id}/comments`, đóng tab/cửa sổ và chờ sang bài kế.
 4. Ghi kết quả chu kỳ vào popup.
 
 Giới hạn tốc độ ở đây nhằm tránh tạo tải bất thường lên tài khoản, không nhằm che giấu việc tự động hoá. Không thêm bất kỳ kỹ thuật giả lập hành vi người dùng nào.

@@ -112,23 +112,28 @@ Webapp trả về danh sách: mỗi bài gồm mã bài, đường link, và dan
 ### Bước 3. Quét từng bài, lần lượt, một tab một lúc
 Với mỗi bài trong danh sách (theo thứ tự):
 
-1. **Mở bài trong một cửa sổ Facebook nhỏ riêng ở góc màn hình** (không lấy mất con trỏ chuột; quét xong tự đóng). Lý do: Facebook chỉ vẽ nốt phần bình luận khi trang đang hiện; tab bị ẩn thì trình duyệt tạm dừng, dễ đọc thiếu. Ở Cài đặt có thể đổi sang tab nền nếu cửa sổ gây vướng. Nếu bộ đọc trang chưa có trong tab (tab mở trước khi cài extension), extension tự nạp bổ sung.
+Trước hết extension mở bài trong **tab nền không lấy focus** và chỉ đọc tổng comment. Nếu tổng bằng lần quét đầy đủ trước, tab được đóng ngay và không mở cửa sổ quét. Nếu tổng thay đổi, chưa có mốc đủ tin cậy, hoặc đã 24 giờ chưa đọc đầy đủ, chính tab đó mới được chuyển sang cửa sổ nhỏ để làm các bước dưới đây.
+
+1. **Chuyển bài sang một cửa sổ Facebook nhỏ riêng ở góc màn hình** (không lấy mất con trỏ chuột; quét xong tự đóng). Lý do: Facebook chỉ vẽ nốt phần bình luận khi trang đang hiện; tab bị ẩn thì trình duyệt tạm dừng, dễ đọc thiếu. Ở Cài đặt có thể giữ bước đầy đủ trong tab nền nếu cửa sổ gây vướng, đổi lại khả năng đọc thiếu cao hơn.
 2. **Chờ trang tải xong** (tối đa 60 giây).
 3. **Kiểm tra có bị chuyển trang lạ không:**
    - Nếu Facebook đưa về trang **đăng nhập** → dừng cả vòng, báo về webapp.
    - Nếu Facebook đưa về trang **xác minh (checkpoint)** → dừng cả vòng, báo về webapp, nick bị đánh dấu *Bị hạn chế* (xem mục 11).
 4. **Content script bắt đầu đọc trang:**
-   1. Chờ phần bài đăng hiện ra (tối đa 25 giây), cuộn xuống vài lần để Facebook vẽ phần bình luận.
+   1. Chờ phần bài đăng hiện ra (tối đa 25 giây), tìm vùng cuộn thật của dialog Facebook và cuộn vùng đó thay vì chỉ cuộn toàn cửa sổ.
    2. Đổi bộ lọc bình luận sang **"Tất cả bình luận"** (nếu đang ở "Phù hợp nhất").
-   3. **Bấm các nút để mở rộng nội dung đã có**: "Xem thêm bình luận", "Xem phản hồi". Mỗi lần bấm chờ **1 giây cố định** cho nội dung tải thêm. Lặp đến khi hết nút, nhưng có giới hạn: tối đa **80 lần bấm** hoặc **3 phút** mỗi bài. Nút nào bấm mà không ra thêm comment thì bị bỏ qua, không bấm lặp.
-   4. Bấm "Xem thêm" ở những comment bị cắt ngắn để lấy đủ nội dung.
-   5. **Đọc từng comment:** mã comment (lấy từ tham số `comment_id` trong đường link thời gian của comment; không có link thì dùng nhãn "Bình luận của X" và một mã tạm băm từ người viết + nội dung), tên người viết, link trang cá nhân, nội dung, chuỗi thời gian ("2 giờ"), và comment cha nếu là trả lời.
-   6. Đánh dấu comment nào là của *chính nick mình* (so link, hoặc so tên hiển thị khi link khác dạng).
+   3. **Bấm các nút để mở rộng nội dung đã có**: "Xem thêm bình luận", "Xem phản hồi". Sau mỗi lần bấm, `MutationObserver` chờ DOM ngừng thay đổi thay vì đoán bằng một khoảng chờ cố định. Nút chậm được thử lại tối đa hai lần.
+   4. **Thu thập cuốn chiếu:** sau từng lần cuộn/mở rộng, comment đang hiện được cộng vào bộ nhớ theo mã. Vì vậy Facebook có gỡ comment cũ khỏi DOM khi cuộn xuống thì phần đã đọc vẫn được giữ. "Xem thêm" được bấm trước khi ghi nhận nội dung bị cắt.
+   5. Khi hết nút, bộ đọc cuộn qua đầu/giữa/cuối và chỉ kết thúc sau **3 vòng không có comment hoặc nút mới**. Bài thường có tối đa **160 lần mở rộng / 5 phút**; bài trên 100 comment có tối đa **300 lần / 8 phút**.
+   6. **Đọc từng comment:** mã comment (lấy từ tham số `comment_id` trong đường link thời gian của comment; không có link thì dùng nhãn "Bình luận của X" và một mã tạm băm từ người viết + nội dung), tên người viết, link trang cá nhân, nội dung, chuỗi thời gian ("2 giờ"), và comment cha nếu là trả lời.
+   7. Đánh dấu comment nào là của *chính nick mình* (so link, hoặc so tên hiển thị khi link khác dạng).
 5. **Gửi toàn bộ về webapp** (`/api/ext/posts/{mã bài}/comments`).
 6. **Đóng cửa sổ.** Nếu bài được thêm bằng link chia sẻ rút gọn (`share/p/...`), extension báo lại địa chỉ thật của bài để webapp cập nhật.
 7. **Chờ 45 giây** (số cố định, chỉnh được) rồi sang bài kế. Chờ để không tạo tải bất thường lên tài khoản, *không phải* để giả làm người.
 
-Nếu đọc dở giữa chừng (quá 3 phút hoặc quá 80 lần bấm), extension vẫn gửi phần đã đọc nhưng báo "chưa trọn vẹn". Webapp lưu phần đó và **không ghi nhận là đã quét xong**, nên vòng sau sẽ quét lại bài đó.
+Nếu đọc dở giữa chừng (quá giới hạn thích ứng 5–8 phút hoặc 160–300 lần bấm), extension vẫn gửi phần đã cộng dồn nhưng báo "chưa trọn vẹn". Webapp lưu phần đó và **không ghi nhận là đã quét xong**, nên vòng sau sẽ quét lại bài đó.
+
+Mốc tổng chỉ được lưu khi bộ đọc đạt ít nhất **95%** số Facebook công bố. Vì vậy trường hợp Facebook báo 75 nhưng mới đọc 10 sẽ tiếp tục được quét sâu, không bị coi là "không đổi" rồi bỏ qua. Quét nhanh giúp giảm ảnh hưởng trên máy, nhưng không thể làm mọi lần đọc sâu hoàn toàn vô hình vì Facebook thường không lazy-load đầy đủ trong tab bị ẩn.
 
 ### Bước 4. Webapp xử lý những gì nhận được
 Với mỗi comment:

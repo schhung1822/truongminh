@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Data Lead Facebook",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Đọc comment trên những bài bạn chủ động theo dõi và gửi về webapp để tách số điện thoại thành lead. Không tự đăng, không tự comment, không tự bấm gửi bất cứ thứ gì lên Facebook.",
   "permissions": ["storage", "alarms", "tabs", "scripting", "notifications"],
   "host_permissions": ["https://*.facebook.com/*", "__APP_ORIGIN__/*"],

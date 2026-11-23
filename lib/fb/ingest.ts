@@ -121,6 +121,8 @@ export async function ingestComments(opts: IngestInput): Promise<IngestResult> {
       commentCount,
       leadCount,
       ...(opts.payload.complete ? { lastScannedAt: scannedAt } : {}), // quét dở thì chưa tính là đã quét, chu kỳ sau thử lại
+      ...(opts.payload.complete && !opts.payload.unchanged ? { lastFullScannedAt: scannedAt } : {}),
+      ...(opts.payload.complete && opts.payload.reported_comment_count != null ? { reportedCommentCount: opts.payload.reported_comment_count } : {}),
       ...(toCreate.length > 0 ? { lastCommentAt: now } : {}),
     },
   });
@@ -129,7 +131,7 @@ export async function ingestComments(opts: IngestInput): Promise<IngestResult> {
     data: {
       tokenId: opts.tokenId,
       type: opts.payload.complete ? "SCAN_OK" : "SCAN_FAIL",
-      detail: { post_id: post.id, received: opts.payload.comments.length, new_comments: toCreate.length, updated_comments: toUpdate.length, new_leads: newLeads, complete: opts.payload.complete, ...(opts.payload.note ? { note: opts.payload.note } : {}) },
+      detail: { post_id: post.id, received: opts.payload.comments.length, new_comments: toCreate.length, updated_comments: toUpdate.length, new_leads: newLeads, complete: opts.payload.complete, unchanged: opts.payload.unchanged, reported_comment_count: opts.payload.reported_comment_count ?? null, ...(opts.payload.note ? { note: opts.payload.note } : {}) },
     },
   });
 

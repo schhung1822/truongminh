@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // @vitest-environment-options {"url": "https://www.facebook.com/groups/123456789/posts/987654321012/"}
 import { beforeEach, describe, expect, it } from "vitest";
-import { commentArticles, diagnose, findClickable, mainPostArticle, mainPostRoot, postAuthorLink, readAllComments, readPostInfo, seeMoreButtons } from "./extract";
+import { commentArticles, commentScrollContainer, diagnose, findClickable, mainPostArticle, mainPostRoot, pageCommentCount, postAuthorLink, readAllComments, readPostInfo, scrollCommentArea, seeMoreButtons } from "./extract";
 
 /**
  * Kiểm tra logic đọc trang trên các trang HTML MÔ PHỎNG cấu trúc Facebook (article lồng nhau, link thời gian có comment_id,
@@ -189,6 +189,22 @@ describe("thông tin bài cho nút Theo dõi bài này", () => {
   });
 });
 
+describe("tổng comment và vùng cuộn", () => {
+  it("đọc tổng từ aria-label khi giao diện chỉ hiện số cạnh biểu tượng", () => {
+    document.body.innerHTML = '<div role="dialog"><div role="article"><div dir="auto">Bài</div><button aria-label="75 bình luận"><span>75</span></button></div></div>';
+    expect(pageCommentCount()).toBe(75);
+  });
+
+  it("cuộn div của dialog thay vì chỉ cuộn window", () => {
+    document.body.innerHTML = '<div role="dialog"><div id="scroller" style="overflow-y:auto"><div role="article"><div dir="auto">Bài</div><div role="article" aria-label="Bình luận của A"><div dir="auto">Nội dung</div></div></div></div></div>';
+    const scroller = document.querySelector<HTMLElement>("#scroller")!;
+    Object.defineProperties(scroller, { scrollHeight: { value: 1000 }, clientHeight: { value: 300 } });
+    expect(commentScrollContainer()).toBe(scroller);
+    scrollCommentArea("bottom");
+    expect(scroller.scrollTop).toBe(700);
+  });
+});
+
 describe("báo cáo chẩn đoán", () => {
   it("có số đếm, nhãn nút, mẫu link; KHÔNG chứa tên người, nội dung comment hay số điện thoại", () => {
     const r = diagnose(OWN);
@@ -197,6 +213,11 @@ describe("báo cáo chẩn đoán", () => {
     const deep = diagnose(OWN, { expanded: true, steps: 3, complete: true, seconds: 5 });
     expect(deep.deep).toEqual({ expanded: true, steps: 3, complete: true, seconds: 5 });
     for (const secret of ["0912", "0987654321", "Nguyễn Văn A"]) expect(JSON.stringify(deep), secret).not.toContain(secret);
+    const observed = readAllComments(OWN);
+    document.querySelectorAll('[role="article"] [role="article"]').forEach((article) => article.remove());
+    const observedReport = diagnose(OWN, { expanded: true, steps: 4, complete: true, seconds: 6, stableRounds: 3, reportedCount: 3 }, observed);
+    expect(observedReport.counts.commentsRead).toBe(3);
+    for (const secret of ["0912", "0987654321", "Nguyễn Văn A"]) expect(JSON.stringify(observedReport), secret).not.toContain(secret);
     expect(r.buttons.viewMoreComments).toEqual(["Xem thêm 2 bình luận"]);
     expect(r.sortButtonLabel).toBe("Phù hợp nhất");
     expect(r.commentCountText).toBe("3 bình luận");

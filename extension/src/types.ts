@@ -7,7 +7,7 @@ export type MeResponse = {
   server_time: string;
 };
 
-export type ScanJob = { post_id: string; url: string; known_comment_ids: string[] };
+export type ScanJob = { post_id: string; url: string; known_comment_ids: string[]; reported_comment_count: number | null; force_full_scan: boolean };
 export type JobsResponse = { scan: ScanJob[]; paused_reason?: string };
 
 export type CommentPayload = {
@@ -24,7 +24,13 @@ export type IngestResponse = { new_comments: number; updated_comments: number; n
 
 /** Kết quả content script trả về sau khi đọc một bài. */
 export type ScanResult =
-  | { state: "ok"; comments: CommentPayload[]; complete: boolean; note?: string; resolvedUrl: string }
+  | { state: "ok"; comments: CommentPayload[]; complete: boolean; reportedCount: number | null; note?: string; resolvedUrl: string }
+  | { state: "login" }
+  | { state: "checkpoint" }
+  | { state: "selector_broken"; item: string; detail?: string; resolvedUrl: string };
+
+export type CommentCountResult =
+  | { state: "ok"; count: number | null; resolvedUrl: string }
   | { state: "login" }
   | { state: "checkpoint" }
   | { state: "selector_broken"; item: string; detail?: string; resolvedUrl: string };
@@ -56,7 +62,7 @@ export type DiagnosticReport = {
     commentsWithPhone: number;
   };
   /** Chế độ thử đọc sâu: có bấm mở rộng hết các nút "Xem thêm" không, bao nhiêu lần bấm, có đọc trọn vẹn không. */
-  deep: { expanded: boolean; steps: number; complete: boolean; seconds: number } | null;
+  deep: { expanded: boolean; steps: number; complete: boolean; seconds: number; stableRounds?: number; reportedCount?: number | null } | null;
   buttons: Record<string, string[]>;
   sortButtonLabel: string | null;
   commentCountText: string | null;
@@ -72,6 +78,7 @@ export type DiagnosticReport = {
 export type ContentMessage =
   | { type: "PING" }
   | { type: "SCAN"; ownProfileUrl: string; ownDisplayName: string }
+  | { type: "GET_COMMENT_COUNT" }
   | { type: "GET_POST_INFO" }
   | { type: "DIAGNOSE"; ownProfileUrl: string; ownDisplayName: string; deep?: boolean };
 

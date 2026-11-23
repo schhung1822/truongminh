@@ -24,6 +24,10 @@ export const ingestPayloadSchema = z.object({
   scanned_at: z.string().max(40).optional(),
   /** false = extension dừng giữa chừng (quá dài, lỗi); phần đã đọc vẫn được lưu. */
   complete: z.boolean().default(true),
+  /** Tổng comment Facebook hiển thị trên bài; null khi giao diện không cho đọc được bộ đếm. */
+  reported_comment_count: z.number().int().min(0).max(10_000_000).nullish(),
+  /** true = chỉ đọc bộ đếm và thấy không đổi, không mở rộng comment. */
+  unchanged: z.boolean().default(false),
   /** Địa chỉ thật của bài sau khi Facebook chuyển hướng (link chia sẻ rút gọn -> permalink). Web dùng để cập nhật link bài. */
   resolved_url: z.string().trim().max(600).nullish(),
   /** Ghi chú của bộ đọc trang (ví dụ dùng mã tạm vì không thấy link thời gian). Chỉ để tra cứu. */

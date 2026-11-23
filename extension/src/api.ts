@@ -42,7 +42,15 @@ async function call<T>(token: string, path: string, init: { method?: string; bod
   return json as T;
 }
 
-export type IngestBody = { scanned_at: string; complete: boolean; comments: CommentPayload[]; resolved_url?: string | null; note?: string | null };
+export type IngestBody = {
+  scanned_at: string;
+  complete: boolean;
+  comments: CommentPayload[];
+  reported_comment_count?: number | null;
+  unchanged?: boolean;
+  resolved_url?: string | null;
+  note?: string | null;
+};
 
 export const api = {
   me: (token: string) => call<MeResponse>(token, "/api/ext/me"),

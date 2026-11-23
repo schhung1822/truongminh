@@ -5,7 +5,8 @@ Extension đọc **comment trên những bài bạn chủ động theo dõi** v�
 ## Extension làm gì và KHÔNG làm gì
 
 Làm:
-- Cứ mỗi vài phút hỏi webapp "có bài nào cần quét không", mở **từng bài một** trong một cửa sổ Facebook nhỏ riêng (hoặc tab nền, tuỳ thiết lập), cuộn và bấm các nút mở rộng để Facebook hiện đủ bình luận, đọc comment, gửi về, đóng cửa sổ.
+- Cứ mỗi vài phút hỏi webapp "có bài nào cần quét không", mở **từng bài một** trong một cửa sổ Facebook nhỏ riêng (hoặc tab nền, tuỳ thiết lập), cuộn và bấm các nút mở rộng để Facebook hiện đủ bình luận, đọc comment, gửi về, đóng cửa sổ. Comment được cộng dồn sau từng lần mở rộng/cuộn để không mất phần Facebook đã gỡ khỏi DOM; mỗi thao tác chờ DOM tải xong bằng `MutationObserver`.
+- Trước khi đọc sâu, mở bài trong **tab nền không lấy focus** để lấy tổng comment. Nếu bằng lần quét đầy đủ trước thì đóng tab ngay; chỉ hiện cửa sổ quét khi tổng thay đổi, chưa có mốc tin cậy, hoặc tới lượt quét đầy đủ hằng ngày.
 - Nút **Theo dõi bài này**: đưa permalink đang mở vào danh sách theo dõi, kể cả bài do người khác đăng.
 - Nút **Chẩn đoán trang này**: đọc thử cấu trúc trang Facebook đang mở và tạo báo cáo (số đếm, nhãn nút, mẫu đường link; không có tên hay nội dung comment) để người phát triển chỉnh bộ đọc khi Facebook đổi giao diện.
 - Báo trên máy khi có lead mới (tắt được ở Cài đặt).
@@ -18,6 +19,8 @@ Không làm, và có test chặn ([src/guard.test.ts](src/guard.test.ts)):
 - Không lưu comment hay số điện thoại trên máy. Dữ liệu chỉ nằm tạm trong bộ nhớ khi quét rồi gửi đi.
 
 Khi Facebook yêu cầu xác minh nick (checkpoint) hoặc hiện trang đăng nhập, extension **dừng toàn bộ**, báo về webapp, và webapp ngừng giao việc cho nick đó cho tới khi quản trị viên bật lại.
+
+Không thể làm toàn bộ quá trình luôn vô hình mà vẫn bảo đảm đọc đủ: Facebook thường chỉ lazy-load comment khi vùng bài được render. Bản mặc định giữ phần kiểm tra thường xuyên ở nền; cửa sổ nhỏ không lấy focus chỉ xuất hiện khi thực sự cần đọc comment mới.
 
 ## Quyền extension xin và vì sao
 | Quyền | Dùng để |

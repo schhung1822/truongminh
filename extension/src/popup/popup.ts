@@ -161,11 +161,11 @@ $("deepRead").addEventListener("click", async () => {
       const d = r.report.deep;
       setMessage(
         "Kết quả thử đọc sâu (chỉ số đếm):\n" +
-          "- Trang báo: " + (r.report.commentCountText ?? "không rõ") + "\n" +
+          "- Trang báo: " + (r.report.commentCountText ?? (d?.reportedCount != null ? d.reportedCount + " bình luận" : "không rõ")) + "\n" +
           "- Bộ đọc đọc được: " + c.commentsRead + " comment (" + c.repliesRead + " trả lời)\n" +
           "- Có dạng số điện thoại: " + c.commentsWithPhone + "\n" +
           "- Dùng mã thật: " + (c.commentsRead - c.commentsWithFallbackId) + ", mã tạm: " + c.commentsWithFallbackId + "\n" +
-          "- Bấm mở rộng " + (d?.steps ?? 0) + " lần trong " + (d?.seconds ?? 0) + " giây, " + (d?.complete ? "đã hết nút để bấm" : "dừng vì chạm giới hạn"),
+          "- Bấm mở rộng " + (d?.steps ?? 0) + " lần trong " + (d?.seconds ?? 0) + " giây, rà ổn định " + (d?.stableRounds ?? 0) + " vòng, " + (d?.complete ? "đã hết nút để bấm" : "dừng vì chạm giới hạn"),
         "ok",
       );
     } else setMessage(r.message, "error");

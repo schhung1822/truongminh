@@ -2,11 +2,10 @@ import { db } from "@/lib/db";
 import { authenticateExt } from "@/lib/ext/auth";
 import { getFbConfig } from "@/lib/ext/config";
 import { acquireScanLeases } from "@/lib/fb/lease";
-import { pickPostsToScan, shouldMarkDone } from "@/lib/fb/schedule";
+import { needsFullScan, pickPostsToScan, shouldMarkDone } from "@/lib/fb/schedule";
 
 /** Số mã comment đã biết gửi kèm mỗi bài (để extension biết phần nào đã có). */
 const MAX_KNOWN_IDS = 3000;
-
 /**
  * Việc cần làm cho nick của mã này. Giai đoạn 1 chỉ có `scan` (đọc comment); `replies` và `post_tasks` luôn rỗng.
  * Chỉ giao bài đã được người dùng chủ động thêm vào danh sách theo dõi của nick quét này.
@@ -26,7 +25,7 @@ export async function GET(request: Request) {
   const now = Date.now();
   const tracking = await db.fbPost.findMany({
     where: { accountId: account.id, trackingStatus: "TRACKING", OR: [{ groupId: null }, { group: { status: { not: "BANNED" } } }] },
-    select: { id: true, url: true, postedAt: true, createdAt: true, lastScannedAt: true, lastCommentAt: true },
+    select: { id: true, url: true, postedAt: true, createdAt: true, lastScannedAt: true, lastFullScannedAt: true, lastCommentAt: true, reportedCommentCount: true },
     orderBy: { createdAt: "desc" },
     take: 500,
   });
@@ -50,7 +49,13 @@ export async function GET(request: Request) {
   const scan = [];
   for (const p of acquireScanLeases(picks, token.id, now)) {
     const known = await db.fbComment.findMany({ where: { postId: p.id }, select: { fbCommentId: true }, take: MAX_KNOWN_IDS });
-    scan.push({ post_id: p.id, url: p.url, known_comment_ids: known.map((k) => k.fbCommentId) });
+    scan.push({
+      post_id: p.id,
+      url: p.url,
+      known_comment_ids: known.map((k) => k.fbCommentId),
+      reported_comment_count: p.reportedCommentCount,
+      force_full_scan: needsFullScan(p.lastFullScannedAt, now),
+    });
   }
 
   return Response.json({ scan, replies: [], post_tasks: [] }, { headers });

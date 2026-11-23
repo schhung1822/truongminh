@@ -1061,21 +1061,23 @@ model FbGroup {
 
 // Bài đã đăng cần theo dõi. Chỉ bài có trong bảng này mới được extension mở và đọc.
 model FbPost {
-  id              String           @id @default(cuid())
-  accountId       String
-  groupId         String? // null nếu đăng trang cá nhân
-  url             String           @unique @db.VarChar(400) // permalink đã chuẩn hoá (lib/fb/urls.ts)
-  contentSnapshot String?          @db.Text
-  purpose         FbPostPurpose
-  postedAt        DateTime?
-  trackingStatus  FbTrackingStatus @default(TRACKING)
-  lastScannedAt   DateTime?
-  lastCommentAt   DateTime? // lần cuối thấy comment mới; quá N ngày không có thì tự chuyển DONE
-  commentCount    Int              @default(0)
-  leadCount       Int              @default(0)
-  registeredById  String? // người đã chủ động đăng ký bài này vào danh sách theo dõi
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                   String           @id @default(cuid())
+  accountId            String
+  groupId              String? // null nếu đăng trang cá nhân
+  url                  String           @unique @db.VarChar(400) // permalink đã chuẩn hoá (lib/fb/urls.ts)
+  contentSnapshot      String?          @db.Text
+  purpose              FbPostPurpose
+  postedAt             DateTime?
+  trackingStatus       FbTrackingStatus @default(TRACKING)
+  lastScannedAt        DateTime?
+  lastFullScannedAt    DateTime? // lần gần nhất thực sự mở rộng và đọc comment; quét nhanh không đổi không cập nhật mốc này
+  lastCommentAt        DateTime? // lần cuối thấy comment mới; quá N ngày không có thì tự chuyển DONE
+  reportedCommentCount Int? // tổng comment Facebook công bố ở lần quét đầy đủ gần nhất
+  commentCount         Int              @default(0)
+  leadCount            Int              @default(0)
+  registeredById       String? // người đã chủ động đăng ký bài này vào danh sách theo dõi
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   account      FbAccount   @relation(fields: [accountId], references: [id])
   group        FbGroup?    @relation(fields: [groupId], references: [id])

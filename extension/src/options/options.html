@@ -60,8 +60,8 @@
     <h2 id="thietlap">2. Thiết lập</h2>
     <div class="card">
       <h3>Cách mở bài khi quét</h3>
-      <label class="row"><input type="radio" name="scanMode" value="window" /><span><b>Cửa sổ nhỏ riêng</b> (khuyên dùng)<small>Extension mở bài trong một cửa sổ Facebook nhỏ ở góc màn hình, không lấy mất con trỏ chuột, quét xong tự đóng. Facebook vẽ đủ phần bình luận ở cửa sổ đang hiện, nên cách này chắc hơn.</small></span></label>
-      <label class="row"><input type="radio" name="scanMode" value="tab" /><span><b>Tab nền</b> (yên lặng hơn)<small>Mở bài ở một tab ẩn trong cửa sổ hiện tại. Facebook có thể không vẽ hết bình luận khi tab bị ẩn, nên có khi đọc thiếu. Dùng khi cửa sổ nhỏ gây vướng.</small></span></label>
+      <label class="row"><input type="radio" name="scanMode" value="window" /><span><b>Tự động: kiểm tra nền, cần mới mở cửa sổ</b> (khuyên dùng)<small>Mỗi lượt chỉ lấy tổng comment trong tab nền. Tổng không đổi thì đóng ngay; có thay đổi hoặc tới lượt kiểm tra đầy đủ hằng ngày mới mở cửa sổ nhỏ không lấy focus để đọc comment.</small></span></label>
+      <label class="row"><input type="radio" name="scanMode" value="tab" /><span><b>Luôn dùng tab nền</b> (ít gây chú ý hơn)<small>Cả bước đọc đầy đủ cũng ở tab nền. Facebook có thể không render hết bình luận khi tab bị ẩn, nên chế độ này yên lặng hơn nhưng dễ đọc thiếu hơn.</small></span></label>
       <h3>Thông báo</h3>
       <label class="row"><input type="checkbox" id="notifyLeads" /><span><b>Báo trên máy khi có lead mới</b><small>Sau một lần quét có lead mới, Chrome hiện thông báo nhỏ ở góc màn hình. Không chứa số điện thoại.</small></span></label>
       <p class="muted">Các thiết lập về nhịp quét (bao lâu quét một lần, chờ giữa hai bài, số bài mỗi lần) do quản trị viên đặt trên webapp ở <b>Kết nối extension › Cấu hình</b>, áp dụng chung cho mọi máy.</p>
@@ -88,6 +88,8 @@
         <li>Chrome phải đang mở (thu nhỏ được) và máy không ngủ thì mới quét theo chu kỳ.</li>
         <li>Mỗi máy một mã kết nối, mỗi mã gắn một nick. Nhiều nhân sự, nhiều máy dùng song song được; webapp tự chia việc để hai máy không quét trùng một bài.</li>
         <li>Có thể theo dõi bài của người khác. Extension chỉ quét đúng những permalink bạn chủ động thêm và chỉ đọc nội dung nick đang kết nối nhìn thấy.</li>
+        <li>Bộ đọc cộng dồn comment trong suốt quá trình cuộn và rà lại ít nhất 3 vòng khi bài có comment. Bài lớn có thể mất 5–8 phút; đừng đóng cửa sổ quét.</li>
+        <li>Mốc tổng chỉ được lưu khi bộ đọc đạt ít nhất 95% số Facebook báo; trường hợp 10/75 sẽ không bị coi là xong và không bị bỏ qua ở vòng sau.</li>
         <li>Comment do chính nick mình viết không bao giờ thành lead (tránh số của xưởng lọt vào danh sách).</li>
       </ul>
       <h3>Extension KHÔNG làm gì</h3>

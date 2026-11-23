@@ -11,6 +11,7 @@ import {
   LABELS,
   authorFromCommentLabel,
   cleanCommentText,
+  commentCountFromText,
   commentIdsFromHref,
   fallbackCommentId,
   isCheckpointUrl,
@@ -177,6 +178,26 @@ export function postText(root: HTMLElement): string {
   return textOf(root);
 }
 
+/**
+ * Tổng comment Facebook công bố cho bài. Ưu tiên toàn vùng dialog vì số tổng thường nằm ở thanh tương tác ngoài article;
+ * đọc cả aria-label/title vì giao diện có thể chỉ hiện chữ số cạnh biểu tượng comment.
+ */
+export function pageCommentCount(root: HTMLElement = mainPostRoot()): number | null {
+  const scope = root.closest<HTMLElement>('[role="dialog"]') ?? root;
+  const counts: number[] = [];
+  const add = (raw: string | null | undefined) => {
+    if (!raw) return;
+    const count = commentCountFromText(raw);
+    if (count !== null) counts.push(count);
+  };
+  add(textOf(scope));
+  for (const el of scope.querySelectorAll<HTMLElement>("[aria-label], [title]")) {
+    add(el.getAttribute("aria-label"));
+    add(el.getAttribute("title"));
+  }
+  return counts.length > 0 ? Math.max(...counts) : null;
+}
+
 /** Link tên tác giả của bài chính: ưu tiên chỗ Facebook đánh dấu tên, rồi tiêu đề h2/h3/h4 hoặc chữ đậm, rồi link trang cá nhân đầu tiên trong bài. */
 export function postAuthorLink(root: HTMLElement): HTMLAnchorElement | null {
   const mine = root.matches(ARTICLE) ? ownLevel(root) : () => true;
@@ -219,10 +240,38 @@ export function readPostInfo(): PostInfo {
 
 /* ---------- Cuộn để Facebook vẽ nốt phần bình luận ---------- */
 
+/** Vùng cuộn thật chứa comment. Bài mở dạng dialog thường cuộn một div riêng, không cuộn window. */
+export function commentScrollContainer(): HTMLElement | null {
+  const seeds = [mainPostRoot(), ...commentArticles()];
+  const coverage = new Map<HTMLElement, number>();
+  for (const seed of seeds) {
+    let parent = seed.parentElement;
+    while (parent && parent !== document.body && parent !== document.documentElement) {
+      const style = getComputedStyle(parent);
+      const canScroll = parent.scrollHeight > parent.clientHeight + 40 && /(auto|scroll|overlay)/i.test(style.overflowY);
+      if (canScroll) coverage.set(parent, (coverage.get(parent) ?? 0) + 1);
+      parent = parent.parentElement;
+    }
+  }
+  return [...coverage].sort((a, b) => b[1] - a[1] || b[0].scrollHeight - b[0].clientHeight - (a[0].scrollHeight - a[0].clientHeight))[0]?.[0] ?? null;
+}
+
+/** Cuộn vùng comment tới một vị trí; trình duyệt tự phát sự kiện scroll khi scrollTop thay đổi. */
+export function scrollCommentArea(position: "top" | "middle" | "bottom"): void {
+  const container = commentScrollContainer();
+  if (container) {
+    const max = Math.max(0, container.scrollHeight - container.clientHeight);
+    container.scrollTop = position === "top" ? 0 : position === "middle" ? Math.round(max / 2) : max;
+    return;
+  }
+  const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  window.scrollTo({ top: position === "top" ? 0 : position === "middle" ? Math.round(max / 2) : max, behavior: "auto" });
+}
+
 /** Cuộn xuống cuối trang vài lần (chờ cố định 700 ms mỗi lần) rồi đưa bình luận cuối vào khung nhìn. Facebook vẽ bình luận theo khung nhìn. */
 export async function scrollToLoad(rounds = 4): Promise<void> {
   for (let i = 0; i < rounds; i++) {
-    window.scrollTo(0, document.documentElement.scrollHeight);
+    scrollCommentArea("bottom");
     await sleep(700);
   }
   const all = commentArticles();
@@ -245,10 +294,10 @@ const summarizeStructure = (a: HTMLElement): string => {
   return parts.join(" ");
 };
 
-/** Báo cáo cấu trúc trang, không chứa dữ liệu cá nhân (xem DiagnosticReport). */
-export function diagnose(own: { profileUrl: string; displayName: string }, deep: DiagnosticReport["deep"] = null): DiagnosticReport {
+/** Báo cáo cấu trúc trang, không chứa dữ liệu cá nhân (xem DiagnosticReport). `observedComments` dùng số đếm đã gom qua nhiều lát DOM. */
+export function diagnose(own: { profileUrl: string; displayName: string }, deep: DiagnosticReport["deep"] = null, observedComments: ReadComment[] | null = null): DiagnosticReport {
   const articles = [...document.querySelectorAll<HTMLElement>(ARTICLE)];
-  const comments = readAllComments(own);
+  const comments = observedComments ?? readAllComments(own);
   const buttons: Record<string, string[]> = {};
   for (const kind of Object.keys(LABELS) as LabelKind[]) {
     const labels = findClickables(kind).map((b) => labelOf(b).split(/\r?\n/)[0].trim().slice(0, 40));

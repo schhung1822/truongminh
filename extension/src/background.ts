@@ -10,11 +10,12 @@ import { api, ApiError } from "./api";
 import { APP_ORIGIN, EXT_NAME, EXT_VERSION } from "./config";
 import { isCheckpointUrl, isLoginUrl } from "./content/selectors";
 import { store } from "./storage";
-import type { BackgroundMessage, ContentMessage, CycleSummary, DiagnosticReport, MeResponse, PostInfo, ScanJob, ScanResult, SimpleResult, StatusResponse } from "./types";
+import { canSkipFullScan } from "./scan-policy";
+import type { BackgroundMessage, CommentCountResult, ContentMessage, CycleSummary, DiagnosticReport, MeResponse, PostInfo, ScanJob, ScanResult, SimpleResult, StatusResponse } from "./types";
 
 const ALARM = "data-lead-poll";
 const TAB_LOAD_TIMEOUT_MS = 60_000;
-const SCAN_TIMEOUT_MS = 5 * 60_000;
+const SCAN_TIMEOUT_MS = 10 * 60_000;
 const KEEP_ALIVE_MS = 20_000;
 /** Cửa sổ quét riêng: đủ rộng để Facebook hiện giao diện máy tính (dưới ~900px Facebook có thể đổi bố cục). */
 const SCAN_WINDOW = { width: 980, height: 760 };
@@ -106,14 +107,17 @@ async function sendToContent<T>(tabId: number, msg: ContentMessage, timeoutMs: n
 
 type Opened = { tabId: number; windowId: number | null };
 
-/** Mở bài để quét theo thiết lập: cửa sổ nhỏ riêng (Facebook vẽ đủ nội dung) hoặc tab nền. */
-async function openForScan(url: string): Promise<Opened> {
+/** Luôn kiểm tra nhanh tổng comment trong tab nền trước; tab không lấy focus và sẽ được đóng ngay nếu tổng không đổi. */
+async function openCountProbe(url: string): Promise<Opened> {
+  const tab = await chrome.tabs.create({ url, active: false });
+  if (tab.id === undefined) throw new Error("Không mở được tab nền để kiểm tra bài.");
+  return { tabId: tab.id, windowId: null };
+}
+
+/** Khi cần đọc đầy đủ, chuyển chính tab nền sang cửa sổ nhỏ không lấy focus; không tải lại bài lần hai. */
+async function promoteForFullScan(opened: Opened): Promise<Opened> {
   const settings = await store.getSettings();
-  if (settings.scanMode === "tab") {
-    const tab = await chrome.tabs.create({ url, active: false });
-    if (tab.id === undefined) throw new Error("Không mở được tab.");
-    return { tabId: tab.id, windowId: null };
-  }
+  if (settings.scanMode === "tab" || opened.windowId !== null) return opened;
   let left: number | undefined;
   let top: number | undefined;
   try {
@@ -125,10 +129,9 @@ async function openForScan(url: string): Promise<Opened> {
   } catch {
     /* để Chrome tự đặt */
   }
-  const win = await chrome.windows.create({ url, type: "popup", focused: false, width: SCAN_WINDOW.width, height: SCAN_WINDOW.height, left, top });
-  const tabId = win?.tabs?.[0]?.id;
-  if (tabId === undefined || win?.id === undefined) throw new Error("Không mở được cửa sổ quét.");
-  return { tabId, windowId: win.id };
+  const win = await chrome.windows.create({ tabId: opened.tabId, type: "popup", focused: false, width: SCAN_WINDOW.width, height: SCAN_WINDOW.height, left, top });
+  if (win?.id === undefined) throw new Error("Không mở được cửa sổ quét.");
+  return { tabId: opened.tabId, windowId: win.id };
 }
 
 async function closeOpened(o: Opened): Promise<void> {
@@ -152,7 +155,7 @@ async function scanOne(token: string, me: MeResponse, job: ScanJob): Promise<Sca
   const label = shortUrl(job.url);
   let opened: Opened;
   try {
-    opened = await openForScan(job.url);
+    opened = await openCountProbe(job.url);
   } catch (e) {
     await store.addEvent("error", `Không mở được bài ${label}: ${errText(e)}`);
     return { newComments: 0, newLeads: 0, stop: null };
@@ -166,6 +169,35 @@ async function scanOne(token: string, me: MeResponse, job: ScanJob): Promise<Sca
     const url = (await chrome.tabs.get(opened.tabId)).url ?? "";
     if (isCheckpointUrl(url)) return await reportAndStop(token, "checkpoint", job, "Facebook đang yêu cầu xác minh nick. Đã dừng quét và báo về webapp; nick tạm ngừng cho tới khi quản trị viên bật lại.");
     if (isLoginUrl(url)) return await reportAndStop(token, "scan_fail", job, "Facebook đang hiện trang đăng nhập. Hãy đăng nhập Facebook trên Chrome này rồi bấm Quét ngay.", { reason: "login_required" });
+
+    // Pha 1 chạy trong tab nền: chỉ đọc tổng comment. Mốc chỉ được server cấp sau một lần quét đầy đủ đủ tin cậy.
+    let countResult: CommentCountResult | null = null;
+    try {
+      countResult = await sendToContent<CommentCountResult>(opened.tabId, { type: "GET_COMMENT_COUNT" }, 40_000);
+    } catch {
+      // Không đọc được bộ đếm thì vẫn chuyển sang quét đầy đủ; không để tối ưu nhanh làm mất dữ liệu.
+    }
+    if (countResult?.state === "checkpoint") return await reportAndStop(token, "checkpoint", job, "Facebook đang yêu cầu xác minh nick. Đã dừng quét và báo về webapp; nick tạm ngừng cho tới khi quản trị viên bật lại.");
+    if (countResult?.state === "login") return await reportAndStop(token, "scan_fail", job, "Facebook đang hiện trang đăng nhập. Hãy đăng nhập Facebook trên Chrome này rồi bấm Quét ngay.", { reason: "login_required" });
+    if (countResult?.state === "ok" && canSkipFullScan(job, countResult.count)) {
+      await api.postComments(token, job.post_id, {
+        scanned_at: new Date().toISOString(),
+        complete: true,
+        comments: [],
+        reported_comment_count: countResult.count,
+        unchanged: true,
+        resolved_url: countResult.resolvedUrl,
+        note: "Tổng comment không đổi; đã bỏ qua đọc sâu.",
+      });
+      await store.addEvent("info", `Bài ${label}: tổng vẫn ${countResult.count} comment, đã kiểm tra ngầm và đóng tab.`);
+      return { newComments: 0, newLeads: 0, stop: null };
+    }
+
+    try {
+      opened = await promoteForFullScan(opened);
+    } catch (e) {
+      await store.addEvent("warn", `Bài ${label}: không mở được cửa sổ riêng, tiếp tục đọc trong tab nền (${errText(e).slice(0, 100)}).`);
+    }
 
     let result: ScanResult;
     try {
@@ -190,6 +222,8 @@ async function scanOne(token: string, me: MeResponse, job: ScanJob): Promise<Sca
           scanned_at: new Date().toISOString(),
           complete: result.complete,
           comments: result.comments,
+          reported_comment_count: result.reportedCount,
+          unchanged: false,
           resolved_url: result.resolvedUrl,
           note: result.note ?? null,
         });
@@ -325,7 +359,7 @@ async function diagnoseActiveTab(tabId: number, deep = false): Promise<{ ok: boo
   if (token) me = await api.me(token).catch(() => null);
   let report: DiagnosticReport;
   try {
-    report = await sendToContent<DiagnosticReport>(tabId, { type: "DIAGNOSE", ownProfileUrl: me?.account.profile_url ?? "", ownDisplayName: me?.account.display_name ?? "", deep }, deep ? 5 * 60_000 : 40_000);
+    report = await sendToContent<DiagnosticReport>(tabId, { type: "DIAGNOSE", ownProfileUrl: me?.account.profile_url ?? "", ownDisplayName: me?.account.display_name ?? "", deep }, deep ? 10 * 60_000 : 40_000);
   } catch (e) {
     return { ok: false, message: `Không chạy được chẩn đoán trên tab này: ${errText(e)}` };
   }

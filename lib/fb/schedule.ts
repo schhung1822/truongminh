@@ -21,6 +21,7 @@ export type ScheduleConfig = {
 };
 
 const MIN = 60_000;
+export const FULL_SCAN_INTERVAL_MS = 24 * 60 * MIN;
 
 /** Mốc tính tuổi bài: ngày đăng nếu biết, không thì ngày đưa vào theo dõi. */
 function age(p: SchedulePost, now: number): number {
@@ -35,6 +36,11 @@ export function isDue(p: SchedulePost, now: number, cfg: ScheduleConfig): boolea
   if (!p.lastScannedAt) return true;
   const every = (isFresh(p, now, cfg) ? cfg.pollMinutes : cfg.oldIntervalMinutes) * MIN;
   return now - p.lastScannedAt.getTime() >= every;
+}
+
+/** Quét nhanh theo bộ đếm vẫn phải nhường chỗ cho một lần đọc đầy đủ mỗi ngày để bắt comment bị sửa. */
+export function needsFullScan(lastFullScannedAt: Date | null, now: number): boolean {
+  return !lastFullScannedAt || now - lastFullScannedAt.getTime() >= FULL_SCAN_INTERVAL_MS;
 }
 
 /** Các bài đến lượt quét, đã xếp thứ tự ưu tiên và cắt theo giới hạn mỗi chu kỳ. */
