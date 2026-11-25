@@ -23,7 +23,9 @@ export async function createLogoFromBuffer(input: {
   brandId: string;
   file: Buffer;
   note?: string | null;
-}): Promise<{ logo: { id: string; normalizedPath: string; note: string | null }; normalized: NormalizedLogo }> {
+  /** logo dạng huy hiệu/bảng (có nền + khung viền riêng), xem docs/DECISIONS.md D113 */
+  isBadge?: boolean;
+}): Promise<{ logo: { id: string; normalizedPath: string; note: string | null; isBadge: boolean }; normalized: NormalizedLogo }> {
   let normalized: NormalizedLogo;
   try {
     normalized = await normalizeLogo(input.file);
@@ -40,6 +42,7 @@ export async function createLogoFromBuffer(input: {
     data: {
       brandId: input.brandId,
       note: input.note || null,
+      isBadge: input.isBadge === true,
       originalPath: "pending",
       normalizedPath: "pending",
       width: normalized.width,
@@ -60,5 +63,5 @@ export async function createLogoFromBuffer(input: {
     await db.logo.delete({ where: { id: logo.id } }).catch(() => {});
     throw new LogoError("Không lưu được logo. Vui lòng thử lại.", false);
   }
-  return { logo: { id: logo.id, normalizedPath: normalizedKey, note: logo.note }, normalized };
+  return { logo: { id: logo.id, normalizedPath: normalizedKey, note: logo.note, isBadge: logo.isBadge }, normalized };
 }

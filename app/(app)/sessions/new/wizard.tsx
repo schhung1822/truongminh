@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Explorer } from "@/components/customers/explorer";
-import { QuickCreate } from "@/components/customers/quick-create";
+import { QuickCreate, type QuickCreateData } from "@/components/customers/quick-create";
 import { useFolderNav } from "@/components/customers/use-folder-nav";
 import { pickDefaultSheets } from "@/lib/default-sheets";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,8 @@ export function NewSessionWizard({
   sheets,
   quota,
   showCost,
+  imageModel,
+  auto,
   isAdmin,
 }: {
   customers: CustomerOption[];
@@ -34,6 +36,8 @@ export function NewSessionWizard({
   sheets: SheetOption[];
   quota: QuotaInfo;
   showCost: boolean;
+  imageModel: string;
+  auto: QuickCreateData["auto"];
   isAdmin: boolean;
 }) {
   const nav = useFolderNav(customers, initial);
@@ -82,16 +86,17 @@ export function NewSessionWizard({
         <Explorer
           nav={nav}
           stepPrefix="Bước 1: "
+          autoCreate
           logoFooter={
             logo ? (
               <div className="flex flex-col gap-3 border-t pt-4">
                 <p className="text-sm text-muted-foreground">
-                  Đã chọn logo {logo.width}x{logo.height}px. Bấm <b>Tạo nhanh</b> để tạo ngay bằng trang mẫu mặc định, hoặc
-                  chọn trang mẫu khác.
+                  Đã chọn logo {logo.width}x{logo.height}px. Bấm <b>AI chọn chất liệu</b> để AI tự chọn các chất liệu hợp với logo
+                  và tạo ảnh mẫu, <b>Tạo nhanh</b> để dùng trang mẫu mặc định, hoặc tự chọn trang mẫu khác.
                 </p>
                 <QuickCreate
                   logoId={logo.id}
-                  data={{ defaultSheets: pickDefaultSheets(sheets), quota, showCost, isAdmin }}
+                  data={{ defaultSheets: pickDefaultSheets(sheets), quota, showCost, imageModel, auto, isAdmin }}
                 >
                   <Button type="button" variant="outline" className="h-12 px-5" onClick={() => setStep("sheets")}>
                     Chọn trang mẫu khác
@@ -123,6 +128,7 @@ export function NewSessionWizard({
           sheets={sheets.filter((x) => selectedSheets.has(x.id))}
           quota={quota}
           showCost={showCost}
+          imageModel={imageModel}
           onBack={() => setStep("sheets")}
         />
       )}

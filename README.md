@@ -261,9 +261,17 @@ Chưa kiểm chứng trên Facebook thật: xem mục "Chưa kiểm chứng" tro
 1. Tạo App tại Pinterest Developers, xin Trial access với các scope đọc: `boards:read`, `pins:read`, `user_accounts:read`; nếu cần board bí mật thì xin thêm `boards:read_secret`, `pins:read_secret` và đặt `PINTEREST_INCLUDE_SECRET_BOARDS="true"`.
 2. Đăng ký Redirect URI chính xác là `https://tên-miền/api/pinterest/oauth/callback`.
 3. Điền `PINTEREST_CLIENT_ID` và `PINTEREST_CLIENT_SECRET` vào `.env`, chạy migration/build rồi khởi động lại web.
-4. Admin vào **Thư viện mẫu > Kết nối Pinterest**, bấm kết nối và **Đồng bộ ngay**. Nhân viên xem/copy ảnh ở **Mẫu Pinterest**; khi tạo thiết kế ở Bước 2 có thể chọn một pin làm ảnh phong cách tham khảo.
+4. Admin vào **Thư viện mẫu > Kết nối Pinterest**, bấm kết nối và **Đồng bộ ngay**. Nhân viên xem/copy ảnh, gắn tag phong cách và lọc ở **Mẫu Pinterest**; khi tạo thiết kế ở Bước 2 có thể chọn tối đa 3 pin làm ảnh phong cách tham khảo (picker tự gợi ý pin khách đã thích và board đúng công nghệ chất liệu đang chọn).
 
 Token Pinterest chỉ lưu mã hóa trên máy chủ, không đưa vào trình duyệt hoặc Git. Sau mỗi lần thêm/xóa pin trên Pinterest, admin bấm **Đồng bộ ngay** để cập nhật thư viện trong ứng dụng.
+
+### Tự động đồng bộ Pinterest (không bắt buộc)
+Mặc định phải vào **Thư viện mẫu > Kết nối Pinterest** bấm **Đồng bộ ngay** mỗi khi có ảnh/board mới. Trên VPS có thể cho máy tự đồng bộ định kỳ:
+1. Trong `.env` đặt `PINTEREST_SYNC_CRON_SECRET` là một chuỗi dài (16 ký tự trở lên), rồi `docker compose up -d`.
+2. Gõ `crontab -e` và thêm dòng chạy mỗi 6 giờ (thay khóa và tên miền):
+```
+0 */6 * * * curl -fsS -X POST -H "x-cron-secret: KHÓA_CỦA_BẠN" https://tên-miền/api/jobs/pinterest-sync >> /root/truongminh/backups/pinterest-sync.log 2>&1
+```
 
 ### Sự cố thường gặp
 | Hiện tượng | Cách xử lý |

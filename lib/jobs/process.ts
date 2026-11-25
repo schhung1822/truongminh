@@ -11,7 +11,7 @@ import { mapLimit } from "./async";
 import { renderFinal } from "./finish";
 import { ensurePinterestPinUrl, PinterestReferenceError } from "./pinterest-reference";
 import { ensureLogoUrl, ensureMaterialUrl, NoReferenceError } from "./references";
-import { MAX_ATTEMPTS, type LayoutSnapshot } from "./snapshot";
+import { getStyleRefPinIds, MAX_ATTEMPTS, type LayoutSnapshot } from "./snapshot";
 import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
 import {
   ACTIVE_CAP_WAIT_MS,
@@ -118,8 +118,8 @@ export async function submitImage(imageId: string): Promise<void> {
 
   try {
     const snapshot = img.layoutSnapshot as unknown as LayoutSnapshot;
-    const pinterestPinId = img.kind === "DESIGN" ? snapshot.design?.pinterestPinId : undefined;
-    if (1 + snapshot.cells.length + (pinterestPinId ? 1 : 0) > MAX_REFERENCE_IMAGES) {
+    const pinterestPinIds = img.kind === "DESIGN" ? getStyleRefPinIds(snapshot) : [];
+    if (1 + snapshot.cells.length + pinterestPinIds.length > MAX_REFERENCE_IMAGES) {
       throw new NoReferenceError(`(quá giới hạn ${MAX_REFERENCE_IMAGES} ảnh tham chiếu)`);
     }
     const materials = await db.material.findMany({ where: { id: { in: snapshot.cells.map((c) => c.materialId) } } });
@@ -134,19 +134,23 @@ export async function submitImage(imageId: string): Promise<void> {
       }),
     ]);
 
-    // Ảnh thiết kế có chọn ảnh phong cách tham khảo (Pinterest): thêm làm ảnh tham chiếu cuối cùng.
-    // Không được âm thầm bỏ qua vì prompt đang trỏ đúng tới ảnh này; thiếu ảnh thì kết quả sẽ sai phong cách đã chọn.
-    let styleRefUrl: string | null = null;
-    if (pinterestPinId) {
-      const pin = await db.pinterestPin.findUnique({ where: { id: pinterestPinId } });
-      if (!pin) throw new PinterestReferenceError("Ảnh phong cách Pinterest đã chọn không còn trong thư viện. Hãy chọn lại ảnh rồi tạo thiết kế mới.");
-      styleRefUrl = await ensurePinterestPinUrl(pin);
+    // Ảnh thiết kế có chọn (các) ảnh phong cách tham khảo (Pinterest): thêm làm ảnh tham chiếu cuối cùng, đúng thứ
+    // tự đã chọn. Không được âm thầm bỏ qua vì prompt đang trỏ đúng tới các ảnh này; thiếu ảnh thì kết quả sẽ sai
+    // phong cách đã chọn.
+    let styleRefUrls: string[] = [];
+    if (pinterestPinIds.length > 0) {
+      const pins = await db.pinterestPin.findMany({ where: { id: { in: pinterestPinIds } } });
+      if (pins.length !== pinterestPinIds.length) {
+        throw new PinterestReferenceError("Một ảnh phong cách Pinterest đã chọn không còn trong thư viện. Hãy chọn lại ảnh rồi tạo thiết kế mới.");
+      }
+      const pinById = new Map(pins.map((p) => [p.id, p]));
+      styleRefUrls = await Promise.all(pinterestPinIds.map((id) => ensurePinterestPinUrl(pinById.get(id)!)));
     }
 
     const { taskId } = await getProvider().createTask({
       model: img.model,
       prompt: img.promptUsed,
-      inputUrls: [logoUrl, ...materialUrls, ...(styleRefUrl ? [styleRefUrl] : [])], // ảnh 1 là logo, sau đó theo đúng thứ tự ô, cuối cùng là ảnh phong cách tham khảo nếu có
+      inputUrls: [logoUrl, ...materialUrls, ...styleRefUrls], // ảnh 1 là logo, sau đó theo đúng thứ tự ô, cuối cùng (các) ảnh phong cách tham khảo nếu có
       aspectRatio: img.aspectRatio,
       resolution: img.resolution,
       callbackUrl: callbackUrl(),

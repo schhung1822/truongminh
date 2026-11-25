@@ -58,12 +58,19 @@ describe("badgeRect", () => {
 });
 
 describe("computeLegend", () => {
-  it("xếp 10 mục thành 2 cột, đọc từ trên xuống rồi sang cột kế", () => {
+  it("xếp 10 mục thành 2 cột, đọc trái sang phải rồi mới xuống dòng, khớp đúng thứ tự ô trên ảnh", () => {
     const l = computeLegend({ width: 1000, count: 10, columns: 2, rowHeight: 40, padding: 20 });
     expect(l.height).toBe(20 * 2 + 5 * 40);
     expect(l.entries[0]).toMatchObject({ index: 0, x: 20, y: 20, w: 480, h: 40 });
-    expect(l.entries[4]).toMatchObject({ index: 4, x: 20, y: 180 });
-    expect(l.entries[5]).toMatchObject({ index: 5, x: 500, y: 20 });
+    expect(l.entries[1]).toMatchObject({ index: 1, x: 500, y: 20 });
+    expect(l.entries[4]).toMatchObject({ index: 4, x: 20, y: 100 });
+    expect(l.entries[5]).toMatchObject({ index: 5, x: 500, y: 100 });
+  });
+
+  it("8 mục 2 cột: mục 7 và 8 (hàng cuối) nằm cùng hàng, đúng cột trái/phải như ô 7 và 8 trên ảnh", () => {
+    const l = computeLegend({ width: 1000, count: 8, columns: 2, rowHeight: 40, padding: 20 });
+    expect(l.entries[6]).toMatchObject({ index: 6, x: 20, y: 20 + 3 * 40 });
+    expect(l.entries[7]).toMatchObject({ index: 7, x: 500, y: 20 + 3 * 40 });
   });
 
   it("số mục lẻ vẫn đủ dòng, không có mục thì cao bằng 0", () => {

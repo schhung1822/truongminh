@@ -49,7 +49,8 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  /* Nền trang hơi xám để Card/ô trắng nổi lên trên, giống bố cục 2 tông (nền xám + card trắng) */
+  --background: oklch(0.965 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -73,7 +74,7 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
+  --sidebar: #ebebeb;
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -137,4 +138,29 @@
   100% {
     left: 100%;
   }
+}
+
+/* Menu bên trái: ẩn thanh cuộn lúc bình thường, chỉ hiện (mảnh, kiểu overlay như trên mobile) khi rê chuột vào
+   hoặc đang cuộn (lớp .is-scrolling do app-shell.tsx gắn/gỡ khi bắt sự kiện scroll). */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.sidebar-scroll:hover,
+.sidebar-scroll.is-scrolling {
+  scrollbar-color: oklch(0.7 0 0 / 60%) transparent;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+.sidebar-scroll:hover::-webkit-scrollbar-thumb,
+.sidebar-scroll.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: oklch(0.7 0 0 / 60%);
 }

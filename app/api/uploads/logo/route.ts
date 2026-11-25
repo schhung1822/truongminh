@@ -4,7 +4,7 @@ import { createLogoFromBuffer, LogoError } from "@/lib/logos/create";
 import { canEditCustomer } from "@/lib/permissions";
 import { fileUrl } from "@/lib/storage";
 
-// Upload logo cho một thương hiệu. Form nhiều phần: brandId, note (không bắt buộc), file.
+// Upload logo cho một thương hiệu. Form nhiều phần: brandId, note (không bắt buộc), isBadge ("true" nếu logo dạng huy hiệu/bảng), file.
 export async function POST(request: Request) {
   const user = await apiUser();
   if (isResponse(user)) return user;
@@ -29,7 +29,13 @@ export async function POST(request: Request) {
 
   let created;
   try {
-    created = await createLogoFromBuffer({ userId: user.id, brandId, file: Buffer.from(await file.arrayBuffer()), note });
+    created = await createLogoFromBuffer({
+      userId: user.id,
+      brandId,
+      file: Buffer.from(await file.arrayBuffer()),
+      note,
+      isBadge: form.get("isBadge") === "true",
+    });
   } catch (e) {
     if (e instanceof LogoError) return jsonError(e.userFault ? 400 : 500, e.message);
     throw e;
@@ -43,6 +49,7 @@ export async function POST(request: Request) {
       width: normalized.width,
       height: normalized.height,
       note: logo.note,
+      isBadge: logo.isBadge,
     },
     warning: normalized.tooSmall
       ? "Logo nhỏ hơn 500px nên ảnh mô phỏng có thể bị mờ. Nên xin khách file lớn hơn nếu có."

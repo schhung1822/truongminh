@@ -89,6 +89,7 @@ export default async function DesignPage({
             name: c.name,
             groupName: m?.groupName ?? c.groupName ?? "",
             printTech: m?.printTech ?? c.printTech ?? "",
+            technique: m?.technique ?? null,
             usable: usableIds.has(c.materialId),
           };
         }),
@@ -128,11 +129,13 @@ export default async function DesignPage({
       ) : (
         <DesignForm
           parentSessionId={session.id}
+          logoId={session.logoId}
           images={pickerImages}
           initialSelected={initialSelected}
           styleNames={styles.map((s) => s.name)}
           resolution={settings.designResolution}
           aspectRatio={settings.designAspectRatio}
+          imageModel={settings.imageModel}
           quota={quota}
           showCost={getEnv().IMAGE_PROVIDER === "kie"}
           isAdmin={user.role === "ADMIN"}

@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { FINISH_RULES } from "./finish";
+import { finishRule } from "./finish";
 import { buildMaterialsList, extractVariables, renderDesignPrompt, renderPrompt, styleReferenceNote, validateTemplate } from "./render";
 
 describe("styleReferenceNote", () => {
-  it("nhắc đúng số thứ tự ảnh tham chiếu và dặn không chép nội dung", () => {
+  it("nhắc đúng số thứ tự ảnh tham chiếu và dặn không chép nội dung (một ảnh)", () => {
     const note = styleReferenceNote(3);
     expect(note).toContain("Reference image 3");
     expect(note).toContain("Do NOT copy its logo, text, specific object shape");
+  });
+
+  it("nhiều ảnh: nhắc đúng khoảng số thứ tự, số ít -> số nhiều", () => {
+    const note = styleReferenceNote(3, 3);
+    expect(note).toContain("Reference images 3-5");
+    expect(note).toContain("Do NOT copy their logo, text, specific object shape");
   });
 });
 
@@ -55,44 +61,50 @@ describe("extractVariables / validateTemplate", () => {
 
 describe("buildMaterialsList", () => {
   const m = (printTech: string, technique?: string) => ({ printTech, technique });
-  const FRONT_BACK = "use the front and back materials shown in the two panels of the reference image";
-  const FRONT_ONLY = "use ONLY the front material shown in the LEFT panel of the reference image";
+  const cellLines = (list: string) => list.split("\n").filter((l) => /^Cells? \d/.test(l));
+  const typeLines = (list: string) => list.split("\n").filter((l) => l.startsWith("- "));
 
-  it("ô 1 ứng với ảnh tham chiếu 2 (ảnh 1 là logo), đúng thứ tự, mỗi ô kèm kiểu hoàn thiện", () => {
-    const list = buildMaterialsList([m("UV print"), m("laser engraving")], {
-      cols: 1,
-      rows: 2,
-    });
-    expect(list).toBe(
-      [
-        `Cell 1 = reference image 2: ${FRONT_BACK}, technique: UV print. Finish: ${FINISH_RULES.PRINT}`,
-        `Cell 2 = reference image 3: ${FRONT_BACK}, technique: laser engraving. Finish: ${FINISH_RULES.ENGRAVE}`,
-      ].join("\n"),
-    );
+  it("định nghĩa mỗi kiểu hàng đúng MỘT lần ở đầu, mỗi ô chỉ một dòng ngắn ghi kiểu theo công nghệ của chất liệu", () => {
+    const list = buildMaterialsList([m("Cắt laser", "cat-laser"), m("Khắc laser", "khac-laser"), m("Khắc laser", "khac-laser")], { cols: 1, rows: 3 });
+    expect(typeLines(list)).toEqual([`- ENGRAVED = ${finishRule("ENGRAVE")}`, `- CUT-ONLY = ${finishRule("CUT")}`]);
+    expect(cellLines(list)).toEqual([
+      "Cell 1 (row 1, column 1) = reference image 2, type CUT-ONLY (technique: Cắt laser)",
+      "Cell 2 (row 2, column 1) = reference image 3, type ENGRAVED (technique: Khắc laser)",
+      "Cell 3 (row 3, column 1) = reference image 4, type ENGRAVED (technique: Khắc laser)",
+    ]);
+    expect(list.split(finishRule("ENGRAVE"))).toHaveLength(2);
+    expect(list).toMatch(/never choose it from how the material looks or from the cell's position/);
   });
 
-  it("hàng cắt laser chỉ dùng nửa trái (mặt trước), không dùng mặt sau làm viền", () => {
-    const list = buildMaterialsList([m("Cắt laser", "cat-laser"), m("Khắc laser", "khac-laser")], { cols: 1, rows: 2 });
-    const [cut, engrave] = list.split("\n");
-    expect(cut).toBe(`Cell 1 = reference image 2: ${FRONT_ONLY}, technique: Cắt laser. Finish: ${FINISH_RULES.CUT}`);
-    expect(cut).toMatch(/NO border or rim/);
-    expect(engrave).toBe(`Cell 2 = reference image 3: ${FRONT_BACK}, technique: Khắc laser. Finish: ${FINISH_RULES.ENGRAVE}`);
-    expect(engrave).not.toMatch(/NO border/);
+  it("kiểu của ô theo công nghệ chất liệu chứ không theo vị trí: 5 khắc rồi 3 cắt vẫn ra đúng từng ô", () => {
+    const mats = [...Array.from({ length: 5 }, () => m("Khắc laser", "khac-laser")), ...Array.from({ length: 3 }, () => m("Cắt laser", "cat-laser"))];
+    const lines = cellLines(buildMaterialsList(mats, { cols: 2, rows: 4 }));
+    expect(lines.map((l) => (l.includes("type ENGRAVED") ? "E" : l.includes("type CUT-ONLY") ? "C" : "?")).join("")).toBe("EEEEECCC");
   });
 
-  it("trang trộn khắc, cắt, in: mỗi ô đúng kiểu của nó", () => {
-    const list = buildMaterialsList([m("Khắc laser", "khac-laser"), m("Cắt laser", "cat-laser"), m("In UV", "in-uv")], { cols: 3, rows: 1 });
-    const lines = list.split("\n");
-    expect(lines[0]).toContain(FINISH_RULES.ENGRAVE);
-    expect(lines[1]).toContain(FINISH_RULES.CUT);
-    expect(lines[2]).toContain(FINISH_RULES.PRINT);
+  it("chỉ định nghĩa kiểu hàng có mặt trong ảnh", () => {
+    const onlyCut = buildMaterialsList([m("Cắt laser", "cat-laser")], { cols: 1, rows: 1 });
+    expect(typeLines(onlyCut)).toEqual([`- CUT-ONLY = ${finishRule("CUT")}`]);
+    const onlyEngrave = buildMaterialsList([m("Khắc laser", "khac-laser")], { cols: 1, rows: 1 });
+    expect(typeLines(onlyEngrave)).toEqual([`- ENGRAVED = ${finishRule("ENGRAVE")}`]);
+  });
+
+  it("logo dạng huy hiệu (D113): hàng khắc dùng câu giữ hình bảng, hàng cắt dùng câu bỏ nền và khung", () => {
+    const list = buildMaterialsList([m("Khắc laser", "khac-laser"), m("Cắt laser", "cat-laser")], { cols: 2, rows: 1 }, { badge: true });
+    expect(typeLines(list)).toEqual([`- ENGRAVED = ${finishRule("ENGRAVE", true)}`, `- CUT-ONLY = ${finishRule("CUT", true)}`]);
+    expect(list).toMatch(/keeps the logo's badge shape/);
+  });
+
+  it("8 ô lưới 2x4: ô 7 và 8 (hàng cuối) có đúng hàng/cột khác nhau để AI không tráo nhầm", () => {
+    const lines = cellLines(buildMaterialsList(Array.from({ length: 8 }, () => m("y")), { cols: 2, rows: 4 }));
+    expect(lines[6]).toMatch(/^Cell 7 \(row 4, column 1\) = reference image 8,/);
+    expect(lines[7]).toMatch(/^Cell 8 \(row 4, column 2\) = reference image 9,/);
   });
 
   it("đủ 10 chất liệu thì không có dòng dặn để trống, ô cuối là ảnh 11", () => {
-    const list = buildMaterialsList(Array.from({ length: 10 }, () => m("y")), { cols: 2, rows: 5 });
-    const lines = list.split("\n");
+    const lines = cellLines(buildMaterialsList(Array.from({ length: 10 }, () => m("y")), { cols: 2, rows: 5 }));
     expect(lines).toHaveLength(10);
-    expect(lines[9]).toMatch(/^Cell 10 = reference image 11:/);
+    expect(lines[9]).toMatch(/^Cell 10 \(row 5, column 2\) = reference image 11,/);
   });
 
   it("trang chưa đầy: dặn AI để trống các ô còn lại", () => {
@@ -103,23 +115,24 @@ describe("buildMaterialsList", () => {
   });
 
   it("gộp khoảng trắng và xuống dòng trong tên công nghệ in", () => {
-    const list = buildMaterialsList([m("  UV\n  print ")], { cols: 1, rows: 1 });
-    expect(list).toBe(`Cell 1 = reference image 2: ${FRONT_BACK}, technique: UV print. Finish: ${FINISH_RULES.PRINT}`);
+    const lines = cellLines(buildMaterialsList([m("  Khắc\n  laser ")], { cols: 1, rows: 1 }));
+    expect(lines).toEqual(["Cell 1 (row 1, column 1) = reference image 2, type ENGRAVED (technique: Khắc laser)"]);
   });
 });
 
 describe("renderDesignPrompt", () => {
   const values = { product_type: "móc khóa", design_style: "tối giản", note: "none" };
+  const CUT = finishRule("CUT");
 
   it("mẫu có {{material_finish}}: câu dặn nằm đúng chỗ đó, không nối thêm", () => {
-    const out = renderDesignPrompt("A {{product_type}}\nFinish: {{material_finish}}\nStyle: {{design_style}}", values, FINISH_RULES.CUT);
-    expect(out).toBe(`A móc khóa\nFinish: ${FINISH_RULES.CUT}\nStyle: tối giản`);
+    const out = renderDesignPrompt("A {{product_type}}\nFinish: {{material_finish}}\nStyle: {{design_style}}", values, CUT);
+    expect(out).toBe(`A móc khóa\nFinish: ${CUT}\nStyle: tối giản`);
   });
 
   it("mẫu cũ chưa có biến: câu dặn tự được nối vào cuối", () => {
-    const out = renderDesignPrompt("A {{product_type}} in {{design_style}}. {{note}}", values, FINISH_RULES.CUT);
+    const out = renderDesignPrompt("A {{product_type}} in {{design_style}}. {{note}}", values, CUT);
     expect(out.startsWith("A móc khóa in tối giản. none")).toBe(true);
-    expect(out.endsWith(FINISH_RULES.CUT)).toBe(true);
+    expect(out.endsWith(CUT)).toBe(true);
     expect(out).toMatch(/overrides any conflicting detail above/);
     expect(out).not.toContain("{{");
   });

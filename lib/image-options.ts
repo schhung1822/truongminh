@@ -32,3 +32,12 @@ export const MAX_MATERIALS_PER_IMAGE = 10; // một ảnh: API tối đa 16 ản
 export const MAX_MATERIALS_IN_SHEET = 200; // một trang mẫu có thể dài hơn một ảnh: tự chia thành nhiều ảnh khi tạo
 export const MAX_REFERENCE_IMAGES = 16;
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+// Số ảnh phong cách Pinterest tối đa chọn được mỗi lượt thiết kế (docs/DECISIONS.md D99).
+export const MAX_STYLE_REF_PINS = 3;
+
+// AI chọn chất liệu hợp với logo rồi tự tạo ảnh mẫu (docs/DECISIONS.md D115).
+/** Các mức "số chất liệu AI chọn cho mỗi logo" cho chỉnh ở Quản trị > Cấu hình. */
+export const AUTO_MATERIAL_COUNTS = [16, 24, 32, 48] as const;
+/** Bố cục ảnh của phiên AI chọn: 8 chất liệu mỗi ảnh, giống các trang mẫu đang dùng. */
+export const AUTO_SHEET_LAYOUT = { cols: 2, rows: 4, aspectRatio: "16:9" } as const;
+export const AUTO_SHEET_NAME = "Chất liệu phù hợp";

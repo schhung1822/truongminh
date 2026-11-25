@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangleIcon, ExternalLinkIcon, ImageOffIcon, ImagesIcon, PlugZapIcon } from "lucide-react";
+import { AlertTriangleIcon, ExternalLinkIcon, ImageOffIcon, ImagesIcon, PlugZapIcon, TrendingUpIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { getPinterestConfig } from "@/lib/env";
 import { fmtDateTime } from "@/lib/fb/format";
 import { cn } from "@/lib/utils";
-import { DisconnectButton, SyncButton } from "./pinterest-client";
+import { BoardTechniqueSelect, DisconnectButton, SyncButton } from "./pinterest-client";
 
 export const metadata: Metadata = { title: "Pinterest" };
 
@@ -21,12 +21,36 @@ export default async function AdminPinterestPage({ searchParams }: { searchParam
   const params = await searchParams;
   const configured = !!getPinterestConfig();
 
-  const account = await db.pinterestAccount.findFirst({
-    include: {
-      connectedBy: { select: { name: true } },
-      boards: { orderBy: { name: "asc" }, include: { _count: { select: { pins: true } } } },
-    },
+  const [account, techniqueOptions] = await Promise.all([
+    db.pinterestAccount.findFirst({
+      include: {
+        connectedBy: { select: { name: true } },
+        boards: { orderBy: { name: "asc" }, include: { _count: { select: { pins: true } } } },
+      },
+    }),
+    db.materialOption.findMany({ where: { type: "TECHNIQUE", isActive: true }, orderBy: { sortOrder: "asc" }, select: { value: true, label: true } }),
+  ]);
+
+  // Pin dùng làm ảnh phong cách tham khảo nhiều nhất (docs/DECISIONS.md D99), để chủ xưởng biết phong cách nào khách đang ưng.
+  const topRefCounts = await db.generatedImageStyleRefPin.groupBy({
+    by: ["pinId"],
+    _count: { _all: true },
+    orderBy: { _count: { pinId: "desc" } },
+    take: 20,
   });
+  const topRefPinsById = new Map(
+    topRefCounts.length
+      ? (
+          await db.pinterestPin.findMany({
+            where: { id: { in: topRefCounts.map((r) => r.pinId) } },
+            select: { id: true, title: true, altText: true, sourceImageUrl: true, board: { select: { name: true } } },
+          })
+        ).map((p) => [p.id, p])
+      : [],
+  );
+  const topRefPins = topRefCounts
+    .map((r) => ({ count: r._count._all, pin: topRefPinsById.get(r.pinId) }))
+    .filter((r): r is { count: number; pin: NonNullable<typeof r.pin> } => !!r.pin);
 
   return (
     <div className="flex flex-col gap-6">
@@ -101,6 +125,33 @@ export default async function AdminPinterestPage({ searchParams }: { searchParam
             )}
           </Card>
 
+          {topRefPins.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUpIcon className="size-5" /> Pin dùng tham khảo nhiều nhất
+                </CardTitle>
+                <CardDescription>Pin được chọn làm ảnh phong cách khi thiết kế, nhiều lượt nhất trước — gợi ý phong cách khách đang ưng.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {topRefPins.map(({ count, pin }) => (
+                    <li key={pin.id} className="flex items-center gap-3 rounded-lg border p-2">
+                      <img src={pin.sourceImageUrl} alt={pin.title ?? pin.altText ?? "Pin"} className="size-12 shrink-0 rounded-md border object-cover" loading="lazy" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{pin.title || pin.altText || "Mẫu Pinterest"}</p>
+                        <p className="text-xs text-muted-foreground">{pin.board.name}</p>
+                      </div>
+                      <Badge variant="secondary" className="shrink-0">
+                        {count} lượt
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Board đã đồng bộ ({account.boards.length})</CardTitle>
@@ -120,11 +171,12 @@ export default async function AdminPinterestPage({ searchParams }: { searchParam
                           <ImageOffIcon className="size-5 text-muted-foreground" />
                         )}
                       </span>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{b.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {b._count.pins} pin{b.privacy !== "PUBLIC" && ` · ${b.privacy === "SECRET" ? "Bí mật" : "Hạn chế"}`}
                         </p>
+                        <BoardTechniqueSelect boardId={b.id} value={b.techniqueHint ?? ""} options={techniqueOptions} />
                       </div>
                     </li>
                   ))}

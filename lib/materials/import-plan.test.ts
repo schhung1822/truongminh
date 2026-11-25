@@ -63,8 +63,8 @@ describe("planMaterialsImport: cập nhật", () => {
 
 describe("planMaterialsImport: thêm mới và chế độ chỉ thêm", () => {
   it("chưa có mã thì thêm mới, cần tên; nhóm/công nghệ in lấy từ nhãn trong file cũ", () => {
-    const p = plan("code,name,nhóm,công nghệ in\nN1,Nhựa mới,Nhựa,In UV\nN2,,Nhựa,In UV\n", []);
-    expect(p[0]).toMatchObject({ kind: "create", data: { code: "N1", name: "Nhựa mới", baseMaterial: "nhua", groupName: "Nhựa", technique: "in-uv", printTech: "In UV", sortOrder: 100 } });
+    const p = plan("code,name,nhóm,công nghệ in\nN1,Nhựa mới,Nhựa,Cắt laser\nN2,,Nhựa,Cắt laser\n", []);
+    expect(p[0]).toMatchObject({ kind: "create", data: { code: "N1", name: "Nhựa mới", baseMaterial: "nhua", groupName: "Nhựa", technique: "cat-laser", printTech: "Cắt laser", sortOrder: 100 } });
     expect(p[1]).toMatchObject({ kind: "error" });
   });
 
@@ -74,12 +74,12 @@ describe("planMaterialsImport: thêm mới và chế độ chỉ thêm", () => {
   });
 
   it("thêm mới không có cột mô tả thì mô tả là chuỗi rỗng (cột bắt buộc ở CSDL)", () => {
-    const p = plan("code,name,baseMaterial,technique\nN1,Mới,nhua,in-uv\n", []);
+    const p = plan("code,name,baseMaterial,technique\nN1,Mới,nhua,cat-laser\n", []);
     expect(p[0]).toMatchObject({ kind: "create", data: { descHuman: "" } });
   });
 
   it("nhóm ghi chữ không có trong danh mục thì báo lỗi, không tự tạo nhóm", () => {
-    const p = plan("code,name,nhóm,công nghệ in\nN1,Mới,Kim loại,In UV\n", []);
+    const p = plan("code,name,nhóm,công nghệ in\nN1,Mới,Kim loại,Cắt laser\n", []);
     expect(p[0].kind).toBe("error");
   });
 
@@ -177,7 +177,7 @@ describe("planMaterialsImport: thông số tấm", () => {
   });
 
   it("thêm mới: có cột tấm thì có kế hoạch lưu tấm (phần không có là chưa có dữ liệu, allowRotate mặc định TRUE); không có thì không", () => {
-    const csv = ["code,name,baseMaterial,technique,stockWidthMm,stockHeightMm,stockPrice,edgeMarginMm", "N1,Mới,nhua,in-uv,600,400,1500000,5", "N2,Không tấm,nhua,in-uv,,,,", "N3,Xóa suông,nhua,in-uv,[xoa],,,"].join("\n");
+    const csv = ["code,name,baseMaterial,technique,stockWidthMm,stockHeightMm,stockPrice,edgeMarginMm", "N1,Mới,nhua,cat-laser,600,400,1500000,5", "N2,Không tấm,nhua,cat-laser,,,,", "N3,Xóa suông,nhua,cat-laser,[xoa],,,"].join("\n");
     const p = plan(csv, []);
     expect(p.map((x) => x.kind)).toEqual(["create", "create", "create"]);
     const c = p[0] as Extract<(typeof p)[number], { kind: "create" }>;
@@ -192,7 +192,7 @@ describe("planMaterialsImport: thông số tấm", () => {
   });
 
   it("thêm mới có số tấm sai thì lỗi dòng đó, không tạo", () => {
-    const p = plan("code,name,baseMaterial,technique,stockPrice\nN1,Mới,nhua,in-uv,rẻ\n", []);
+    const p = plan("code,name,baseMaterial,technique,stockPrice\nN1,Mới,nhua,cat-laser,rẻ\n", []);
     expect(p[0]).toMatchObject({ kind: "error", line: 2 });
   });
 
@@ -202,8 +202,8 @@ describe("planMaterialsImport: thông số tấm", () => {
     expect(u.stock).toBeUndefined();
     expect(u.changed).toEqual(["surfaceFinish"]);
     expect(countStockChanges(p)).toBe(0);
-    const created = plan("code,name,nhóm,công nghệ in\nN1,Nhựa mới,Nhựa,In UV\n", []);
-    expect(created[0]).toMatchObject({ kind: "create", data: { code: "N1", technique: "in-uv" } });
+    const created = plan("code,name,nhóm,công nghệ in\nN1,Nhựa mới,Nhựa,Cắt laser\n", []);
+    expect(created[0]).toMatchObject({ kind: "create", data: { code: "N1", technique: "cat-laser" } });
     expect((created[0] as { stock?: unknown }).stock).toBeUndefined();
   });
 

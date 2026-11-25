@@ -7,13 +7,13 @@ import { getActiveTemplate, type Template } from "./template";
 import { db } from "@/lib/db";
 import { buildMaterialsList, renderPrompt } from "@/lib/prompts/render";
 import { getSettings } from "@/lib/settings";
-import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
+import { AUTO_SHEET_NAME, MAX_REFERENCE_IMAGES } from "@/lib/image-options";
 import type { LabelPos, LabelStyle } from "@/lib/imaging/label-pos";
 import { partTitle, splitIntoImages } from "@/lib/sheets/split";
 import { canEditOwned } from "@/lib/permissions";
 import { fallbackImageNumber } from "./finish";
 import { assertQuota, todayKey } from "./limits";
-import { MAX_IMAGES_PER_SESSION, type LayoutSnapshot } from "./snapshot";
+import { getStyleRefPinIds, MAX_IMAGES_PER_SESSION, type LayoutSnapshot } from "./snapshot";
 
 type SheetRow = NonNullable<Awaited<ReturnType<typeof findSheet>>>;
 type UsableMaterial = SheetRow["materials"][number]["material"];
@@ -52,14 +52,29 @@ async function loadSheetParts(
   return { sheet, parts };
 }
 
-/** Dựng dữ liệu một ảnh catalog (một đoạn chất liệu của trang mẫu): đánh số ô liên tục, sinh prompt từ mẫu. */
-function buildPartImage(
-  sheet: SheetRow,
-  materials: UsableMaterial[],
+/** Bố cục của một ảnh catalog: lấy từ trang mẫu, hoặc cố định cho phiên AI chọn chất liệu (sheetId = null, D115). */
+export type PartLayout = { sheetId: string | null; name: string; cols: number; rows: number; resolution: string; aspectRatio: string };
+export type PartMaterial = { id: string; code: string; name: string; groupName: string; printTech: string; technique?: string | null };
+
+const sheetLayout = (sheet: SheetRow): PartLayout => ({
+  sheetId: sheet.id,
+  name: sheet.name,
+  cols: sheet.cols,
+  rows: sheet.rows,
+  resolution: sheet.resolution,
+  aspectRatio: sheet.aspectRatio,
+});
+
+/** Dựng dữ liệu một ảnh catalog (một đoạn chất liệu của trang mẫu hoặc của danh sách AI chọn): đánh số ô liên tục, sinh prompt từ mẫu. */
+export function buildPartImage(
+  sheet: PartLayout,
+  materials: PartMaterial[],
   template: Template,
   model: string,
   imageNumber: number | undefined,
   part: { index: number; total: number },
+  /** logo dạng huy hiệu/bảng (Logo.isBadge): quyết định hình dạng tấm khắc, xem lib/prompts/finish.ts */
+  logoIsBadge: boolean,
   label?: { pos?: LabelPos; style?: LabelStyle },
 ): { error: string } | { data: BuiltImage } {
   const snapshot: LayoutSnapshot = {
@@ -83,7 +98,7 @@ function buildPartImage(
     promptUsed = renderPrompt(template.body, {
       cols: sheet.cols,
       rows: sheet.rows,
-      materials_list: buildMaterialsList(materials, { cols: sheet.cols, rows: sheet.rows }),
+      materials_list: buildMaterialsList(materials, { cols: sheet.cols, rows: sheet.rows }, { badge: logoIsBadge }),
     });
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Không sinh được prompt." };
@@ -92,7 +107,7 @@ function buildPartImage(
   return {
     data: {
       kind: "SHEET",
-      sheetId: sheet.id,
+      sheetId: sheet.sheetId,
       layoutSnapshot: snapshot as unknown as Prisma.InputJsonValue,
       promptUsed,
       promptTemplateId: template.id,
@@ -151,7 +166,7 @@ export async function createCatalogSession(
   for (const { sheet, parts } of loaded) {
     for (const [i, materials] of parts.entries()) {
       // số thứ tự ảnh trong phiên chạy liên tục qua các trang mẫu: Ảnh 1, Ảnh 2...
-      const r = buildPartImage(sheet, materials, template, settings.imageModel, built.length + 1, { index: i + 1, total: parts.length });
+      const r = buildPartImage(sheetLayout(sheet), materials, template, settings.imageModel, built.length + 1, { index: i + 1, total: parts.length }, logo.isBadge);
       if ("error" in r) return { error: r.error };
       built.push(r.data);
     }
@@ -204,13 +219,45 @@ export async function retryImage(user: SessionUser, imageId: string): Promise<{ 
     if (!("error" in loaded) && loaded.parts.length > 1) loaded = await loadSheetParts(old.sheetId, oldIds);
     if ("error" in loaded) return { error: loaded.error };
     if (loaded.parts.length !== 1) return { error: "Trang mẫu đã đổi bố cục, hãy tạo phiên mới thay vì tạo lại ảnh này." };
+    const session = await db.consultSession.findUnique({ where: { id: old.sessionId }, select: { logo: { select: { isBadge: true } } } });
     const r = buildPartImage(
-      loaded.sheet,
+      sheetLayout(loaded.sheet),
       loaded.parts[0],
       template,
       settings.imageModel,
       oldNumber,
       oldSnap.part ?? { index: 1, total: 1 },
+      session?.logo.isBadge ?? false,
+      { pos: oldSnap.labelPos, style: oldSnap.labelStyle },
+    );
+    if ("error" in r) return { error: r.error };
+    built = r.data;
+  } else if (old.kind === "SHEET") {
+    // Ảnh của phiên AI chọn chất liệu (không thuộc trang mẫu nào, D115): dựng lại từ đúng các chất liệu của ảnh cũ còn dùng được,
+    // giữ bố cục, số thứ tự và nhãn; prompt và ô "logo dạng huy hiệu" lấy theo hiện tại như mọi lần tạo lại khác.
+    let template: Template;
+    try {
+      template = await getActiveTemplate("CATALOG");
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Thiếu prompt." };
+    }
+    const oldSnap = old.layoutSnapshot as unknown as LayoutSnapshot;
+    const oldIds = oldSnap.cells.map((c) => c.materialId);
+    const [rows, session] = await Promise.all([
+      db.material.findMany({ where: { id: { in: oldIds }, isActive: true, referencePath: { not: null } } }),
+      db.consultSession.findUnique({ where: { id: old.sessionId }, select: { logo: { select: { isBadge: true } } } }),
+    ]);
+    const byId = new Map(rows.map((m) => [m.id, m]));
+    const materials = oldIds.map((id) => byId.get(id)).filter((m): m is NonNullable<typeof m> => !!m);
+    if (materials.length === 0) return { error: "Các chất liệu của ảnh này không còn dùng được, hãy tạo phiên mới." };
+    const r = buildPartImage(
+      { sheetId: null, name: AUTO_SHEET_NAME, cols: oldSnap.cols, rows: oldSnap.rows, resolution: old.resolution, aspectRatio: old.aspectRatio },
+      materials,
+      template,
+      settings.imageModel,
+      oldSnap.imageNumber ?? (await fallbackImageNumber(old.sessionId, old.id)),
+      oldSnap.part ?? { index: 1, total: 1 },
+      session?.logo.isBadge ?? false,
       { pos: oldSnap.labelPos, style: oldSnap.labelStyle },
     );
     if ("error" in r) return { error: r.error };
@@ -228,6 +275,12 @@ export async function retryImage(user: SessionUser, imageId: string): Promise<{ 
       data: { ...built, sessionId: old.sessionId, createdById: old.createdById, parentImageId: old.id },
     });
     await tx.usageLog.create({ data: { userId: user.id, imageId: image.id, kind: old.kind, day: todayKey() } });
+    if (old.kind === "DESIGN") {
+      const styleRefPinIds = getStyleRefPinIds(built.layoutSnapshot as unknown as LayoutSnapshot);
+      if (styleRefPinIds.length > 0) {
+        await tx.generatedImageStyleRefPin.createMany({ data: styleRefPinIds.map((pinId) => ({ imageId: image.id, pinId })) });
+      }
+    }
   });
   return { sessionId: old.sessionId };
 }

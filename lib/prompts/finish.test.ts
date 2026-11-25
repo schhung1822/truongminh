@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { FINISH_RULES, finishKindOf, finishRuleOf } from "./finish";
+import { FINISH_LABEL, finishKindOf, finishRule, finishRuleOf } from "./finish";
 
 describe("finishKindOf", () => {
-  it("ba công nghệ mặc định theo mã", () => {
+  it("hai công nghệ mặc định theo mã", () => {
     expect(finishKindOf({ technique: "khac-laser", printTech: "Khắc laser" })).toBe("ENGRAVE");
     expect(finishKindOf({ technique: "cat-laser", printTech: "Cắt laser" })).toBe("CUT");
-    expect(finishKindOf({ technique: "in-uv", printTech: "In UV" })).toBe("PRINT");
   });
 
   it("mã công nghệ thắng nhãn (nhãn có thể bị đổi tên)", () => {
@@ -17,9 +16,12 @@ describe("finishKindOf", () => {
     expect(finishKindOf({ printTech: "CAT LASER" })).toBe("CUT");
     expect(finishKindOf({ printTech: "Khắc laser" })).toBe("ENGRAVE");
     expect(finishKindOf({ printTech: "laser engraving" })).toBe("ENGRAVE");
-    expect(finishKindOf({ printTech: "In UV" })).toBe("PRINT");
-    expect(finishKindOf({ printTech: "UV print" })).toBe("PRINT");
     expect(finishKindOf({ printTech: "laser cut" })).toBe("CUT");
+  });
+
+  it("nhãn 'in UV' không còn là kiểu riêng (D101): rơi về mặc định khắc", () => {
+    expect(finishKindOf({ technique: "in-uv", printTech: "In UV" })).toBe("ENGRAVE");
+    expect(finishKindOf({ printTech: "UV print" })).toBe("ENGRAVE");
   });
 
   it("nhãn nhắc cả khắc lẫn cắt thì lấy khắc", () => {
@@ -38,28 +40,60 @@ describe("finishKindOf", () => {
   });
 });
 
-describe("FINISH_RULES", () => {
-  it("hàng cắt: một lớp, không viền, không khắc, không dùng mặt sau", () => {
-    const r = FINISH_RULES.CUT;
-    expect(r).toMatch(/ONE single thin flat layer/);
-    expect(r).toMatch(/NO border or rim/);
-    expect(r).toMatch(/NO engraving/);
-    expect(r).toMatch(/Do not use the RIGHT \(back\) panel/);
+describe("finishRule", () => {
+  it("nhãn kiểu hàng ghi trên từng ô", () => {
+    expect(FINISH_LABEL).toEqual({ ENGRAVE: "ENGRAVED", CUT: "CUT-ONLY" });
   });
 
-  it("hàng in UV: in phẳng, không khắc", () => {
-    expect(FINISH_RULES.PRINT).toMatch(/printed flat/);
-    expect(FINISH_RULES.PRINT).toMatch(/no engraving/);
+  it("hàng cắt: một lớp mặt trước, không viền, không khắc, không dùng mặt sau", () => {
+    const r = finishRule("CUT");
+    expect(r).toMatch(/single-layer cut decal/);
+    expect(r).toMatch(/ONE thin flat layer of the FRONT material \(LEFT panel only\)/);
+    expect(r).toMatch(/No border or rim of a second material, no engraving/);
+    expect(r).toMatch(/The RIGHT \(back\) panel is not used/);
   });
 
-  it("hàng khắc vẫn có mặt trước + viền mảnh như hai nửa ảnh mẫu", () => {
-    expect(FINISH_RULES.ENGRAVE).toMatch(/laser-engraved/);
-    expect(FINISH_RULES.ENGRAVE).toMatch(/back-material border/);
+  it("hàng khắc, logo thường: ôm sát hình logo, mặt trước lớp 1, viền mảnh lớp 2", () => {
+    const r = finishRule("ENGRAVE");
+    expect(r).toMatch(/two-layer laser-engraved piece, die-cut to the logo's own silhouette/);
+    expect(r).toMatch(/front face is the FRONT material \(LEFT panel\)/);
+    expect(r).toMatch(/thin, even border of the BACK material \(RIGHT panel\)/);
+    expect(r).not.toMatch(/badge/);
   });
 
-  it("finishRuleOf lấy đúng câu theo chất liệu", () => {
-    expect(finishRuleOf({ technique: "cat-laser" })).toBe(FINISH_RULES.CUT);
-    expect(finishRuleOf({ technique: "in-uv" })).toBe(FINISH_RULES.PRINT);
-    expect(finishRuleOf({ technique: "khac-laser" })).toBe(FINISH_RULES.ENGRAVE);
+  it("hàng khắc, logo dạng huy hiệu (D113): giữ hình bảng; khung viền + chữ + biểu tượng là lớp trên, nền khắc chìm lộ lớp dưới", () => {
+    const r = finishRule("ENGRAVE", true);
+    expect(r).toMatch(/keeps the logo's badge shape: ONE solid plate with the badge's outer shape/);
+    expect(r).toMatch(/never the bare letters alone/);
+    expect(r).toMatch(/border line, symbol, wordmark and tagline are the untouched FRONT material \(LEFT panel\)/);
+    expect(r).toMatch(/background \(.*\) is engraved down into the plate, a hair below the top, and shows the BACK material \(RIGHT panel\)/);
+  });
+
+  it("hàng khắc (D114): giữ đúng cách tả vẻ khắc laser của phiên 13:27, nét mảnh sắc phẳng, khắc chìm chứ không nổi khối", () => {
+    for (const r of [finishRule("ENGRAVE"), finishRule("ENGRAVE", true)]) {
+      expect(r).toMatch(/fine, crisp, perfectly flat laser-engraved look of the sample/);
+      expect(r).toMatch(/engraved INTO the surface, with no bevel, no 3D relief, no shiny chrome emboss and no separate emblem glued on top/);
+    }
+    expect(finishRule("CUT")).not.toMatch(/laser-engraved look/);
+  });
+
+  it("hàng cắt với logo dạng huy hiệu: vẫn chỉ cắt biểu tượng + chữ, bỏ nền và khung của huy hiệu", () => {
+    const r = finishRule("CUT", true);
+    expect(r.startsWith(finishRule("CUT"))).toBe(true);
+    expect(r).toMatch(/the badge's background plate and border line are dropped/);
+  });
+
+  it("không câu nào bảo AI tự đoán logo có phải huy hiệu hay không, và không nhắc tới màu của logo", () => {
+    for (const r of [finishRule("ENGRAVE"), finishRule("ENGRAVE", true), finishRule("CUT"), finishRule("CUT", true)]) {
+      expect(r).not.toMatch(/\bif the logo\b/i);
+      expect(r).not.toMatch(/colour.* in the logo reference/);
+    }
+  });
+
+  it("finishRuleOf lấy đúng câu theo công nghệ của chất liệu và ô huy hiệu của logo", () => {
+    expect(finishRuleOf({ technique: "cat-laser" })).toBe(finishRule("CUT"));
+    expect(finishRuleOf({ technique: "khac-laser" })).toBe(finishRule("ENGRAVE"));
+    expect(finishRuleOf({ technique: "khac-laser" }, true)).toBe(finishRule("ENGRAVE", true));
+    expect(finishRuleOf({ technique: "in-uv" })).toBe(finishRule("ENGRAVE"));
   });
 });

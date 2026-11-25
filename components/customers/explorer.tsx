@@ -1,18 +1,22 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { FolderPlusIcon, ImagePlusIcon, Loader2Icon, SearchIcon } from "lucide-react";
 import { toast } from "sonner";
+import { autoCatalogSessionAction } from "@/app/(app)/sessions/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { FolderTile, ImageTile, NewTile, PathBar, TileGrid } from "@/components/folder-ui";
 import {
   createBrandAction,
   createCustomerAction,
+  setLogoBadgeAction,
   type BrandOption,
   type CustomerOption,
   type LogoOption,
@@ -28,13 +32,18 @@ export function Explorer({
   nav,
   stepPrefix = "",
   logoFooter,
+  autoCreate = false,
 }: {
   nav: FolderNav;
   /** tiền tố tiêu đề, ví dụ "Bước 1: " */
   stepPrefix?: string;
   logoFooter?: React.ReactNode;
+  /** true = sau khi tải logo mới lên, AI tự chọn chất liệu hợp và tạo ảnh mẫu ngay (D115) */
+  autoCreate?: boolean;
 }) {
   const { customer, brand } = nav;
+  // AI đang phân tích logo vừa tải lên: tạm ẩn các nút tạo phiên bên dưới để không bấm trùng thành hai phiên
+  const [analysing, setAnalysing] = useState(false);
   const crumbs = [
     { label: "Khách hàng", onClick: customer ? nav.openRoot : undefined },
     ...(customer ? [{ label: customer.name, onClick: brand ? () => nav.openCustomer(customer) : undefined }] : []),
@@ -53,7 +62,9 @@ export function Explorer({
       ? "Mỗi khách hàng là một thư mục, bên trong là các thương hiệu, bên trong thương hiệu là các logo."
       : level === "brand"
         ? "Mở thư mục thương hiệu để xem các logo, hoặc tạo thư mục thương hiệu mới."
-        : "Bấm vào logo để chọn, hoặc tải logo mới lên thư mục này.";
+        : autoCreate
+          ? "Tải logo mới lên để AI tự chọn chất liệu hợp và tạo ảnh mẫu ngay, hoặc bấm vào một logo có sẵn để chọn."
+          : "Bấm vào logo để chọn, hoặc tải logo mới lên thư mục này.";
 
   return (
     <Card>
@@ -93,10 +104,14 @@ export function Explorer({
             selected={nav.logo}
             onSelect={nav.setLogo}
             onUploaded={nav.onLogoUploaded}
+            onUpdated={nav.onLogoUpdated}
+            autoCreate={autoCreate}
+            analysing={analysing}
+            onAnalysing={setAnalysing}
           />
         )}
 
-        {level === "logo" && logoFooter}
+        {level === "logo" && !analysing && logoFooter}
       </CardContent>
     </Card>
   );
@@ -350,6 +365,10 @@ function LogoFiles({
   selected,
   onSelect,
   onUploaded,
+  onUpdated,
+  autoCreate,
+  analysing,
+  onAnalysing,
 }: {
   brand: BrandOption;
   canUpload: boolean;
@@ -358,11 +377,49 @@ function LogoFiles({
   selected: LogoOption | null;
   onSelect: (l: LogoOption) => void;
   onUploaded: (l: LogoOption) => void;
+  onUpdated: (l: LogoOption) => void;
+  autoCreate: boolean;
+  analysing: boolean;
+  onAnalysing: (busy: boolean) => void;
 }) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState("");
+  const [badge, setBadge] = useState(false);
+  const [savingBadge, startSavingBadge] = useTransition();
+  // tự phân tích và tạo ảnh mẫu sau khi tải lên (bỏ tick nếu chỉ muốn lưu logo, chưa tạo ảnh)
+  const [autoRun, setAutoRun] = useState(true);
+
+  /** Logo vừa tải lên: AI chọn chất liệu hợp rồi tạo ảnh mẫu, xong thì sang trang kết quả. Lỗi thì ở lại để chọn trang mẫu tay. */
+  async function runAuto(logo: LogoOption) {
+    onAnalysing(true);
+    try {
+      const r = await autoCatalogSessionAction(logo.id, true);
+      if (r.error || !r.sessionId) {
+        setError(r.error ?? "Không tạo được ảnh mẫu tự động. Hãy chọn trang mẫu bên dưới.");
+        return;
+      }
+      toast.success("AI đã chọn xong chất liệu, đang tạo ảnh mẫu.");
+      router.push(`/sessions/${r.sessionId}`);
+    } catch {
+      setError("Không gửi được yêu cầu phân tích logo. Logo đã lưu, hãy bấm \"AI chọn chất liệu\" bên dưới để thử lại.");
+    } finally {
+      onAnalysing(false);
+    }
+  }
+
+  function toggleBadge(logo: LogoOption, isBadge: boolean) {
+    startSavingBadge(async () => {
+      const r = await setLogoBadgeAction(logo.id, isBadge);
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      onUpdated({ ...logo, isBadge });
+    });
+  }
 
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.target;
@@ -375,6 +432,7 @@ function LogoFiles({
       const fd = new FormData();
       fd.set("brandId", brand.id);
       fd.set("note", note);
+      fd.set("isBadge", String(badge));
       fd.set("file", file);
       const res = await fetch("/api/uploads/logo", { method: "POST", body: fd });
       const body = (await res.json().catch(() => ({}))) as { error?: string; logo?: LogoOption; warning?: string | null };
@@ -384,8 +442,10 @@ function LogoFiles({
       }
       setWarning(body.warning ?? null);
       setNote("");
+      setBadge(false);
       toast.success("Đã tải logo lên.");
       onUploaded(body.logo);
+      if (autoCreate && autoRun) void runAuto(body.logo);
     } catch {
       setError("Mất kết nối tới máy chủ. Vui lòng thử lại.");
     } finally {
@@ -406,6 +466,14 @@ function LogoFiles({
           <AlertDescription>{warning}</AlertDescription>
         </Alert>
       )}
+      {analysing && (
+        <Alert role="status">
+          <AlertDescription className="flex items-center gap-2">
+            <Loader2Icon className="size-4 shrink-0 animate-spin" />
+            AI đang xem logo và chọn chất liệu hợp nhất, mất khoảng nửa phút. Xong sẽ tự chuyển sang trang ảnh mẫu.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {loading ? (
         <FolderSkeletons />
@@ -421,7 +489,7 @@ function LogoFiles({
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg"
                 onChange={upload}
-                disabled={uploading}
+                disabled={uploading || analysing}
                 className="sr-only"
                 aria-label="File logo"
               />
@@ -431,7 +499,7 @@ function LogoFiles({
             <ImageTile
               key={l.id}
               src={l.url}
-              caption={`${l.width}x${l.height}px${l.note ? ` · ${l.note}` : ""}`}
+              caption={`${l.width}x${l.height}px${l.isBadge ? " · Huy hiệu" : ""}${l.note ? ` · ${l.note}` : ""}`}
               selected={selected?.id === l.id}
               onClick={() => onSelect(l)}
             />
@@ -441,11 +509,38 @@ function LogoFiles({
 
       {!loading && logos.length === 0 && <p className="text-sm text-muted-foreground">Thư mục này chưa có logo nào.</p>}
 
+      {selected && (
+        <div className="flex flex-col gap-1 rounded-lg border bg-muted/30 p-3 text-sm">
+          <label className="flex w-fit items-center gap-2.5 font-medium">
+            <Switch checked={selected.isBadge} onCheckedChange={(c) => toggleBadge(selected, c)} disabled={!canUpload || savingBadge} />
+            Logo đang chọn là dạng huy hiệu/bảng (có nền và khung viền riêng)
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Bật: chất liệu KHẮC ra dạng bảng giữ nguyên khung của logo (nền khắc chìm lộ lớp dưới, chữ và đường khung là lớp trên). Tắt:
+            hàng khắc ôm sát hình logo, có viền mảnh lớp dưới. Chất liệu CẮT luôn chỉ cắt biểu tượng và chữ. Áp dụng cho ảnh tạo từ bây
+            giờ, ảnh đã tạo giữ nguyên.
+          </p>
+        </div>
+      )}
+
       {canUpload ? (
-        <div className="flex flex-col gap-1.5 sm:max-w-sm">
+        <div className="flex flex-col gap-1.5 sm:max-w-md">
           <Label htmlFor="l-note">Ghi chú cho logo sắp tải lên (không bắt buộc)</Label>
           <Input id="l-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="h-10" />
-          <p className="text-xs text-muted-foreground">PNG, JPG, WEBP hoặc SVG, tối đa 15MB.</p>
+          {autoCreate && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} className="size-4" />
+              Tải lên xong thì AI tự chọn chất liệu hợp và tạo ảnh mẫu ngay
+            </label>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={badge} onChange={(e) => setBadge(e.target.checked)} className="size-4" />
+            Logo sắp tải lên là dạng huy hiệu/bảng (có nền và khung viền riêng)
+          </label>
+          <p className="text-xs text-muted-foreground">
+            PNG, JPG, WEBP hoặc SVG, tối đa 15MB.
+            {autoCreate && autoRun ? " Không tick ô huy hiệu thì AI tự nhận xét logo có phải dạng huy hiệu không." : ""}
+          </p>
         </div>
       ) : (
         <Alert>

@@ -250,10 +250,13 @@ export async function finishImage(input: FinishInput): Promise<Buffer> {
   let legendH = 0;
   if (input.labelMode === "legend" && input.cells.length > 0) {
     const rowHeight = Math.round(W * 0.052); // đủ chỗ cho tên dài xuống tối đa 2 dòng
+    // số cột chú giải: khớp đúng số cột của lưới ảnh khi còn đọc được (tối đa 2, nhiều hơn thì tên chất liệu bị chật),
+    // để số thứ tự dưới chú giải nằm đúng vị trí tương ứng với ô phía trên (D107)
+    const legendCols = Math.min(input.cols, input.cells.length > 4 ? 2 : 1);
     const legend = computeLegend({
       width: W,
       count: input.cells.length,
-      columns: input.cells.length > 4 ? 2 : 1,
+      columns: legendCols,
       rowHeight,
       padding: pad,
     });

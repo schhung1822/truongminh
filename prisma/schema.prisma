@@ -87,6 +87,7 @@ model User {
   assignedFbLeads   FbLead[]           @relation("FbLeadAssignee")
   registeredFbPosts FbPost[]           @relation("FbPostRegistrar")
   pinterestAccounts PinterestAccount[]
+  logoFavoritePins  LogoFavoritePin[]
 
   @@map("users")
 }
@@ -320,17 +321,20 @@ model Logo {
   width          Int
   height         Int
   note           String?   @db.Text
+  // logo dạng huy hiệu/bảng (có nền + khung viền riêng), do người dùng đánh dấu: chất liệu KHẮC giữ nguyên hình bảng đó (D113)
+  isBadge        Boolean   @default(false)
   kieUrl         String?   @db.VarChar(1000)
   kieExpiresAt   DateTime?
   createdById    String
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  brand     Brand            @relation(fields: [brandId], references: [id])
-  createdBy User             @relation(fields: [createdById], references: [id])
-  sessions  ConsultSession[]
-  geometry  LogoGeometry?
-  quotes    Quote[]
+  brand        Brand             @relation(fields: [brandId], references: [id])
+  createdBy    User              @relation(fields: [createdById], references: [id])
+  sessions     ConsultSession[]
+  geometry     LogoGeometry?
+  quotes       Quote[]
+  favoritePins LogoFavoritePin[]
 
   @@index([brandId])
   @@map("logos")
@@ -344,6 +348,8 @@ model ConsultSession {
   productType         String?
   variantsPerMaterial Int?
   note                String?     @db.Text
+  // Phiên catalog do AI chọn chất liệu (D115): nhận xét logo và lý do chọn từng chất liệu. Trống = phiên tạo theo trang mẫu.
+  aiAnalysis          Json?
   createdById         String
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -403,17 +409,18 @@ model GeneratedImage {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  session        ConsultSession   @relation(fields: [sessionId], references: [id])
-  sheet          Sheet?           @relation(fields: [sheetId], references: [id])
-  material       Material?        @relation(fields: [materialId], references: [id])
-  designStyle    DesignStyle?     @relation(fields: [designStyleId], references: [id])
-  promptTemplate PromptTemplate?  @relation(fields: [promptTemplateId], references: [id])
-  parentImage    GeneratedImage?  @relation("ImageRetry", fields: [parentImageId], references: [id])
-  retries        GeneratedImage[] @relation("ImageRetry")
-  createdBy      User             @relation(fields: [createdById], references: [id])
+  session        ConsultSession              @relation(fields: [sessionId], references: [id])
+  sheet          Sheet?                      @relation(fields: [sheetId], references: [id])
+  material       Material?                   @relation(fields: [materialId], references: [id])
+  designStyle    DesignStyle?                @relation(fields: [designStyleId], references: [id])
+  promptTemplate PromptTemplate?             @relation(fields: [promptTemplateId], references: [id])
+  parentImage    GeneratedImage?             @relation("ImageRetry", fields: [parentImageId], references: [id])
+  retries        GeneratedImage[]            @relation("ImageRetry")
+  createdBy      User                        @relation(fields: [createdById], references: [id])
   usageLogs      UsageLog[]
   zaloDeliveries ZaloDelivery[]
   zaloPosts      ZaloPost[]
+  styleRefPins   GeneratedImageStyleRefPin[]
 
   @@index([status, lastPolledAt])
   @@index([sessionId])
@@ -1236,6 +1243,9 @@ model PinterestBoard {
   privacy          String    @db.VarChar(20) // PUBLIC / PROTECTED / SECRET (nguyên văn Pinterest trả về)
   pinCount         Int       @default(0)
   coverImageUrl    String?   @db.VarChar(500)
+  // giá trị "technique" (MaterialOption loại TECHNIQUE) mà board này đại diện, admin gắn tay ở /admin/pinterest;
+  // dùng để picker ảnh phong cách tự gợi ý đúng board theo công nghệ chất liệu đang chọn khi thiết kế
+  techniqueHint    String?   @db.VarChar(60)
   lastSyncedAt     DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -1263,8 +1273,57 @@ model PinterestPin {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  board PinterestBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  board            PinterestBoard              @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  styleTags        PinterestPinStyleTag[]
+  favoritedByLogos LogoFavoritePin[]
+  referenceUses    GeneratedImageStyleRefPin[]
 
   @@index([boardId])
   @@map("pinterest_pins")
+}
+
+// Tag phong cách gắn cho pin (dùng CHUNG danh sách MaterialOption loại STYLE_TAG với Chất liệu, không có danh mục
+// riêng), để sale lọc nhanh đúng gu khách trên /pinterest. value không có khóa ngoại tới MaterialOption, giống
+// MaterialStyleTag (xem comment ở đó).
+model PinterestPinStyleTag {
+  pinId String
+  value String       @db.VarChar(60)
+  pin   PinterestPin @relation(fields: [pinId], references: [id], onDelete: Cascade)
+
+  @@id([pinId, value])
+  @@index([value])
+  @@map("pinterest_pin_style_tags")
+}
+
+// Pin khách thích, lưu ở cấp Logo (mỗi logo là một yêu cầu sản phẩm riêng, phiên thiết kế cũng gắn theo logoId).
+// Sale bấm lưu khi gửi ảnh cho khách qua Zalo; thiết kế mở logo lên là thấy ngay khách thích phong cách nào.
+model LogoFavoritePin {
+  id          String   @id @default(cuid())
+  logoId      String
+  pinId       String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  logo      Logo         @relation(fields: [logoId], references: [id], onDelete: Cascade)
+  pin       PinterestPin @relation(fields: [pinId], references: [id], onDelete: Cascade)
+  createdBy User         @relation(fields: [createdById], references: [id])
+
+  @@unique([logoId, pinId])
+  @@index([pinId])
+  @@map("logo_favorite_pins")
+}
+
+// Một dòng mỗi (ảnh thiết kế, pin dùng làm ảnh phong cách tham khảo): ghi lúc tạo ảnh, dùng để thống kê pin nào
+// được chọn làm tham khảo nhiều nhất mà không phải lọc qua JSON layoutSnapshot của generated_images.
+model GeneratedImageStyleRefPin {
+  id      String @id @default(cuid())
+  imageId String
+  pinId   String
+
+  image GeneratedImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  pin   PinterestPin   @relation(fields: [pinId], references: [id], onDelete: Cascade)
+
+  @@unique([imageId, pinId])
+  @@index([pinId])
+  @@map("generated_image_style_ref_pins")
 }

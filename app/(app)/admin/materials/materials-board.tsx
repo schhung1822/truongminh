@@ -42,8 +42,10 @@ export type BoardItem = {
   refUrl: string | null;
   /** tên các trang mẫu đang chứa chất liệu này */
   sheets: string[];
-  /** đã từng dùng để tạo ảnh: không xóa được, chỉ tắt */
+  /** đã từng dùng để tạo ảnh hoặc báo giá (chỉ để hiển thị, không quyết định xóa được hay không — xem `locked`) */
   used: boolean;
+  /** đã dùng trong báo giá: không xóa được, chỉ tắt (D106 — dùng để tạo ảnh thì vẫn xóa được, ảnh cũ vẫn giữ) */
+  locked: boolean;
   // phân loại (nhãn tiếng Việt đã tra từ danh mục)
   baseLabel: string;
   techLabel: string;
@@ -79,7 +81,7 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
   const [confirm, setConfirm] = useState<BoardItem[] | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const deletable = items.filter((i) => !i.used);
+  const deletable = items.filter((i) => !i.locked);
   const selectedItems = items.filter((i) => selected.has(i.id));
 
   function toggle(id: string) {
@@ -111,12 +113,12 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
         <PencilIcon /> Sửa
       </Link>
       <ActiveToggle id={m.id} isActive={m.isActive} sheets={m.sheets} />
-      {m.used ? (
+      {m.locked ? (
         <span
-          title="Đã từng dùng để tạo ảnh nên không xóa được. Hãy bấm Tắt để ẩn khỏi danh sách chọn."
+          title="Đã dùng trong báo giá nên không xóa được. Hãy bấm Tắt để ẩn khỏi danh sách chọn."
           className="flex h-7 items-center gap-1 rounded-lg px-2 text-xs text-muted-foreground"
         >
-          <LockIcon className="size-3.5" /> Đã dùng
+          <LockIcon className="size-3.5" /> Đã báo giá
         </span>
       ) : (
         <Button
@@ -351,7 +353,7 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
               type="button"
               variant="destructive"
               onClick={() => confirm && runDelete(confirm)}
-              disabled={pending || !confirm || confirm.every((i) => i.used)}
+              disabled={pending || !confirm || confirm.every((i) => i.locked)}
             >
               {pending && <Loader2Icon className="animate-spin" />}
               Xóa vĩnh viễn
@@ -456,9 +458,10 @@ export function MaterialsBoard({ items, view }: { items: BoardItem[]; view: "gri
 }
 
 function ConfirmBody({ items }: { items: BoardItem[] }) {
-  const removable = items.filter((i) => !i.used);
-  const kept = items.filter((i) => i.used);
+  const removable = items.filter((i) => !i.locked);
+  const kept = items.filter((i) => i.locked);
   const inSheets = removable.filter((i) => i.sheets.length > 0);
+  const usedRemovable = removable.filter((i) => i.used);
   return (
     <>
       <DialogHeader>
@@ -466,7 +469,7 @@ function ConfirmBody({ items }: { items: BoardItem[] }) {
           {removable.length === 1 ? `Xóa chất liệu ${removable[0].code}?` : `Xóa ${removable.length} chất liệu?`}
         </DialogTitle>
         <DialogDescription>
-          Xóa vĩnh viễn, kèm toàn bộ ảnh của chất liệu. Không thể hoàn tác.
+          Xóa vĩnh viễn chất liệu và ảnh mẫu của nó. Không thể hoàn tác.
         </DialogDescription>
       </DialogHeader>
       {removable.length > 0 && (
@@ -484,10 +487,17 @@ function ConfirmBody({ items }: { items: BoardItem[] }) {
           {inSheets.length} chất liệu đang nằm trong trang mẫu và sẽ bị gỡ khỏi các trang đó.
         </p>
       )}
+      {usedRemovable.length > 0 && (
+        <p className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
+          <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
+          {usedRemovable.length} chất liệu đã từng dùng để tạo ảnh ({usedRemovable.map((i) => i.code).join(", ")}). Các
+          ảnh đã tạo vẫn được giữ nguyên, nhưng sau khi xóa sẽ không chọn lại được chất liệu này để tạo thiết kế mới.
+        </p>
+      )}
       {kept.length > 0 && (
         <p className="flex items-start gap-2 rounded-lg border p-2 text-sm text-muted-foreground">
           <LockIcon className="mt-0.5 size-4 shrink-0" />
-          {kept.length} chất liệu đã từng dùng để tạo ảnh ({kept.map((i) => i.code).join(", ")}) sẽ được giữ lại. Hãy
+          {kept.length} chất liệu đã dùng trong báo giá ({kept.map((i) => i.code).join(", ")}) sẽ được giữ lại. Hãy
           dùng nút Tắt cho các chất liệu này.
         </p>
       )}

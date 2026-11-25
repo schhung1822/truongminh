@@ -24,7 +24,7 @@ import { db } from "@/lib/db";
 import { loadOptions } from "@/lib/materials/options";
 import { optionLabel, PHOTO_ISSUES } from "@/lib/materials/option-types";
 import { decimalToNumber, describeStock } from "@/lib/materials/stock";
-import { getUsedMaterialIds } from "@/lib/materials/usage";
+import { getQuotedMaterialIds, getUsedMaterialIds } from "@/lib/materials/usage";
 import { fileUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { MaterialFilters } from "./materials-filters";
@@ -101,7 +101,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
     ...(status === "review" ? reviewWhere : {}),
   };
 
-  const [rows, filteredTotal, total, active, todo, review, stockMissing, used, options] = await Promise.all([
+  const [rows, filteredTotal, total, active, todo, review, stockMissing, used, quoted, options] = await Promise.all([
     db.material.findMany({
       where,
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
@@ -119,6 +119,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
     db.material.count({ where: reviewWhere }),
     db.material.count({ where: stockWhere }),
     getUsedMaterialIds(),
+    getQuotedMaterialIds(),
     loadOptions(),
   ]);
 
@@ -134,6 +135,7 @@ export default async function MaterialsPage({ searchParams }: { searchParams: Pr
     refUrl: fileUrl(m.referencePath),
     sheets: [...new Set(m.sheetMaterials.map((sm) => sm.sheet.name))],
     used: used.has(m.id),
+    locked: quoted.has(m.id),
     baseLabel: optionLabel(options, "BASE_MATERIAL", m.baseMaterial) || m.groupName,
     techLabel: optionLabel(options, "TECHNIQUE", m.technique) || m.printTech,
     finishLabel: optionLabel(options, "SURFACE_FINISH", m.surfaceFinish),

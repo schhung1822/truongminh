@@ -27,7 +27,7 @@ export default async function QuotePage({
   const initialMaterialId = sp.materialId && materials.some((m) => m.id === sp.materialId) ? sp.materialId : null;
 
   return (
-    <div className="flex max-w-5xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Báo giá sản xuất</h1>
         <p className="text-muted-foreground">

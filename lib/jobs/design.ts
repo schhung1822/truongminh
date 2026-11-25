@@ -6,9 +6,10 @@ import { assignStyles, validateDesignRequest } from "@/lib/design/assign";
 import { finishRuleOf } from "@/lib/prompts/finish";
 import { renderDesignPrompt, styleReferenceNote } from "@/lib/prompts/render";
 import { getSettings, type Settings } from "@/lib/settings";
+import { MAX_STYLE_REF_PINS } from "@/lib/image-options";
 import type { BuiltImage } from "./built";
 import { assertQuota, todayKey } from "./limits";
-import type { LayoutSnapshot } from "./snapshot";
+import { getStyleRefPinIds, type LayoutSnapshot } from "./snapshot";
 import { getActiveTemplate, type Template } from "./template";
 
 type MaterialRow = {
@@ -17,7 +18,7 @@ type MaterialRow = {
   name: string;
   groupName: string;
   printTech: string;
-  /** mã công nghệ (khac-laser, cat-laser, in-uv...): quyết định ảnh vẽ kiểu khắc, cắt hay in, xem lib/prompts/finish.ts */
+  /** mã công nghệ (khac-laser, cat-laser...): quyết định ảnh vẽ kiểu khắc hay cắt, xem lib/prompts/finish.ts */
   technique?: string | null;
   referencePath: string | null;
 };
@@ -36,8 +37,10 @@ export function buildDesignImage(input: {
   note: string;
   template: Template;
   settings: Settings;
-  /** PinterestPin.id dùng làm ảnh phong cách tham khảo thêm cho AI; không bắt buộc */
-  styleRefPinId?: string;
+  /** logo dạng huy hiệu/bảng (Logo.isBadge): quyết định hình dạng tấm khắc, xem lib/prompts/finish.ts */
+  logoIsBadge: boolean;
+  /** PinterestPin.id dùng làm ảnh phong cách tham khảo thêm cho AI, tối đa MAX_STYLE_REF_PINS; không bắt buộc */
+  styleRefPinIds?: string[];
 }): { error: string } | { data: BuiltImage } {
   const { material, style, template, settings } = input;
   if (!material.referencePath) {
@@ -52,12 +55,13 @@ export function buildDesignImage(input: {
         design_style: `${style.name}: ${style.description}`,
         note: input.note.trim() || "none",
       },
-      finishRuleOf(material),
+      finishRuleOf(material, input.logoIsBadge),
     );
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Không sinh được prompt." };
   }
-  if (input.styleRefPinId) promptUsed += "\n\n" + styleReferenceNote(STYLE_REF_INDEX);
+  const styleRefPinIds = input.styleRefPinIds?.slice(0, MAX_STYLE_REF_PINS) ?? [];
+  if (styleRefPinIds.length > 0) promptUsed += "\n\n" + styleReferenceNote(STYLE_REF_INDEX, styleRefPinIds.length);
 
   const snapshot: LayoutSnapshot = {
     cols: 1,
@@ -73,7 +77,7 @@ export function buildDesignImage(input: {
         printTech: material.printTech,
       },
     ],
-    design: { productType: input.productType, styleName: style.name, note: input.note, ...(input.styleRefPinId ? { pinterestPinId: input.styleRefPinId } : {}) },
+    design: { productType: input.productType, styleName: style.name, note: input.note, ...(styleRefPinIds.length ? { pinterestPinIds: styleRefPinIds } : {}) },
   };
 
   return {
@@ -99,23 +103,27 @@ export function buildDesignImage(input: {
  */
 export async function createDesignSession(
   user: SessionUser,
-  input: { parentSessionId: string; materialIds: string[]; productType: string; variants: number; note: string; styleRefPinId?: string },
+  input: { parentSessionId: string; materialIds: string[]; productType: string; variants: number; note: string; styleRefPinIds?: string[] },
 ): Promise<{ error?: string; sessionId?: string }> {
   const materialIds = [...new Set(input.materialIds)];
   const productType = input.productType.trim().slice(0, 200);
   const note = input.note.trim().slice(0, 1000);
+  const styleRefPinIds = [...new Set(input.styleRefPinIds ?? [])].slice(0, MAX_STYLE_REF_PINS);
 
   const invalid = validateDesignRequest({ materialCount: materialIds.length, variants: input.variants, productType });
   if (invalid) return { error: invalid };
 
-  if (input.styleRefPinId) {
-    const pin = await db.pinterestPin.findUnique({ where: { id: input.styleRefPinId }, select: { id: true } });
-    if (!pin) return { error: "Không tìm thấy ảnh phong cách tham khảo đã chọn. Hãy chọn lại." };
+  if (styleRefPinIds.length > 0) {
+    const found = await db.pinterestPin.count({ where: { id: { in: styleRefPinIds } } });
+    if (found !== styleRefPinIds.length) return { error: "Không tìm thấy một ảnh phong cách tham khảo đã chọn. Hãy chọn lại." };
   }
 
   const parent = await db.consultSession.findUnique({
     where: { id: input.parentSessionId },
-    include: { images: { where: { status: "SUCCESS", retries: { none: {} } }, select: { layoutSnapshot: true } } },
+    include: {
+      logo: { select: { isBadge: true } },
+      images: { where: { status: "SUCCESS", retries: { none: {} } }, select: { layoutSnapshot: true } },
+    },
   });
   if (!parent) return { error: "Không tìm thấy phiên." };
   if (parent.type !== "CATALOG") return { error: "Chỉ thiết kế được từ phiên catalog (bước 1)." };
@@ -166,7 +174,8 @@ export async function createDesignSession(
         note,
         template,
         settings,
-        styleRefPinId: input.styleRefPinId,
+        logoIsBadge: parent.logo.isBadge,
+        styleRefPinIds,
       });
       if ("error" in r) return { error: r.error };
       built.push(r.data);
@@ -192,6 +201,9 @@ export async function createDesignSession(
     for (const data of built) {
       const image = await tx.generatedImage.create({ data: { ...data, sessionId: session.id, createdById: user.id } });
       await tx.usageLog.create({ data: { userId: user.id, imageId: image.id, kind: "DESIGN", day } });
+      if (styleRefPinIds.length > 0) {
+        await tx.generatedImageStyleRefPin.createMany({ data: styleRefPinIds.map((pinId) => ({ imageId: image.id, pinId })) });
+      }
     }
     return session.id;
   });
@@ -208,7 +220,7 @@ export async function rebuildDesignImage(old: {
 }): Promise<{ error: string } | { data: BuiltImage }> {
   if (!old.materialId || !old.designStyleId) return { error: "Ảnh thiết kế này thiếu thông tin để tạo lại." };
   const [session, material, style, settings] = await Promise.all([
-    db.consultSession.findUnique({ where: { id: old.sessionId }, select: { productType: true, note: true } }),
+    db.consultSession.findUnique({ where: { id: old.sessionId }, select: { productType: true, note: true, logo: { select: { isBadge: true } } } }),
     db.material.findUnique({ where: { id: old.materialId } }),
     db.designStyle.findUnique({ where: { id: old.designStyleId } }),
     getSettings(),
@@ -232,7 +244,8 @@ export async function rebuildDesignImage(old: {
     note: session.note ?? "",
     template,
     settings,
-    styleRefPinId: snap.design?.pinterestPinId, // giữ nguyên ảnh phong cách tham khảo (nếu có) khi tạo lại
+    logoIsBadge: session.logo.isBadge,
+    styleRefPinIds: getStyleRefPinIds(snap), // giữ nguyên (các) ảnh phong cách tham khảo (nếu có) khi tạo lại
   });
   if ("error" in built || (!snap.labelPos && !snap.labelStyle)) return built;
   // giữ kiểu và vị trí nhãn người dùng đã chọn cho ảnh cũ

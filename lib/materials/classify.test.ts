@@ -15,8 +15,8 @@ describe("resolveOption", () => {
 
   it("giá trị lạ hoặc đã tắt thì null, trừ khi đang là giá trị hiện có", () => {
     expect(resolveOption(options, "TECHNIQUE", "in 3d")).toBeNull();
-    expect(resolveOption(off("TECHNIQUE", "in-uv"), "TECHNIQUE", "in-uv")).toBeNull();
-    expect(resolveOption(off("TECHNIQUE", "in-uv"), "TECHNIQUE", "in-uv", "in-uv")).toBe("in-uv");
+    expect(resolveOption(off("TECHNIQUE", "cat-laser"), "TECHNIQUE", "cat-laser")).toBeNull();
+    expect(resolveOption(off("TECHNIQUE", "cat-laser"), "TECHNIQUE", "cat-laser", "cat-laser")).toBe("cat-laser");
   });
 });
 

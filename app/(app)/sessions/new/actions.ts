@@ -15,7 +15,15 @@ export type CustomerOption = {
   brandCount: number;
 };
 export type BrandOption = { id: string; name: string; logoCount: number };
-export type LogoOption = { id: string; url: string; width: number; height: number; note: string | null };
+export type LogoOption = {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+  note: string | null;
+  /** logo dạng huy hiệu/bảng (có nền + khung viền riêng): chất liệu khắc giữ nguyên hình bảng, xem docs/DECISIONS.md D113 */
+  isBadge: boolean;
+};
 
 const customerSchema = z.object({
   name: z.string().trim().min(1, "Vui lòng nhập tên khách hàng.").max(150),
@@ -79,8 +87,24 @@ export async function listLogosAction(brandId: string): Promise<{ error?: string
       width: l.width,
       height: l.height,
       note: l.note,
+      isBadge: l.isBadge,
     })),
   };
+}
+
+/**
+ * Đánh dấu / bỏ đánh dấu "logo dạng huy hiệu/bảng" (D113). Quyền như tải logo: người phụ trách khách hàng hoặc admin.
+ * Chỉ ảnh tạo SAU khi đổi mới theo giá trị mới; ảnh đã tạo giữ nguyên.
+ */
+export async function setLogoBadgeAction(logoId: string, isBadge: boolean): Promise<{ error?: string }> {
+  const user = await requireUser();
+  const logo = await db.logo.findUnique({ where: { id: logoId }, include: { brand: { include: { customer: true } } } });
+  if (!logo) return { error: "Không tìm thấy logo." };
+  if (!canEditCustomer(user, logo.brand.customer)) {
+    return { error: "Khách hàng này do người khác phụ trách, bạn không sửa logo được." };
+  }
+  await db.logo.update({ where: { id: logoId }, data: { isBadge: isBadge === true } });
+  return {};
 }
 
 export type LogoSessionOption = {
@@ -121,4 +145,24 @@ export async function listLogoSessionsAction(logoId: string): Promise<{ sessions
       };
     }),
   };
+}
+
+export type LogoFavoritePinOption = { id: string; pinId: string; title: string | null; sourceImageUrl: string };
+
+/** Pin Pinterest khách đã thích, lưu theo logo (xem docs/DECISIONS.md D98). */
+export async function listLogoFavoritePinsAction(logoId: string): Promise<{ favorites: LogoFavoritePinOption[] }> {
+  await requireUser();
+  const favorites = await db.logoFavoritePin.findMany({
+    where: { logoId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, pin: { select: { id: true, title: true, sourceImageUrl: true } } },
+  });
+  return { favorites: favorites.map((f) => ({ id: f.id, pinId: f.pin.id, title: f.pin.title, sourceImageUrl: f.pin.sourceImageUrl })) };
+}
+
+/** Bỏ lưu một pin thích của logo (nút "x" trong màn Khách hàng), không cần vào lại /pinterest. */
+export async function removeLogoFavoritePinAction(favoriteId: string): Promise<{ error?: string }> {
+  await requireUser();
+  await db.logoFavoritePin.deleteMany({ where: { id: favoriteId } });
+  return {};
 }

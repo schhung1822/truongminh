@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getStorage } from "@/lib/storage";
-import { getUsedMaterialIds } from "./usage";
+import { getQuotedMaterialIds } from "./usage";
 
 export type DeleteMaterialsResult = {
   deleted: string[]; // mã đã xóa
@@ -9,28 +9,29 @@ export type DeleteMaterialsResult = {
 };
 
 /**
- * Xóa cứng các chất liệu CHƯA TỪNG DÙNG (kể cả ảnh trong kho). Chất liệu đã từng dùng để tạo ảnh bị giữ lại.
- * Chất liệu đang nằm trong trang mẫu thì được gỡ khỏi các trang đó rồi mới xóa.
+ * Xóa cứng chất liệu. Chỉ chất liệu đã dùng trong báo giá mới bị giữ lại (D44: hồ sơ tài chính, phải giữ đúng chất
+ * liệu đã tính giá) — chất liệu chỉ dùng để tạo ảnh (catalog hoặc thiết kế) vẫn xóa được (D106): ảnh cũ giữ nguyên
+ * nhờ bản chụp bố cục (layoutSnapshot) và khóa ngoại materialId của ảnh tự chuyển NULL khi xóa, chỉ không còn
+ * chọn lại được chất liệu này để tạo thiết kế mới. Chất liệu đang nằm trong trang mẫu, hoặc từng được chọn cho một
+ * lượt thiết kế, được gỡ khỏi đó rồi mới xóa.
  */
 export async function deleteMaterials(ids: string[]): Promise<DeleteMaterialsResult> {
   const unique = [...new Set(ids)].slice(0, 500);
   const result: DeleteMaterialsResult = { deleted: [], skipped: [] };
   if (unique.length === 0) return result;
 
-  const [materials, used] = await Promise.all([
-    db.material.findMany({ where: { id: { in: unique } } }),
-    getUsedMaterialIds(),
-  ]);
+  const [materials, quoted] = await Promise.all([db.material.findMany({ where: { id: { in: unique } } }), getQuotedMaterialIds()]);
   const storage = getStorage();
 
   for (const m of materials) {
-    if (used.has(m.id)) {
-      result.skipped.push({ code: m.code, reason: "đã từng dùng để tạo ảnh, hãy tắt thay vì xóa" });
+    if (quoted.has(m.id)) {
+      result.skipped.push({ code: m.code, reason: "đã dùng trong báo giá, hãy tắt thay vì xóa" });
       continue;
     }
     try {
       await db.$transaction([
         db.sheetMaterial.deleteMany({ where: { materialId: m.id } }),
+        db.sessionSelectedMaterial.deleteMany({ where: { materialId: m.id } }),
         db.material.delete({ where: { id: m.id } }),
       ]);
     } catch (e) {
@@ -39,7 +40,7 @@ export async function deleteMaterials(ids: string[]): Promise<DeleteMaterialsRes
       continue;
     }
     result.deleted.push(m.code);
-    // dọn file ảnh (lỗi dọn file không làm hỏng kết quả xóa)
+    // dọn file ảnh mẫu của chất liệu (lỗi dọn file không làm hỏng kết quả xóa); không đụng tới ảnh đã tạo (finalPath/originalPath của GeneratedImage)
     const files = [m.layer1Path, m.layer2Path, m.productPhotoPath, m.referencePath].filter((k): k is string => !!k);
     await Promise.all(files.map((k) => storage.delete(k).catch(() => {})));
   }

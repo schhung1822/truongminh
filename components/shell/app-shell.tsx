@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ChevronDownIcon, CircleUserIcon, LogOutIcon, MenuIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CircleUserIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/generated/prisma/enums";
 import { roleLabel } from "@/lib/roles";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { logoutAction } from "@/app/(auth)/actions";
-import { HeaderStats } from "./header-stats";
+import { AccountMenuStats, HeaderStats } from "./header-stats";
 import { activeHref, visibleNav, type NavGroup, type NavItem } from "./nav-config";
 
 type ShellUser = { name: string; email: string; role: Role };
@@ -52,6 +52,31 @@ function useNavBadges(): Record<string, number> {
   return badges;
 }
 
+/**
+ * Gắn/gỡ lớp "is-scrolling" lên chính phần tử đang cuộn trong lúc có sự kiện scroll (rồi tự gỡ sau một lúc đứng
+ * yên), để CSS (.sidebar-scroll trong globals.css) hiện thanh cuộn mảnh kiểu overlay như trên mobile: chỉ hiện khi
+ * rê chuột vào hoặc đang cuộn, còn lại thì ẩn.
+ */
+function useRevealScrollbarOnScroll<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let hideTimer: ReturnType<typeof setTimeout>;
+    const onScroll = () => {
+      el.classList.add("is-scrolling");
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => el.classList.remove("is-scrolling"), 800);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      clearTimeout(hideTimer);
+    };
+  }, []);
+  return ref;
+}
+
 function NavLink({
   item,
   active,
@@ -64,11 +89,11 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const Icon = item.icon;
-  const base = "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors";
+  const base = "flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px] transition-colors";
 
   if (!item.ready) {
     return (
-      <span className={cn(base, "cursor-not-allowed text-muted-foreground/60")} aria-disabled="true">
+      <span className={cn(base, "cursor-not-allowed text-neutral-400")} aria-disabled="true">
         <Icon className="size-4" strokeWidth={1.75} />
         {item.label}
         <span className="ml-auto text-[10px] font-normal uppercase tracking-wide">Sắp có</span>
@@ -82,9 +107,7 @@ function NavLink({
       aria-current={active ? "page" : undefined}
       className={cn(
         base,
-        active
-          ? "bg-background font-medium text-foreground shadow-xs ring-1 ring-black/5"
-          : "text-foreground/80 hover:bg-background/60 hover:text-foreground",
+        active ? "bg-white font-medium text-neutral-900 shadow-sm" : "text-neutral-600 hover:bg-white/70 hover:text-neutral-900",
       )}
     >
       <Icon className="size-4" strokeWidth={1.75} />
@@ -98,7 +121,7 @@ function NavLink({
   );
 }
 
-/** Một nhóm menu: bấm tiêu đề để thu gọn/mở. Nhóm đang chứa trang hiện tại luôn mở. */
+/** Một nhóm menu: tiêu đề nhỏ, luôn hiện hết các mục bên dưới (không thu gọn) để danh sách gọn và dễ quét mắt. */
 function NavGroupBlock({
   group,
   activePath,
@@ -110,27 +133,14 @@ function NavGroupBlock({
   badges: Record<string, number>;
   onNavigate?: () => void;
 }) {
-  const hasActive = group.items.some((i) => i.href === activePath);
-  const [open, setOpen] = useState(true);
-  const shown = open || hasActive;
   return (
-    <div className="mt-4 first:mt-0">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={shown}
-        className="flex w-full items-center justify-between rounded-md px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {group.label}
-        <ChevronDownIcon className={cn("size-3.5 transition-transform", !shown && "-rotate-90")} />
-      </button>
-      {shown && (
-        <div className="mt-0.5 flex flex-col gap-0.5">
-          {group.items.map((item) => (
-            <NavLink key={item.href} item={item} active={item.href === activePath} badgeCount={badges[item.href]} onNavigate={onNavigate} />
-          ))}
-        </div>
-      )}
+    <div className="mt-5 first:mt-0">
+      <p className="px-3 text-xs text-muted-foreground/80">{group.label}</p>
+      <div className="mt-1 flex flex-col gap-0.5">
+        {group.items.map((item) => (
+          <NavLink key={item.href} item={item} active={item.href === activePath} badgeCount={badges[item.href]} onNavigate={onNavigate} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -167,6 +177,11 @@ function UserMenu({ user }: { user: ShellUser }) {
         <DropdownMenuGroup>
           <DropdownMenuLabel className="truncate">{user.email}</DropdownMenuLabel>
         </DropdownMenuGroup>
+        {/* Số liệu token: ở màn rộng đã hiện sẵn trên thanh đầu trang nên chỉ lặp lại ở đây cho di động */}
+        <div className="sm:hidden">
+          <DropdownMenuSeparator />
+          <AccountMenuStats />
+        </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void logoutAction()}>
           <LogOutIcon />
@@ -188,6 +203,8 @@ function Logo() {
 
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const desktopNavRef = useRevealScrollbarOnScroll<HTMLElement>();
+  const mobileNavRef = useRevealScrollbarOnScroll<HTMLDivElement>();
 
   return (
     <div className="flex min-h-svh flex-1 flex-col">
@@ -206,25 +223,30 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
           >
             <MenuIcon />
           </SheetTrigger>
-          <SheetContent side="left" className="flex w-72 flex-col gap-4 bg-muted p-4">
+          <SheetContent side="left" className="flex w-72 flex-col gap-4 bg-sidebar p-4">
             <SheetHeader className="p-0">
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
-            <div className="flex-1 overflow-y-auto">
+            <div ref={mobileNavRef} className="sidebar-scroll flex-1 overflow-y-auto">
               <NavList role={user.role} onNavigate={() => setOpen(false)} />
             </div>
           </SheetContent>
         </Sheet>
         <Logo />
         <div className="ml-auto flex items-center gap-2">
-          <HeaderStats role={user.role} />
+          <div className="hidden sm:block">
+            <HeaderStats role={user.role} />
+          </div>
           <UserMenu user={user} />
         </div>
       </header>
 
       <div className="flex min-w-0 flex-1">
         {/* Thanh menu bên trái cho máy tính */}
-        <aside className="sticky top-14 hidden h-[calc(100svh-3.5rem)] w-60 shrink-0 overflow-y-auto bg-muted px-3 py-4 md:block">
+        <aside
+          ref={desktopNavRef}
+          className="sidebar-scroll sticky top-14 hidden h-[calc(100svh-3.5rem)] w-60 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar px-3 py-4 md:block"
+        >
           <NavList role={user.role} />
         </aside>
 

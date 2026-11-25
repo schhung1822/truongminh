@@ -59,13 +59,13 @@ export function MaterialStockForm({ materialId, initial }: { materialId: string;
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3 rounded-xl border p-4" aria-labelledby="stock-title">
+    <form onSubmit={onSubmit} className="flex flex-col gap-3" aria-labelledby="stock-title">
       <div>
-        <h2 id="stock-title" className="font-semibold">
+        <h2 id="stock-title" className="sr-only">
           Tấm vật liệu (dùng để báo giá)
         </h2>
         <p className="text-xs text-muted-foreground">{HISTORY_NOTE}</p>
-        <p className="text-xs text-muted-foreground">Mục này có nút lưu riêng bên dưới, không nằm trong nút &quot;Lưu chất liệu&quot; ở trên.</p>
+        <p className="text-xs text-muted-foreground">Mục này có nút lưu riêng bên dưới, không nằm trong nút &quot;Lưu chất liệu&quot; ở tab khác.</p>
       </div>
 
       {error && (

@@ -18,7 +18,6 @@ import { activatePromptAction, savePromptAction } from "./actions";
 const SAMPLE_MATERIALS = [
   { printTech: "Khắc laser", technique: "khac-laser" },
   { printTech: "Cắt laser", technique: "cat-laser" },
-  { printTech: "In UV", technique: "in-uv" },
 ];
 const SAMPLE_GRID = { cols: 5, rows: 2 };
 
@@ -60,13 +59,13 @@ const VARIABLE_HELP: Record<"CATALOG" | "DESIGN", { name: string; desc: string }
   CATALOG: [
     { name: "{{cols}}", desc: "số cột của trang mẫu" },
     { name: "{{rows}}", desc: "số hàng của trang mẫu" },
-    { name: "{{materials_list}}", desc: "danh sách ô và chất liệu (bắt buộc, hệ thống tự sinh)" },
+    { name: "{{materials_list}}", desc: "định nghĩa kiểu hàng khắc/cắt và danh sách ô kèm kiểu của từng ô theo công nghệ chất liệu (bắt buộc, hệ thống tự sinh)" },
   ],
   DESIGN: [
     { name: "{{product_type}}", desc: "loại sản phẩm sale nhập" },
     { name: "{{design_style}}", desc: "mô tả kiểu thiết kế được chọn" },
     { name: "{{note}}", desc: "ghi chú thêm của sale" },
-    { name: "{{material_finish}}", desc: "kiểu hoàn thiện theo công nghệ của chất liệu: khắc laser, cắt laser (một lớp phẳng không viền) hoặc in UV, hệ thống tự sinh; thiếu biến này thì hệ thống tự nối vào cuối prompt" },
+    { name: "{{material_finish}}", desc: "kiểu hàng theo công nghệ của chất liệu (khắc laser hai lớp hoặc cắt laser một lớp) và theo ô \"logo dạng huy hiệu\" của logo, hệ thống tự sinh; thiếu biến này thì hệ thống tự nối vào cuối prompt" },
   ],
 };
 

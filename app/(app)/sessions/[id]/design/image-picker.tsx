@@ -17,6 +17,8 @@ export type CatalogCell = {
   name: string;
   groupName: string;
   printTech: string;
+  /** mã công nghệ (MaterialOption loại TECHNIQUE), dùng để picker ảnh phong cách tự gợi ý đúng board */
+  technique?: string | null;
   /** false: chất liệu đã bị xóa hoặc chưa có ảnh tham chiếu nên không thiết kế được */
   usable: boolean;
 };

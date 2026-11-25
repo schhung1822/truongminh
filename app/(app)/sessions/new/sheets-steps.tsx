@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { estimateCost } from "@/lib/pricing";
+import { estimateCost, formatCostLabel } from "@/lib/pricing";
 import { createCatalogSessionAction } from "../actions";
 import type { BrandOption, CustomerOption, LogoOption } from "./actions";
 
@@ -160,6 +160,7 @@ export function ConfirmStep({
   sheets,
   quota,
   showCost,
+  imageModel,
   onBack,
 }: {
   customer: CustomerOption;
@@ -169,6 +170,8 @@ export function ConfirmStep({
   quota: QuotaInfo;
   /** true khi đang dùng kie.ai thật (tốn tiền): hiện ước tính credits */
   showCost: boolean;
+  /** model tạo ảnh đang cấu hình, dùng để tra đúng bảng giá (lib/providers/kie-models.ts) */
+  imageModel: string;
   onBack: () => void;
 }) {
   const router = useRouter();
@@ -177,7 +180,7 @@ export function ConfirmStep({
   // số ảnh = tổng số ảnh của các trang (trang dài chia nhiều ảnh), mỗi ảnh tính một lượt
   const needed = sheets.reduce((n, s) => n + s.images, 0);
   const overQuota = quota !== null && needed > quota.left;
-  const cost = estimateCost(sheets.flatMap((x) => Array<string>(x.images).fill(x.resolution)));
+  const cost = estimateCost(imageModel, sheets.flatMap((x) => Array<string>(x.images).fill(x.resolution)));
 
   function start() {
     setError(null);
@@ -241,7 +244,7 @@ export function ConfirmStep({
               <>
                 <dt className="text-muted-foreground">Chi phí ước tính</dt>
                 <dd className="font-medium text-amber-700">
-                  {cost.credits} token (khoảng ${cost.usd.toFixed(2)}) trên kie.ai
+                  {formatCostLabel(cost)} trên kie.ai
                 </dd>
               </>
             )}

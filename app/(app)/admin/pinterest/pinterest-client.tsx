@@ -4,7 +4,8 @@ import { useTransition } from "react";
 import { Loader2Icon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { disconnectPinterestAction, syncPinterestAction, type PinterestActionResult } from "./actions";
+import { NativeSelect } from "@/components/ui/native-select";
+import { disconnectPinterestAction, setBoardTechniqueHintAction, syncPinterestAction, type PinterestActionResult } from "./actions";
 
 function toastResult(r: PinterestActionResult) {
   if (r.error) toast.error(r.error);
@@ -37,5 +38,26 @@ export function DisconnectButton() {
       {pending ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}
       Ngắt kết nối
     </Button>
+  );
+}
+
+/** Chọn công nghệ board này đại diện (ví dụ board "Khắc" → công nghệ "khac-laser"), để picker ảnh phong cách tự gợi ý đúng board. */
+export function BoardTechniqueSelect({ boardId, value, options }: { boardId: string; value: string; options: { value: string; label: string }[] }) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <NativeSelect
+      className="h-8 text-xs"
+      defaultValue={value}
+      disabled={pending}
+      aria-label="Công nghệ board này đại diện"
+      onChange={(e) => startTransition(async () => toastResult(await setBoardTechniqueHintAction(boardId, e.target.value)))}
+    >
+      <option value="">Không liên kết công nghệ</option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          Gợi ý khi chọn: {o.label}
+        </option>
+      ))}
+    </NativeSelect>
   );
 }

@@ -83,6 +83,10 @@ export function useFolderNav(initialCustomers: CustomerOption[], initial: Folder
       setLogos((prev) => [l, ...prev]);
       setLogo(l);
     },
+    onLogoUpdated(l: LogoOption) {
+      setLogos((prev) => prev.map((x) => (x.id === l.id ? l : x)));
+      setLogo((cur) => (cur?.id === l.id ? l : cur));
+    },
   };
 }
 

@@ -1,9 +1,12 @@
 import sharp from "sharp";
+import { kieModel } from "./kie-models";
 import { ProviderFatalError, ProviderRateLimitError, type CreateTaskInput, type ImageProvider, type TaskInfo } from "./types";
 
 /**
  * Kết nối kie.ai. Đặc tả lấy từ docs.kie.ai (đã đọc ngày 16/11/2026):
  * - Tạo tác vụ:   POST {API}/api/v1/jobs/createTask   { model, callBackUrl?, input:{prompt,input_urls,aspect_ratio,resolution} }
+ *   (đây là hình dạng của dòng GPT Image; các dòng model khác dùng tên trường khác cho ảnh tham chiếu/độ phân giải,
+ *   xem lib/providers/kie-models.ts — createTask tra theo model để gửi đúng tên trường)
  * - Hỏi trạng thái: GET  {API}/api/v1/jobs/recordInfo?taskId=...   state: waiting|queuing|generating|success|fail
  * - Upload ảnh:   POST https://kieai.redpandaai.co/api/file-stream-upload (multipart: file, uploadPath, fileName)
  *   -> data.downloadUrl; file bị xóa sau 24 giờ; upload miễn phí.
@@ -74,11 +77,25 @@ export class KieProvider implements ImageProvider {
   }
 
   async createTask(input: CreateTaskInput): Promise<{ taskId: string }> {
-    if (input.prompt.length > MAX_PROMPT_CHARS) {
-      throw new ProviderFatalError(`Prompt dài ${input.prompt.length} ký tự, vượt giới hạn ${MAX_PROMPT_CHARS} của kie.ai.`);
+    // Mỗi dòng model của kie.ai dùng tên trường khác nhau cho ảnh tham chiếu và độ phân giải, và nhận prompt dài ngắn khác
+    // nhau (lib/providers/kie-models.ts). Model lạ (không có trong danh mục) thì giữ hành vi mặc định trước nay.
+    const model = kieModel(input.model);
+    const maxPrompt = model?.maxPromptChars ?? MAX_PROMPT_CHARS;
+    if (input.prompt.length > maxPrompt) {
+      throw new ProviderFatalError(
+        `Prompt dài ${input.prompt.length} ký tự, vượt giới hạn ${maxPrompt} của ${model?.label ?? "kie.ai"}. Rút gọn prompt ở Quản trị > Prompt hoặc chọn model khác.`,
+      );
     }
     if (input.inputUrls.length > 16) {
       throw new ProviderFatalError("kie.ai chỉ nhận tối đa 16 ảnh tham chiếu mỗi lượt.");
+    }
+    const refField = model?.refField ?? "input_urls";
+    const sizeField = model?.sizeField ?? "resolution";
+    let sizeValue: string = input.resolution;
+    if (model) {
+      const size = model.sizes.find((s) => s.resolution === input.resolution);
+      if (!size) throw new ProviderFatalError(`${model.label} không hỗ trợ độ phân giải ${input.resolution}.`);
+      sizeValue = size.value;
     }
     const data = await this.call<{ taskId?: string }>(`${this.apiBase}/api/v1/jobs/createTask`, {
       method: "POST",
@@ -88,9 +105,9 @@ export class KieProvider implements ImageProvider {
         ...(input.callbackUrl ? { callBackUrl: input.callbackUrl } : {}),
         input: {
           prompt: input.prompt,
-          input_urls: input.inputUrls, // tên trường là input_urls, không phải image_urls
+          [refField]: input.inputUrls,
           aspect_ratio: input.aspectRatio,
-          resolution: input.resolution,
+          [sizeField]: sizeValue,
         },
       }),
     });

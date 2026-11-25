@@ -48,7 +48,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
   const backHref = `/quote?logoId=${encodeURIComponent(quote.logoId)}${quote.sessionId ? `&sessionId=${encodeURIComponent(quote.sessionId)}` : ""}`;
 
   return (
-    <div className="flex max-w-5xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <Link href={backHref} className={buttonVariants({ variant: "ghost", size: "sm", className: "self-start" })}>
         <ArrowLeftIcon /> Về công cụ báo giá
       </Link>

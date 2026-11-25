@@ -60,7 +60,7 @@ export default async function ImportPage() {
           </ul>
           <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs">
             {`code,name,thicknessMm,baseMaterial,technique,surfaceFinish,colorCount
-V01,Vải bố trắng,0.5,vai,in-uv,mo,ONE
+V01,Vải bố trắng,0.5,vai,cat-laser,mo,ONE
 N05,Mica trong,1.2,nhua,khac-laser,bong,TWO`}
           </pre>
         </CardContent>

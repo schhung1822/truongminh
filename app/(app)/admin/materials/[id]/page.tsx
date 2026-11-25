@@ -56,17 +56,19 @@ export default async function EditMaterialPage({ params }: { params: Promise<{ i
           reviewNote: m.reviewNote,
           styleTags: m.styleTags.map((t) => t.value),
         }}
-      />
-      <MaterialStockForm
-        materialId={m.id}
-        initial={stockToForm({
-          stockWidthMm: m.stockWidthMm,
-          stockHeightMm: m.stockHeightMm,
-          stockPrice: decimalToNumber(m.stockPrice),
-          edgeMarginMm: m.edgeMarginMm,
-          gapMm: m.gapMm,
-          allowRotate: m.allowRotate,
-        })}
+        stockSlot={
+          <MaterialStockForm
+            materialId={m.id}
+            initial={stockToForm({
+              stockWidthMm: m.stockWidthMm,
+              stockHeightMm: m.stockHeightMm,
+              stockPrice: decimalToNumber(m.stockPrice),
+              edgeMarginMm: m.edgeMarginMm,
+              gapMm: m.gapMm,
+              allowRotate: m.allowRotate,
+            })}
+          />
+        }
       />
     </div>
   );

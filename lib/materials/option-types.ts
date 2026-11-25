@@ -16,7 +16,7 @@ export type OptionType = (typeof OPTION_TYPES)[number];
 
 export const OPTION_TYPE_INFO: Record<OptionType, { title: string; hint: string }> = {
   BASE_MATERIAL: { title: "Nhóm chất liệu", hint: "Chất liệu nền: nhựa, vải, giả gương. Ghi song song vào cột nhóm cũ." },
-  TECHNIQUE: { title: "Công nghệ in", hint: "Cách gia công, quyết định ảnh thành phẩm AI vẽ: Khắc laser (hai lớp, vẻ khắc), Cắt laser (decal một lớp phẳng, không viền, không khắc), In UV (in phẳng). Ghi song song vào cột công nghệ in cũ (gửi cho AI)." },
+  TECHNIQUE: { title: "Công nghệ in", hint: "Cách gia công, quyết định ảnh thành phẩm AI vẽ: Khắc laser (hai lớp, vẻ khắc) hoặc Cắt laser (decal một lớp phẳng, không viền, không khắc). Không có mục riêng cho In UV vì đó không phải đặc tính của một decal cụ thể (gần như chất liệu nào cũng in UV được). Ghi song song vào cột công nghệ in cũ (gửi cho AI)." },
   SURFACE_FINISH: { title: "Chất bề mặt", hint: "Bề mặt trông thế nào: mờ, bóng, gương, nhũ, nhung..." },
   SURFACE_PATTERN: { title: "Họa tiết", hint: "Hình vẽ/vân trên bề mặt: trơn, caro, hoa văn, chuyển màu..." },
   COLOR_FAMILY: { title: "Họ màu", hint: "Nhóm màu dùng để lọc, cho cả mặt trước và mặt sau." },
@@ -35,7 +35,6 @@ export const DEFAULT_OPTIONS: Record<OptionType, DefaultOption[]> = {
   TECHNIQUE: [
     { value: "khac-laser", label: "Khắc laser" },
     { value: "cat-laser", label: "Cắt laser" },
-    { value: "in-uv", label: "In UV" },
   ],
   SURFACE_FINISH: [
     { value: "mo", label: "Mờ" },

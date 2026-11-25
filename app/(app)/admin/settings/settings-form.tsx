@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -8,17 +8,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { ASPECT_RATIOS, RESOLUTIONS } from "@/lib/image-options";
+import { ASPECT_RATIOS, AUTO_MATERIAL_COUNTS, AUTO_SHEET_LAYOUT, RESOLUTIONS, type Resolution } from "@/lib/image-options";
 import { LABEL_POSITIONS, LABEL_POS_TEXT } from "@/lib/imaging/label-pos";
+import { formatCostLabel } from "@/lib/pricing";
+import { SELECTABLE_KIE_MODELS, kieModel } from "@/lib/providers/kie-models";
 import type { Settings } from "@/lib/settings";
 import { saveSettingsAction, type SettingsResult } from "./actions";
 
 export function SettingsForm({ settings }: { settings: Settings }) {
   const [state, formAction, pending] = useActionState<SettingsResult, FormData>(saveSettingsAction, {});
+  const [modelId, setModelId] = useState(settings.imageModel);
+  const [defaultResolution, setDefaultResolution] = useState<Resolution>(settings.defaultResolution);
+  const [designResolution, setDesignResolution] = useState<Resolution>(settings.designResolution);
+  const model = kieModel(modelId);
+  const resolutions = model?.sizes.map((s) => s.resolution) ?? RESOLUTIONS;
 
   useEffect(() => {
     if (state.ok) toast.success(state.ok);
   }, [state]);
+
+  function onModelChange(id: string) {
+    setModelId(id);
+    const sizes = kieModel(id)?.sizes.map((s) => s.resolution) ?? RESOLUTIONS;
+    setDefaultResolution((cur) => (sizes.includes(cur) ? cur : sizes[0]));
+    setDesignResolution((cur) => (sizes.includes(cur) ? cur : sizes[0]));
+  }
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
@@ -28,20 +42,55 @@ export function SettingsForm({ settings }: { settings: Settings }) {
         </Alert>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label htmlFor="imageModel">Model tạo ảnh</Label>
-          <Input id="imageModel" name="imageModel" defaultValue={settings.imageModel} required maxLength={100} className="h-10" />
-          <p className="text-xs text-muted-foreground">Tên model của kie.ai, gpt-image-2-5-sunburst-image-to-image hoặc gpt-image-2-5-flare-image-to-image (cùng giá).</p>
+          <NativeSelect id="imageModel" name="imageModel" value={modelId} onChange={(e) => onModelChange(e.target.value)} className="sm:max-w-md">
+            {SELECTABLE_KIE_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+                {!m.verified ? " (chưa xác minh)" : ""}
+              </option>
+            ))}
+          </NativeSelect>
+          <div className="flex flex-col gap-1 rounded-lg bg-muted/30 p-3 text-sm">
+            <p className="font-medium">Chi phí ước tính mỗi ảnh:</p>
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+              {model?.sizes.map((s) => (
+                <li key={s.resolution}>
+                  <span className="font-medium text-foreground">{s.resolution}</span>: {formatCostLabel({ credits: s.credits ?? 0, usd: (s.credits ?? 0) * 0.005, unknown: s.credits === null })}
+                </li>
+              ))}
+            </ul>
+            {model?.note && <p className="text-amber-700">{model.note}</p>}
+          </div>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="defaultResolution">Độ phân giải mặc định (khi tạo trang mẫu mới)</Label>
-          <NativeSelect id="defaultResolution" name="defaultResolution" defaultValue={settings.defaultResolution}>
-            {RESOLUTIONS.map((r) => (
+          <NativeSelect
+            id="defaultResolution"
+            name="defaultResolution"
+            value={defaultResolution}
+            onChange={(e) => setDefaultResolution(e.target.value as Resolution)}
+          >
+            {resolutions.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
             ))}
           </NativeSelect>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="autoMaterialCount">Số chất liệu AI chọn cho mỗi logo</Label>
+          <NativeSelect id="autoMaterialCount" name="autoMaterialCount" defaultValue={String(settings.autoMaterialCount)}>
+            {AUTO_MATERIAL_COUNTS.map((n) => (
+              <option key={n} value={n}>
+                {n} chất liệu ({Math.ceil(n / (AUTO_SHEET_LAYOUT.cols * AUTO_SHEET_LAYOUT.rows))} ảnh)
+              </option>
+            ))}
+          </NativeSelect>
+          <p className="text-xs text-muted-foreground">
+            Khi tải logo mới hoặc bấm &quot;AI chọn chất liệu&quot;, AI đọc logo rồi chọn ngần này chất liệu hợp nhất để tạo ảnh mẫu, mỗi ảnh 8 chất liệu.
+          </p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="dailyLimitPerSale">Giới hạn lượt tạo ảnh mỗi sale mỗi ngày</Label>
@@ -89,14 +138,19 @@ export function SettingsForm({ settings }: { settings: Settings }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="designResolution">Độ phân giải ảnh thiết kế</Label>
-          <NativeSelect id="designResolution" name="designResolution" defaultValue={settings.designResolution}>
-            {RESOLUTIONS.map((r) => (
+          <NativeSelect
+            id="designResolution"
+            name="designResolution"
+            value={designResolution}
+            onChange={(e) => setDesignResolution(e.target.value as Resolution)}
+          >
+            {resolutions.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
             ))}
           </NativeSelect>
-          <p className="text-xs text-muted-foreground">1K tiết kiệm token hơn (6 so với 10 token mỗi ảnh ở 2K).</p>
+          <p className="text-xs text-muted-foreground">Độ phân giải thấp hơn tốn ít token hơn — xem bảng chi phí ở trên.</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="workshopName">Tên xưởng (một dòng chữ nhỏ ở chân ảnh)</Label>

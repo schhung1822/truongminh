@@ -48,6 +48,31 @@ describe("KieProvider.createTask", () => {
     expect(body.input.image_urls).toBeUndefined();
   });
 
+  it("model dòng Nano Banana gửi image_input thay vì input_urls (tên trường riêng của model đó)", async () => {
+    const calls = mockFetch(() => ({ code: 200, data: { taskId: "t" } }));
+    await provider().createTask({ model: "nano-banana-2", prompt: "p", inputUrls: ["https://x/a.png"], aspectRatio: "1:1", resolution: "2K" });
+    const body = JSON.parse(calls[0].init!.body as string);
+    expect(body.input.image_input).toEqual(["https://x/a.png"]);
+    expect(body.input.input_urls).toBeUndefined();
+    expect(body.input.resolution).toBe("2K");
+  });
+
+  it("model Seedream 5 Pro gửi image_urls và quality (basic/high) thay vì resolution", async () => {
+    const calls = mockFetch(() => ({ code: 200, data: { taskId: "t" } }));
+    await provider().createTask({ model: "seedream/5-pro-image-to-image", prompt: "p", inputUrls: ["https://x/a.png"], aspectRatio: "1:1", resolution: "2K" });
+    const body = JSON.parse(calls[0].init!.body as string);
+    expect(body.input.image_urls).toEqual(["https://x/a.png"]);
+    expect(body.input.quality).toBe("high");
+    expect(body.input.resolution).toBeUndefined();
+  });
+
+  it("model có trong danh mục nhưng không hỗ trợ độ phân giải yêu cầu thì báo lỗi rõ ràng, không gửi bừa", async () => {
+    mockFetch(() => ({ code: 200, data: { taskId: "t" } }));
+    await expect(
+      provider().createTask({ model: "qwen2-1/image-to-image", prompt: "p", inputUrls: [], aspectRatio: "1:1", resolution: "4K" }),
+    ).rejects.toThrow(ProviderFatalError);
+  });
+
   it("không gửi callBackUrl khi không bật callback", async () => {
     const calls = mockFetch(() => ({ code: 200, data: { taskId: "t" } }));
     await provider().createTask({ model: "m", prompt: "p", inputUrls: [], aspectRatio: "1:1", resolution: "1K" });
@@ -79,6 +104,20 @@ describe("KieProvider.createTask", () => {
       provider().createTask({ model: "m", prompt: "x".repeat(20001), inputUrls: [], aspectRatio: "1:1", resolution: "1K" }),
     ).rejects.toBeInstanceOf(ProviderFatalError);
     expect(calls).toHaveLength(0);
+  });
+
+  it("giới hạn độ dài prompt theo từng model: Seedream/MiniMax/Qwen chỉ nhận 5.000 ký tự, báo lỗi rõ tên model", async () => {
+    const calls = mockFetch(() => ({ code: 200, data: { taskId: "t" } }));
+    const long = "x".repeat(5001);
+    for (const model of ["seedream/5-pro-image-to-image", "seedream/5-5-image-to-image", "minimax-h3/image-edit", "qwen2-1/image-to-image"]) {
+      const p = provider().createTask({ model, prompt: long, inputUrls: [], aspectRatio: "1:1", resolution: "1K" });
+      await expect(p).rejects.toBeInstanceOf(ProviderFatalError);
+      await expect(p).rejects.toThrow(/vượt giới hạn 5000/);
+    }
+    expect(calls).toHaveLength(0);
+    // cùng prompt đó GPT Image (20.000 ký tự) vẫn nhận
+    await provider().createTask({ model: "gpt-image-2-5-flare-image-to-image", prompt: long, inputUrls: [], aspectRatio: "1:1", resolution: "1K" });
+    expect(calls).toHaveLength(1);
   });
 });
 

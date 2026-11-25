@@ -1,5 +1,6 @@
 import "server-only";
 import { getEnv } from "@/lib/env";
+import { MATERIAL_PICK_MARKER } from "@/lib/materials/suggest";
 import { PLAN_MARKER } from "@/lib/zalo/care-plan";
 
 /**
@@ -149,6 +150,14 @@ export class MockChat implements ChatProvider {
         { date, time: "19:30", kind: code ? "IMAGE" : "TEXT", text: `(Mock) Mẫu mới tối nay (${i + 1}): logo trên mica trong suốt rất đẹp. Nhắn xưởng để được tư vấn.`, media: code, reason: "Giờ vàng buổi tối" },
       ]);
       return { text: JSON.stringify({ posts }), promptTokens: 20, completionTokens: 40 };
+    }
+    // AI chọn chất liệu theo logo: chọn giả các chất liệu đầu danh sách, đủ số lượng được yêu cầu
+    if (sys.includes(MATERIAL_PICK_MARKER)) {
+      const usr = input.messages.find((m) => m.role === "user")?.content.map((p) => (p.type === "text" ? p.text : "")).join(" ") ?? "";
+      const want = Number(/Chọn đúng (\d+) chất liệu/.exec(usr)?.[1] ?? 8);
+      const total = Number(/DANH SÁCH CHẤT LIỆU \((\d+) dòng\)/.exec(usr)?.[1] ?? 0);
+      const picks = Array.from({ length: Math.min(want, total) }, (_, i) => ({ id: i + 1, reason: "(Mock) hợp phong cách logo" }));
+      return { text: JSON.stringify({ summary: "(Mock) Logo đơn giản, nét đậm.", isBadge: false, picks }), promptTokens: 30, completionTokens: 60 };
     }
     const last = [...input.messages].reverse().find((m) => m.role === "user");
     const said = last?.content.map((p) => (p.type === "text" ? p.text : "[ảnh]")).join(" ") ?? "";

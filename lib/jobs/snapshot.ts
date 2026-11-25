@@ -27,10 +27,21 @@ export type LayoutSnapshot = {
     productType: string;
     styleName: string;
     note: string;
-    /** PinterestPin.id (CSDL của ta, không phải id của Pinterest) dùng làm ảnh phong cách tham khảo thêm cho AI; không chọn thì bỏ trống */
+    /** @deprecated giữ lại để đọc ảnh cũ tạo trước khi cho chọn nhiều ảnh (docs/DECISIONS.md D99); dùng getStyleRefPinIds() thay vì đọc trực tiếp */
     pinterestPinId?: string;
+    /** PinterestPin.id (CSDL của ta) dùng làm ảnh phong cách tham khảo thêm cho AI, tối đa MAX_STYLE_REF_PINS; không chọn thì bỏ trống */
+    pinterestPinIds?: string[];
   };
 };
+
+/**
+ * Danh sách PinterestPin.id dùng làm ảnh phong cách tham khảo của một ảnh thiết kế, đọc được cả ảnh cũ (field số ít
+ * `pinterestPinId` trước D99) lẫn ảnh mới (`pinterestPinIds`). Luôn dùng hàm này thay vì đọc trực tiếp field.
+ */
+export function getStyleRefPinIds(snap: Pick<LayoutSnapshot, "design">): string[] {
+  if (snap.design?.pinterestPinIds?.length) return snap.design.pinterestPinIds;
+  return snap.design?.pinterestPinId ? [snap.design.pinterestPinId] : [];
+}
 
 /** Số ảnh tối đa trong một phiên (một trang mẫu dài có thể ra nhiều ảnh). */
 export const MAX_IMAGES_PER_SESSION = 20;

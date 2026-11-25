@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { FolderTile, TileGrid } from "@/components/folder-ui";
 import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
+import type { SessionAiAnalysis } from "@/lib/jobs/auto";
 import { loadSessionViews } from "@/lib/jobs/views";
 import { canEditOwned } from "@/lib/permissions";
 import { listQuotes } from "@/lib/quoting/store";
@@ -45,6 +46,8 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   const fmt = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" });
   const isDesign = session.type === "DESIGN";
   const catalogId = isDesign ? session.parentId : session.id;
+  // phiên do AI chọn chất liệu (D115): nhận xét logo và lý do chọn từng chất liệu
+  const ai = session.aiAnalysis as unknown as SessionAiAnalysis | null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -97,6 +100,33 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         labelMode={settings.labelMode}
         defaultLabelPos={settings.labelPos}
       />
+
+      {ai && ai.picks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>AI chọn {ai.picks.length} chất liệu cho logo này</CardTitle>
+            <CardDescription>{ai.summary || "AI đã xem logo và chọn các chất liệu hợp nhất trong danh mục đang bật."}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <details>
+              <summary className="cursor-pointer text-sm font-medium">Xem lý do chọn từng chất liệu</summary>
+              <ol className="mt-3 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+                {ai.picks.map((p, i) => (
+                  <li key={p.materialId} className="flex gap-2">
+                    <span className="w-6 shrink-0 text-right text-muted-foreground tabular-nums">{i + 1}.</span>
+                    <span className="min-w-0">
+                      <span className="font-medium">
+                        {p.code} - {p.name}
+                      </span>
+                      {p.reason && <span className="text-muted-foreground">: {p.reason}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          </CardContent>
+        </Card>
+      )}
 
       {!isDesign && session.children.length > 0 && (
         <Card>

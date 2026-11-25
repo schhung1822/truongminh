@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth/dal";
+import { createAutoCatalogSession } from "@/lib/jobs/auto";
 import { createCatalogSession, retryImage } from "@/lib/jobs/create";
 import { createDesignSession } from "@/lib/jobs/design";
 import { kickSession } from "@/lib/jobs/process";
@@ -24,6 +25,20 @@ export async function createCatalogSessionAction(
   return r;
 }
 
+/**
+ * AI xem logo, chọn các chất liệu hợp nhất rồi tạo ảnh mẫu (D115). `fromUpload` = logo vừa được tải lên: khi đó AI quyết định
+ * luôn ô "logo dạng huy hiệu" nếu người dùng chưa tick. Mất khoảng nửa phút vì phải chờ AI phân tích.
+ */
+export async function autoCatalogSessionAction(logoId: string, fromUpload: boolean): Promise<{ error?: string; sessionId?: string }> {
+  const user = await requireUser();
+  const r = await createAutoCatalogSession(user, { logoId, decideBadge: fromUpload === true });
+  if (r.sessionId) {
+    const id = r.sessionId;
+    after(() => kickSession(id));
+  }
+  return r;
+}
+
 /** Bước 2: tạo các ảnh thiết kế cho những chất liệu khách đã chọn. */
 export async function createDesignSessionAction(input: {
   parentSessionId: string;
@@ -31,8 +46,8 @@ export async function createDesignSessionAction(input: {
   productType: string;
   variants: number;
   note: string;
-  /** PinterestPin.id dùng làm ảnh phong cách tham khảo thêm cho AI; không bắt buộc */
-  styleRefPinId?: string;
+  /** PinterestPin.id dùng làm ảnh phong cách tham khảo thêm cho AI, tối đa MAX_STYLE_REF_PINS; không bắt buộc */
+  styleRefPinIds?: string[];
 }): Promise<{ error?: string; sessionId?: string }> {
   const user = await requireUser();
   const r = await createDesignSession(user, input);

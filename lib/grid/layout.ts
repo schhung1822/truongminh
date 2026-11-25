@@ -56,8 +56,10 @@ export type LegendLayout = {
 };
 
 /**
- * Bảng chú giải đặt dưới ảnh (chế độ legend): `count` dòng xếp thành `columns` cột, đọc từ trên xuống dưới
- * rồi sang cột kế tiếp. Chiều cao gồm cả đệm trên và dưới.
+ * Bảng chú giải đặt dưới ảnh (chế độ legend): `count` dòng xếp thành `columns` cột, đọc theo ĐÚNG thứ tự ô trên
+ * ảnh (trái sang phải, trên xuống dưới, giống `computeCells`) chứ không lấp đầy cả cột trái rồi mới sang cột phải —
+ * để số thứ tự trong chú giải nằm đúng vị trí tương ứng với số thứ tự trên ảnh khi `columns` khớp số cột của lưới
+ * ảnh (xem D107). Chiều cao gồm cả đệm trên và dưới.
  */
 export function computeLegend(input: {
   width: number;
@@ -69,12 +71,12 @@ export function computeLegend(input: {
   const { width, count, columns, rowHeight, padding } = input;
   if (count === 0) return { height: 0, columns, rowHeight, entries: [] };
 
-  const perColumn = Math.ceil(count / columns);
+  const rows = Math.ceil(count / columns);
   const colW = Math.floor((width - padding * 2) / columns);
   const entries = Array.from({ length: count }, (_, index) => {
-    const col = Math.floor(index / perColumn);
-    const row = index % perColumn;
+    const col = index % columns;
+    const row = Math.floor(index / columns);
     return { index, x: padding + col * colW, y: padding + row * rowHeight, w: colW, h: rowHeight };
   });
-  return { height: padding * 2 + perColumn * rowHeight, columns, rowHeight, entries };
+  return { height: padding * 2 + rows * rowHeight, columns, rowHeight, entries };
 }

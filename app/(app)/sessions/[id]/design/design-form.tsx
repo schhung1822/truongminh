@@ -14,7 +14,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { DEFAULT_VARIANTS, MAX_VARIANTS, MIN_VARIANTS, validateDesignRequest } from "@/lib/design/assign";
 import { PRODUCT_TYPE_SUGGESTIONS } from "@/lib/design/product-types";
-import { estimateCost } from "@/lib/pricing";
+import { estimateCost, formatCostLabel } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import type { QuotaInfo } from "../../new/sheets-steps";
 import { createDesignSessionAction } from "../../actions";
@@ -24,16 +24,20 @@ import type { PickerPin } from "./pinterest-actions";
 
 export function DesignForm({
   parentSessionId,
+  logoId,
   images,
   initialSelected = [],
   styleNames,
   resolution,
   aspectRatio,
+  imageModel,
   quota,
   showCost,
   isAdmin,
 }: {
   parentSessionId: string;
+  /** logo của phiên catalog gốc: dùng để gợi ý pin khách đã thích và lưu thêm pin thích mới */
+  logoId: string;
   /** các ảnh catalog đã xong của phiên, chọn chất liệu ngay trên ảnh */
   images: CatalogImage[];
   /** chất liệu đã chọn sẵn từ trang kết quả */
@@ -41,6 +45,8 @@ export function DesignForm({
   styleNames: string[];
   resolution: string;
   aspectRatio: string;
+  /** model tạo ảnh đang cấu hình, dùng để tra đúng bảng giá (lib/providers/kie-models.ts) */
+  imageModel: string;
   quota: QuotaInfo;
   showCost: boolean;
   isAdmin: boolean;
@@ -50,16 +56,25 @@ export function DesignForm({
   const [productType, setProductType] = useState("");
   const [variants, setVariants] = useState(DEFAULT_VARIANTS);
   const [note, setNote] = useState("");
-  const [styleRefPin, setStyleRefPin] = useState<PickerPin | null>(null);
+  const [styleRefPins, setStyleRefPins] = useState<PickerPin[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const total = selected.length * variants;
+  const preferredTechniques = useMemo(() => {
+    const set = new Set<string>();
+    for (const img of images) {
+      for (const c of img.cells) {
+        if (selected.includes(c.materialId) && c.technique) set.add(c.technique);
+      }
+    }
+    return [...set];
+  }, [images, selected]);
   const problem = useMemo(
     () => (selected.length === 0 ? null : validateDesignRequest({ materialCount: selected.length, variants, productType: "x" })),
     [selected.length, variants],
   );
-  const cost = estimateCost(Array(total).fill(resolution));
+  const cost = estimateCost(imageModel, Array(total).fill(resolution));
   const overQuota = quota !== null && total > quota.left;
   const noStyles = styleNames.length === 0;
   const canStart =
@@ -69,7 +84,14 @@ export function DesignForm({
     setError(null);
     startTransition(async () => {
       try {
-        const r = await createDesignSessionAction({ parentSessionId, materialIds: selected, productType, variants, note, styleRefPinId: styleRefPin?.id });
+        const r = await createDesignSessionAction({
+          parentSessionId,
+          materialIds: selected,
+          productType,
+          variants,
+          note,
+          styleRefPinIds: styleRefPins.map((p) => p.id),
+        });
         if (r.error || !r.sessionId) return setError(r.error ?? "Không tạo được lượt thiết kế.");
         toast.success("Đã bắt đầu thiết kế. Đang chuyển sang màn hình theo dõi tiến độ...");
         router.push(`/sessions/${r.sessionId}`);
@@ -167,9 +189,9 @@ export function DesignForm({
           <div className="flex flex-col gap-1.5">
             <Label>Ảnh phong cách tham khảo (không bắt buộc)</Label>
             <p className="text-xs text-muted-foreground">
-              Chọn một ảnh đã lưu trên Pinterest để AI tham khảo màu sắc, không khí, bối cảnh — logo và chất liệu vẫn vẽ đúng như đã chọn ở trên.
+              Chọn một hoặc vài ảnh đã lưu trên Pinterest để AI tham khảo màu sắc, không khí, bối cảnh — logo và chất liệu vẫn vẽ đúng như đã chọn ở trên.
             </p>
-            <PinterestStylePicker selected={styleRefPin} onSelect={setStyleRefPin} />
+            <PinterestStylePicker selected={styleRefPins} onSelect={setStyleRefPins} logoId={logoId} preferredTechniques={preferredTechniques} />
           </div>
         </CardContent>
       </Card>
@@ -204,11 +226,11 @@ export function DesignForm({
             {showCost && total > 0 && (
               <span className="text-amber-700">
                 {" "}
-                · khoảng {cost.credits} token (${cost.usd.toFixed(2)})
+                · {formatCostLabel(cost)}
               </span>
             )}
             {quota && <span className="text-muted-foreground"> · còn {quota.left} lượt hôm nay</span>}
-            {styleRefPin && <span className="text-muted-foreground"> · có ảnh phong cách tham khảo</span>}
+            {styleRefPins.length > 0 && <span className="text-muted-foreground"> · {styleRefPins.length} ảnh phong cách tham khảo</span>}
           </p>
 
           {problem && (

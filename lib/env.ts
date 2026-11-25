@@ -45,6 +45,8 @@ const schema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+  // Khóa để máy chủ (cron) gọi /api/jobs/pinterest-sync tự động đồng bộ board/pin định kỳ. Bỏ trống = tắt đường gọi này.
+  PINTEREST_SYNC_CRON_SECRET: z.string().min(16).max(256).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

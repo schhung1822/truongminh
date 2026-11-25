@@ -1,12 +1,16 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { ASPECT_RATIOS, RESOLUTIONS } from "@/lib/image-options";
+import { ASPECT_RATIOS, AUTO_MATERIAL_COUNTS, RESOLUTIONS } from "@/lib/image-options";
 import { LABEL_POSITIONS, LABEL_STYLES } from "@/lib/imaging/label-pos";
+import { SELECTABLE_KIE_MODELS } from "@/lib/providers/kie-models";
 
 export const settingsSchema = z.object({
-  imageModel: z.string().trim().min(1, "Vui lòng nhập tên model.").max(100),
+  // chỉ nhận model đang cho chọn; cấu hình cũ trỏ tới model đã ẩn thì getSettings tự quay về mặc định (Sunburst)
+  imageModel: z.string().refine((v) => SELECTABLE_KIE_MODELS.some((m) => m.id === v), "Model không hợp lệ."),
   defaultResolution: z.enum(RESOLUTIONS),
+  /** số chất liệu AI chọn cho mỗi logo khi tự tạo ảnh mẫu (D115) */
+  autoMaterialCount: z.coerce.number().refine((v) => (AUTO_MATERIAL_COUNTS as readonly number[]).includes(v), "Số chất liệu AI chọn không hợp lệ."),
   dailyLimitPerSale: z.coerce.number().int("Phải là số nguyên.").min(0).max(100000),
   workshopName: z.string().trim().max(100),
   footerNote: z.string().trim().max(200),
@@ -25,6 +29,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export const SETTING_DEFAULTS: Settings = {
   imageModel: "gpt-image-2-5-sunburst-image-to-image",
   defaultResolution: "2K",
+  autoMaterialCount: 24,
   dailyLimitPerSale: 60,
   workshopName: "Xưởng in Trường Minh",
   footerNote: "",

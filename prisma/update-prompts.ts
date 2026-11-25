@@ -29,7 +29,7 @@ async function main() {
           version,
           body,
           isActive: true,
-          note: "Tấm mỏng phẳng; phân biệt hàng khắc / cắt (một lớp, không viền) / in UV theo công nghệ của chất liệu",
+          note: "Kiểu hàng khắc/cắt định nghĩa một lần, mỗi ô ghi kiểu theo công nghệ chất liệu; hình tấm khắc theo ô logo dạng huy hiệu (D113); giữ cách tả vẻ khắc của phiên 13:27 25/11 (D114)",
         },
       }),
     ]);
