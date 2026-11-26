@@ -38,6 +38,8 @@ export type ImageView = {
   labelStyle: LabelStyle | null;
   /** ảnh catalog: các ô để chọn chất liệu (ảnh thiết kế không có) */
   pick: PickInfo | null;
+  /** ảnh tạo ở chế độ chất lượng cao (D120): AI vẽ từng mảnh 4 chất liệu rồi ghép */
+  quality: boolean;
 };
 
 export const FINAL_STATUSES: ImageStatusValue[] = ["SUCCESS", "FAILED"];

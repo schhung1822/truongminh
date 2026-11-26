@@ -194,7 +194,7 @@ export function SheetEditor({
             onChange={(e) => setIsDefault(e.target.checked)}
             className="size-4"
           />
-          Trang mẫu mặc định (dùng cho nút Tạo nhanh)
+          Trang mẫu mặc định (được tick sẵn khi sale bấm &quot;Chọn bộ chất liệu&quot;)
         </label>
       </div>
 

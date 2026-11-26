@@ -29,6 +29,7 @@ export async function toggleZaloFeatureAction(name: keyof ZaloSettings, value: b
   const r = await updateZaloSettings({ [name]: value });
   if (!r.ok) return { error: r.error };
   refresh();
+  if (name === "inbox") revalidatePath("/", "layout"); // mục Hộp thư Zalo hiện/ẩn trên menu của mọi trang
   return { ok: value ? "Đã bật." : "Đã tắt." };
 }
 

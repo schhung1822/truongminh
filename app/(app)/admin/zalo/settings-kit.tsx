@@ -96,7 +96,7 @@ export function MasterOffNotice({ enabled, tokenSet }: { enabled: boolean; token
     <p className="rounded-lg border border-dashed border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
       {tokenSet
         ? "Zalo đang tắt (công tắc tổng ở mục Tổng quan). Các chức năng bên dưới sẽ chưa chạy cho tới khi bật."
-        : "Chưa có ZALO_BOT_TOKEN trong .env nên Zalo chưa chạy. Xem mục Tổng quan và Hướng dẫn để kết nối bot."}
+        : "Chưa kết nối bot Zalo nào nên Zalo chưa chạy. Thêm bot ở Hệ thống > Kết nối > Zalo."}
     </p>
   );
 }

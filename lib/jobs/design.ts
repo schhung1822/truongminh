@@ -3,7 +3,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { SessionUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { assignStyles, validateDesignRequest } from "@/lib/design/assign";
-import { finishRuleOf } from "@/lib/prompts/finish";
+import { faceClause } from "@/lib/prompts/face-words";
+import { finishKindOf, finishRuleOf } from "@/lib/prompts/finish";
 import { renderDesignPrompt, styleReferenceNote } from "@/lib/prompts/render";
 import { getSettings, type Settings } from "@/lib/settings";
 import { MAX_STYLE_REF_PINS } from "@/lib/image-options";
@@ -27,6 +28,15 @@ type StyleRow = { id: string; name: string; description: string };
 /** Dựng dữ liệu MỘT ảnh thiết kế: một chất liệu + một kiểu thiết kế + loại sản phẩm + ghi chú. Dùng cho tạo mới và tạo lại. */
 /** Ảnh thiết kế luôn có ảnh tham chiếu 1 = logo, 2 = chất liệu; ảnh phong cách tham khảo (nếu có) luôn là ảnh thứ 3. */
 const STYLE_REF_INDEX = 3;
+
+/**
+ * Câu dặn kiểu hàng cho ảnh thiết kế, kèm màu hai mặt của chất liệu bằng chữ (D123) để AI không lấy nhầm mặt sau làm mặt
+ * chính: ảnh tham chiếu chỉ là hai ô trái/phải, thêm chữ là thêm một điểm đối chiếu.
+ */
+function designFinish(material: Parameters<typeof finishRuleOf>[0] & Parameters<typeof faceClause>[1], badge: boolean): string {
+  const faces = faceClause(finishKindOf(material), material);
+  return faces ? `${finishRuleOf(material, badge)} Colours of this material, as a cross-check (quoted Vietnamese names are our workshop's labels): ${faces}. Never swap the two faces.` : finishRuleOf(material, badge);
+}
 
 export function buildDesignImage(input: {
   material: MaterialRow;
@@ -55,7 +65,7 @@ export function buildDesignImage(input: {
         design_style: `${style.name}: ${style.description}`,
         note: input.note.trim() || "none",
       },
-      finishRuleOf(material, input.logoIsBadge),
+      designFinish(material, input.logoIsBadge),
     );
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Không sinh được prompt." };

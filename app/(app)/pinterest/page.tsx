@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ExternalLinkIcon, ImageOffIcon, PinIcon, SearchIcon } from "lucide-react";
+import { ExternalLinkIcon, ImageOffIcon, PinIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import { CopyImageIconButton, CopyImagesButton } from "@/components/copy-images";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { PinStyleTagEditor } from "./pin-style-tags";
 export const metadata: Metadata = { title: "Mẫu Pinterest" };
 
 const PAGE_SIZE = 48;
-/** Pin đồng bộ trong N ngày gần nhất được coi là "mới" (hiện badge), không cần cấu hình gì thêm. */
+/** Pin đồng bộ trong N ngày gần nhất được coi là "mới" (đánh dấu trên từng ảnh), không cần cấu hình gì thêm. */
 const NEW_PIN_WINDOW_DAYS = 3;
 type Params = { board?: string; q?: string; tag?: string; page?: string; logoId?: string };
 
@@ -27,6 +27,17 @@ function linkHref(opts: { boardId: string; q: string; tag: string; logoId?: stri
   if (opts.logoId) sp.set("logoId", opts.logoId);
   if (opts.page && opts.page > 1) sp.set("page", String(opts.page));
   return `/pinterest?${sp.toString()}`;
+}
+
+/**
+ * Nút "Thiết kế theo mẫu" (D125): sang mục Khách hàng cầm theo pin này. Đang xem kho mẫu cho một logo (?logoId=) thì mở
+ * thẳng logo đó và hộp thiết kế theo mẫu tự hiện; chưa có logo thì người dùng chọn logo trước.
+ */
+function designHref(pinId: string, logoId: string): string {
+  const sp = new URLSearchParams();
+  if (logoId) sp.set("logoId", logoId);
+  sp.set("pin", pinId);
+  return `/customers?${sp.toString()}`;
 }
 
 function daysAgo(days: number): Date {
@@ -42,17 +53,15 @@ export default async function PinterestLibraryPage({ searchParams }: { searchPar
   const newSince = daysAgo(NEW_PIN_WINDOW_DAYS);
   const logoIdParam = (params.logoId ?? "").trim().slice(0, 191);
 
-  const [boards, styleTagOptions, newCountsByBoard, logoContext] = await Promise.all([
+  const [boards, styleTagOptions, logoContext] = await Promise.all([
     db.pinterestBoard.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { pins: true } } } }),
     db.materialOption.findMany({ where: { type: "STYLE_TAG", isActive: true }, orderBy: { sortOrder: "asc" }, select: { value: true, label: true } }),
-    db.pinterestPin.groupBy({ by: ["boardId"], where: { createdAt: { gte: newSince } }, _count: { _all: true } }),
     logoIdParam
       ? db.logo.findUnique({ where: { id: logoIdParam }, select: { id: true, brand: { select: { name: true, customer: { select: { name: true } } } } } })
       : null,
   ]);
   // logoId không hợp lệ/đã xóa: coi như không có ngữ cảnh khách, không chặn xem trang
   const logoId = logoContext?.id ?? "";
-  const newCountByBoardId = new Map(newCountsByBoard.map((r) => [r.boardId, r._count._all]));
   const selected = boards.find((board) => board.id === params.board) ?? boards[0] ?? null;
 
   const where = selected
@@ -100,10 +109,10 @@ export default async function PinterestLibraryPage({ searchParams }: { searchPar
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold"><PinIcon /> Mẫu Pinterest</h1>
-          <p className="text-muted-foreground">Xem ảnh đã đồng bộ, copy để gửi khách hoặc chọn làm phong cách tham khảo ở bước thiết kế.</p>
+          <p className="text-muted-foreground">Xem ảnh đã đồng bộ, copy để gửi khách, hoặc bấm &quot;Thiết kế theo mẫu&quot; dưới một ảnh để AI làm logo của khách theo mẫu đó.</p>
         </div>
         {user.role === "ADMIN" && (
-          <Link href="/admin/pinterest" className={buttonVariants({ variant: "outline" })}>
+          <Link href="/admin/connections/pinterest" className={buttonVariants({ variant: "outline" })}>
             Kết nối và đồng bộ
           </Link>
         )}
@@ -112,10 +121,10 @@ export default async function PinterestLibraryPage({ searchParams }: { searchPar
       {logoContext && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-primary/5 px-3 py-2 text-sm">
           <span>
-            Đang chọn ảnh cho <b>{logoContext.brand.customer.name}</b> · {logoContext.brand.name} — bấm tim trên ảnh để lưu pin khách thích.
+            Đang chọn mẫu cho <b>{logoContext.brand.customer.name}</b> · {logoContext.brand.name}: bấm &quot;Thiết kế theo mẫu&quot; dưới ảnh để tạo ảnh ngay, hoặc bấm tim để lưu pin khách thích.
           </span>
-          <Link href="/customers" className="ml-auto underline underline-offset-4">
-            Xong, về Khách hàng
+          <Link href={`/customers?logoId=${encodeURIComponent(logoId)}`} className="ml-auto underline underline-offset-4">
+            Xong, về logo này
           </Link>
         </div>
       )}
@@ -124,30 +133,28 @@ export default async function PinterestLibraryPage({ searchParams }: { searchPar
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center text-muted-foreground">
           <ImageOffIcon className="size-10" />
           <p>Chưa có board hoặc pin nào được đồng bộ.</p>
-          {user.role === "ADMIN" && <Link href="/admin/pinterest" className={buttonVariants()}>Thiết lập Pinterest</Link>}
+          {user.role === "ADMIN" && <Link href="/admin/connections/pinterest" className={buttonVariants()}>Thiết lập Pinterest</Link>}
         </div>
       ) : (
         <>
           <nav className="flex gap-4 overflow-x-auto border-b" aria-label="Chọn board Pinterest">
             {boards.map((board) => {
               const active = board.id === selected?.id;
-              const newCount = newCountByBoardId.get(board.id) ?? 0;
               return (
                 <Link
                   key={board.id}
                   href={linkHref({ boardId: board.id, q, tag, logoId })}
                   className={cn(
-                    "shrink-0 border-b-2 px-0.5 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors",
+                    "flex shrink-0 items-center gap-1.5 border-b-2 px-0.5 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors",
                     active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                   aria-current={active ? "page" : undefined}
                 >
-                  {board.name} <span className="text-xs text-muted-foreground">({board._count.pins})</span>
-                  {newCount > 0 && (
-                    <Badge className="ml-1 align-middle" variant="secondary">
-                      +{newCount} mới
-                    </Badge>
-                  )}
+                  {board.name}
+                  {/* số ảnh của board, trong chấm tròn màu đỏ Pinterest */}
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#E60023] px-1.5 text-[11px] leading-none font-semibold text-white tabular-nums" aria-label={`${board._count.pins} ảnh`}>
+                    {board._count.pins}
+                  </span>
                 </Link>
               );
             })}
@@ -226,6 +233,15 @@ export default async function PinterestLibraryPage({ searchParams }: { searchPar
                         >
                           <ExternalLinkIcon />
                         </a>
+                      </div>
+                      <div className="px-2 pb-2">
+                        <Link
+                          href={designHref(pin.id, logoId)}
+                          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full")}
+                          title={logoContext ? "Thiết kế logo đang chọn theo mẫu này" : "Chọn mẫu này, rồi chọn logo của khách để thiết kế theo mẫu"}
+                        >
+                          <SparklesIcon /> Thiết kế theo mẫu
+                        </Link>
                       </div>
                     </div>
                   </li>

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/activity";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { syncPinterestAccount } from "@/lib/pinterest/sync";
@@ -13,7 +14,7 @@ export async function syncPinterestAction(): Promise<PinterestActionResult> {
   if (!account) return { error: "Chưa kết nối tài khoản Pinterest nào." };
   try {
     const r = await syncPinterestAccount(account.id);
-    revalidatePath("/admin/pinterest");
+    revalidatePath("/admin/connections", "layout");
     return { ok: `Đã đồng bộ ${r.boards} board, ${r.pins} pin.` };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Đồng bộ thất bại." };
@@ -25,11 +26,12 @@ export async function syncPinterestAction(): Promise<PinterestActionResult> {
  * (ảnh đã lưu rồi); phiên đang chờ tạo mà có chọn ảnh phong cách sẽ tự bỏ qua ảnh đó, vẫn ra ảnh bình thường.
  */
 export async function disconnectPinterestAction(): Promise<PinterestActionResult> {
-  await requireAdmin();
-  const account = await db.pinterestAccount.findFirst({ select: { id: true } });
+  const admin = await requireAdmin();
+  const account = await db.pinterestAccount.findFirst({ select: { id: true, username: true } });
   if (!account) return { error: "Chưa kết nối tài khoản Pinterest nào." };
   await db.pinterestAccount.delete({ where: { id: account.id } });
-  revalidatePath("/admin/pinterest");
+  await logActivity({ actor: admin, action: "PINTEREST_DISCONNECT", target: `@${account.username}` });
+  revalidatePath("/admin/connections", "layout");
   return { ok: "Đã ngắt kết nối Pinterest." };
 }
 
@@ -47,6 +49,6 @@ export async function setBoardTechniqueHintAction(boardId: string, value: string
     if (!option) return { error: "Không tìm thấy công nghệ này." };
   }
   await db.pinterestBoard.update({ where: { id: boardId }, data: { techniqueHint: clean || null } });
-  revalidatePath("/admin/pinterest");
+  revalidatePath("/admin/connections", "layout");
   return { ok: "Đã cập nhật gợi ý board." };
 }

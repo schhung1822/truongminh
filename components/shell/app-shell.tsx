@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { CircleUserIcon, LogOutIcon, MenuIcon } from "lucide-react";
+import { CircleUserIcon, KeyRoundIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/generated/prisma/enums";
 import { roleLabel } from "@/lib/roles";
@@ -145,9 +145,9 @@ function NavGroupBlock({
   );
 }
 
-function NavList({ role, onNavigate }: { role: ShellUser["role"]; onNavigate?: () => void }) {
+function NavList({ role, hidden, onNavigate }: { role: ShellUser["role"]; hidden: readonly string[]; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const groups = visibleNav(role);
+  const groups = visibleNav(role, hidden);
   const activePath = activeHref(pathname, groups);
   const badges = useNavBadges();
   return (
@@ -161,6 +161,7 @@ function NavList({ role, onNavigate }: { role: ShellUser["role"]; onNavigate?: (
 
 /** Ô tài khoản ở góc phải thanh đầu trang: bấm mở menu có email và nút đăng xuất. */
 function UserMenu({ user }: { user: ShellUser }) {
+  const router = useRouter();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -183,6 +184,10 @@ function UserMenu({ user }: { user: ShellUser }) {
           <AccountMenuStats />
         </div>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push("/account")}>
+          <KeyRoundIcon />
+          Tài khoản và mật khẩu
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => void logoutAction()}>
           <LogOutIcon />
           Đăng xuất
@@ -201,7 +206,8 @@ function Logo() {
   );
 }
 
-export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
+/** `hiddenNav`: đường dẫn các mục menu đang bị tắt trong cấu hình (ví dụ Hộp thư Zalo), ẩn khỏi menu của mọi người. */
+export function AppShell({ user, hiddenNav = [], children }: { user: ShellUser; hiddenNav?: readonly string[]; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const desktopNavRef = useRevealScrollbarOnScroll<HTMLElement>();
   const mobileNavRef = useRevealScrollbarOnScroll<HTMLDivElement>();
@@ -228,7 +234,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
             <div ref={mobileNavRef} className="sidebar-scroll flex-1 overflow-y-auto">
-              <NavList role={user.role} onNavigate={() => setOpen(false)} />
+              <NavList role={user.role} hidden={hiddenNav} onNavigate={() => setOpen(false)} />
             </div>
           </SheetContent>
         </Sheet>
@@ -247,7 +253,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
           ref={desktopNavRef}
           className="sidebar-scroll sticky top-14 hidden h-[calc(100svh-3.5rem)] w-60 shrink-0 overflow-y-auto border-r border-sidebar-border bg-sidebar px-3 py-4 md:block"
         >
-          <NavList role={user.role} />
+          <NavList role={user.role} hidden={hiddenNav} />
         </aside>
 
         <main className="mx-auto w-full min-w-0 max-w-[1440px] flex-1 p-4 md:p-8">{children}</main>

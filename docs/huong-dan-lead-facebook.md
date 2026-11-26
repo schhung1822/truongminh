@@ -204,8 +204,9 @@ Danh sách bài đang theo dõi: bài, nhóm, nick dùng để quét, số comme
 Danh sách nhóm Facebook, tự tạo khi thêm bài thuộc nhóm đó (tên tạm lấy từ link, anh sửa lại cho dễ nhớ). Mỗi nhóm có: chủ đề, mục đích, **ghi chú quy định của nhóm**, trạng thái (Đang hoạt động / Tạm dừng / Bị chặn), và số liệu: **số bài đã đăng, số lead, lead trên mỗi bài**. Dùng cột cuối để biết nhóm nào hiệu quả.
 
 ### 4.4. Kết nối extension
+Nằm ở **Hệ thống > Kết nối > Extension Facebook** (link cũ `/fb/connect` tự chuyển về đây). Mỗi nick là một thẻ, bên trong là các máy đang chạy extension bằng nick đó.
 - **Nick Facebook:** thêm nick (tên hiển thị + link trang cá nhân), tạm dừng/bật lại. Nick *Bị hạn chế* chỉ quản trị bật lại được.
-- **Mã kết nối:** tạo mã (hiện **một lần duy nhất**), xem danh sách máy, "hoạt động cuối", thu hồi.
+- **Mã kết nối:** trong thẻ của từng nick, đặt tên máy rồi tạo mã (hiện **một lần duy nhất**); xem danh sách máy, máy nào "Đang chạy", "hoạt động cuối", thu hồi.
 - **Cảnh báo từ extension (14 ngày gần đây):** các lần Facebook đòi xác minh, extension không đọc được trang, quét chưa trọn vẹn, và **báo cáo chẩn đoán** do nhân sự bấm gửi (cột Chi tiết là dữ liệu để người phát triển chỉnh bộ đọc, không chứa tên hay nội dung comment).
 - **Cấu hình** (chỉ quản trị): các số ở mục 10.
 
@@ -338,7 +339,7 @@ Khách comment kèm số ──► Extension đọc ──► Webapp tạo LEAD 
 
 ## 10. Các thiết lập và ý nghĩa của từng số
 
-Ở **Kết nối extension > Cấu hình** (chỉ quản trị). Áp dụng cho mọi extension ở lần hỏi việc kế tiếp.
+Ở **Hệ thống > Kết nối > Extension Facebook > Cấu hình quét** (chỉ quản trị). Áp dụng cho mọi extension ở lần hỏi việc kế tiếp.
 
 | Thiết lập | Mặc định | Ý nghĩa |
 |---|---|---|
@@ -395,7 +396,7 @@ Lần thử đầu tiên (21/11/2026) cho thấy extension nói chuyện đượ
 
 Làm theo thứ tự. Mỗi bài tập nhỏ, an toàn.
 
-1. **Xem hai phía của cùng một việc.** Mở trang **Kết nối extension**, tạo mã, dán vào extension. Mở popup rồi tải lại trang web: thấy "Hoạt động cuối" của máy đổi thành "vừa xong". Đó là extension đã gọi webapp.
+1. **Xem hai phía của cùng một việc.** Mở **Hệ thống > Kết nối > Extension Facebook**, tạo mã, dán vào extension. Mở popup rồi tải lại trang web: thấy "Hoạt động cuối" của máy đổi thành "vừa xong". Đó là extension đã gọi webapp.
 2. **Thử thu hồi.** Bấm **Thu hồi** mã vừa tạo trên web, rồi mở lại popup của extension. Popup đổi sang "Chưa kết nối" kèm lý do "Mã kết nối đã bị thu hồi" và nút Quét ngay bị mờ: thấy rõ mã mất hiệu lực *ngay lập tức*. Tạo mã mới và dán lại ở Cài đặt.
 3. **Xem lịch quét.** Thêm 2 bài rồi bấm **Quét ngay** một lần. Ở **Bài đăng**, nhìn cột "Quét cuối" đổi thành "vừa xong". Vòng tự động (mỗi 10 phút) sẽ *không quét lại* bài vừa quét trong 10 phút đầu, vì chưa đến lượt. Còn bấm **Quét ngay** thì quét lại ngay, vì nút này bỏ qua lịch (nhưng vẫn giữ giới hạn số bài).
 4. **Hiểu chống trùng.** Quét một bài hai lần liên tiếp. Số comment và số lead **không đổi**. Rồi nhờ người comment thêm một comment mới: chỉ comment mới được thêm.

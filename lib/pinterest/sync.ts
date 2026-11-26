@@ -34,7 +34,7 @@ export type SyncResult = { boards: number; pins: number };
 
 /**
  * Đồng bộ lại toàn bộ board + pin của tài khoản Pinterest đã kết nối vào CSDL (bộ nhớ đệm để màn chọn ảnh phong cách
- * đọc nhanh, không gọi Pinterest mỗi lần sale mở màn chọn). Chạy khi admin bấm "Đồng bộ ngay" ở /admin/pinterest.
+ * đọc nhanh, không gọi Pinterest mỗi lần sale mở màn chọn). Chạy khi admin bấm "Đồng bộ ngay" ở /admin/connections/pinterest.
  */
 export async function syncPinterestAccount(accountId: string): Promise<SyncResult> {
   const config = getPinterestConfig();

@@ -63,7 +63,7 @@ export async function saveSheetAction(id: string | null, input: SheetInput): Pro
   return { id: sheetId };
 }
 
-/** Đặt/bỏ "trang mẫu mặc định" (dùng cho nút Tạo nhanh). Có thể có nhiều trang mặc định, nút Tạo nhanh sẽ tạo cho tất cả. */
+/** Đặt/bỏ "trang mẫu mặc định": các trang được tick sẵn khi sale bấm "Chọn bộ chất liệu" (D126). Có thể có nhiều trang mặc định. */
 export async function setSheetDefaultAction(id: string, isDefault: boolean): Promise<{ error?: string; ok?: string }> {
   await requireAdmin();
   const sheet = await db.sheet.findUnique({ where: { id }, select: { id: true, isActive: true } });

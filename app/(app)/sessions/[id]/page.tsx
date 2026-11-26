@@ -5,10 +5,11 @@ import { ArrowLeftIcon, CalculatorIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BackButton } from "@/components/back-button";
 import { FolderTile, TileGrid } from "@/components/folder-ui";
 import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import type { SessionAiAnalysis } from "@/lib/jobs/auto";
+import { readAiState, readPinIds } from "@/lib/jobs/ai-state";
 import { loadSessionViews } from "@/lib/jobs/views";
 import { canEditOwned } from "@/lib/permissions";
 import { listQuotes } from "@/lib/quoting/store";
@@ -16,6 +17,7 @@ import { getSettings } from "@/lib/settings";
 import { fileUrl } from "@/lib/storage";
 import { fmtCm, fmtVnd } from "@/app/(app)/quote/format";
 import { QuoteStatusBadge } from "@/app/(app)/quote/status-badge";
+import { AiAnalysisStatus } from "./ai-analysis-status";
 import { SessionResults } from "./session-results";
 
 export const metadata: Metadata = { title: "Kết quả phiên tư vấn" };
@@ -41,21 +43,38 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   });
   if (!session) notFound();
 
-  const [images, settings, quotes] = await Promise.all([loadSessionViews(session.id, user), getSettings(), listQuotes({ sessionId: session.id, limit: 5 })]);
-    const { brand } = session.logo;
+  // phiên thiết kế theo mẫu Pinterest (D125): các mẫu sale đã chọn, hiện lại ở đầu trang
+  const samplePinIds = readPinIds(session.aiAnalysis);
+  const [images, settings, quotes, samplePinRows] = await Promise.all([
+    loadSessionViews(session.id, user),
+    getSettings(),
+    listQuotes({ sessionId: session.id, limit: 5 }),
+    samplePinIds.length > 0 ? db.pinterestPin.findMany({ where: { id: { in: samplePinIds } }, select: { id: true, title: true, sourceImageUrl: true } }) : [],
+  ]);
+  const samplePins = samplePinIds.map((pinId) => samplePinRows.find((p) => p.id === pinId)).filter((p): p is NonNullable<typeof p> => !!p);
+  const { brand } = session.logo;
   const fmt = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" });
   const isDesign = session.type === "DESIGN";
   const catalogId = isDesign ? session.parentId : session.id;
-  // phiên do AI chọn chất liệu (D115): nhận xét logo và lý do chọn từng chất liệu
-  const ai = session.aiAnalysis as unknown as SessionAiAnalysis | null;
+  /** thiết kế theo mẫu Pinterest: phiên thiết kế đi thẳng từ logo, không qua phiên ảnh chất liệu */
+  const pinDesign = isDesign && !session.parentId;
+  // phiên do AI chọn chất liệu (D115): đang phân tích, phân tích hỏng, hoặc đã có nhận xét logo và lý do chọn từng chất liệu
+  const aiState = readAiState(session.aiAnalysis);
+  const ai = aiState.kind === "done" ? aiState.analysis : null;
+  // AI chưa chọn xong (hoặc hỏng) và chưa có ảnh nào: hiện trạng thái đó thay cho bảng kết quả trống
+  const aiWaiting = images.length === 0 && (aiState.kind === "analyzing" || aiState.kind === "failed") ? aiState : null;
 
   return (
     <div className="flex flex-col gap-6">
-      {isDesign && catalogId && (
-        <Link href={`/sessions/${catalogId}`} className={buttonVariants({ variant: "ghost", size: "sm", className: "self-start" })}>
-          <ArrowLeftIcon /> Về phiên catalog
-        </Link>
-      )}
+      {/* Quay lại trang vừa xem (logo ở mục Khách hàng, Lịch sử, Trang chính...); mở thẳng bằng link thì về đúng logo này ở mục Khách hàng */}
+      <div className="flex flex-wrap items-center gap-2">
+        <BackButton fallbackHref={`/customers?logoId=${encodeURIComponent(session.logoId)}`} />
+        {isDesign && catalogId && (
+          <Link href={`/sessions/${catalogId}`} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+            <ArrowLeftIcon /> Về phiên catalog
+          </Link>
+        )}
+      </div>
 
       <div className="flex items-start gap-4">
         <div
@@ -73,7 +92,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         <div className="min-w-0">
           <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold">
             {brand.name}
-            {isDesign && <Badge variant="secondary">Bước 2: thiết kế</Badge>}
+            {isDesign && <Badge variant="secondary">{pinDesign ? "Thiết kế theo mẫu Pinterest" : "Bước 2: thiết kế"}</Badge>}
           </h1>
           <p className="text-muted-foreground">
             {brand.customer.name}
@@ -88,18 +107,41 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
               {session.note ? ` · Ghi chú: ${session.note}` : ""}
             </p>
           )}
+          {samplePins.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Mẫu Pinterest đã chọn:</span>
+              {samplePins.map((p) => (
+                <a key={p.id} href={p.sourceImageUrl} target="_blank" rel="noreferrer noopener" className="block size-12 overflow-hidden rounded-md border" title={p.title ?? "Mở ảnh mẫu"}>
+                  <img src={p.sourceImageUrl} alt={p.title ?? "Mẫu Pinterest"} className="size-full object-cover" loading="lazy" />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      <SessionResults
-        sessionId={session.id}
-        initialImages={images}
-        canRefinish={canEditOwned(user, session.createdById)}
-        designHref={catalogId ? `/sessions/${catalogId}/design` : undefined}
-        isDesign={isDesign}
-        labelMode={settings.labelMode}
-        defaultLabelPos={settings.labelPos}
-      />
+      {aiWaiting ? (
+        <AiAnalysisStatus
+          sessionId={session.id}
+          logoId={session.logoId}
+          state={aiWaiting.kind}
+          error={aiWaiting.kind === "failed" ? aiWaiting.error : undefined}
+          startedAt={aiWaiting.kind === "analyzing" ? aiWaiting.startedAt : undefined}
+          requested={aiWaiting.requested}
+          pinDesign={pinDesign}
+          canRetry={canEditOwned(user, session.createdById)}
+        />
+      ) : (
+        <SessionResults
+          sessionId={session.id}
+          initialImages={images}
+          canRefinish={canEditOwned(user, session.createdById)}
+          designHref={catalogId ? `/sessions/${catalogId}/design` : undefined}
+          isDesign={isDesign}
+          labelMode={settings.labelMode}
+          defaultLabelPos={settings.labelPos}
+        />
+      )}
 
       {ai && ai.picks.length > 0 && (
         <Card>

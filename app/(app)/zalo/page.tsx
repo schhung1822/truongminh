@@ -20,7 +20,8 @@ export default async function ZaloInboxPage() {
           Hộp thư Zalo đang tắt.{" "}
           {user.role === "ADMIN" ? (
             <>
-              Bật ở <Link href="/admin/zalo" className="underline">Quản trị &gt; Zalo</Link>.
+              Bật lại ở <Link href="/admin/settings" className="underline">Hệ thống &gt; Cấu hình</Link> (công tắc Hộp thư Zalo); Zalo cũng phải đang bật ở{" "}
+              <Link href="/admin/zalo" className="underline">Cài đặt Zalo</Link>.
             </>
           ) : (
             "Báo quản trị viên nếu cần dùng."

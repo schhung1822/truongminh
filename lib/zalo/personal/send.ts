@@ -18,7 +18,7 @@ type PersonalContact = { id: string; accountId: string | null; threadId: string 
 function resolve(contact: PersonalContact) {
   if (!contact.accountId || !contact.threadId) return { ok: false, error: "Hội thoại này không thuộc tài khoản Zalo cá nhân." } as const;
   const api = getAccountApi(contact.accountId);
-  if (!api) return { ok: false, error: "Tài khoản Zalo này chưa kết nối. Vào Quản trị > Zalo > Tài khoản cá nhân để kết nối lại." } as const;
+  if (!api) return { ok: false, error: "Tài khoản Zalo này chưa kết nối. Vào Hệ thống > Kết nối > Zalo để kết nối lại." } as const;
   return { ok: true, api, accountId: contact.accountId, threadId: contact.threadId, type: contact.chatType === "GROUP" ? ThreadType.Group : ThreadType.User } as const;
 }
 

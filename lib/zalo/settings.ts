@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getEnv } from "@/lib/env";
+import { isZaloConfigured } from "./index";
 
 /**
  * Cấu hình các chức năng Zalo, lưu trong bảng settings với khóa "zalo.<tên>".
@@ -60,7 +60,7 @@ export type ZaloSettings = z.infer<typeof zaloSettingsSchema>;
 
 export const ZALO_SETTING_DEFAULTS: ZaloSettings = {
   enabled: true,
-  inbox: true,
+  inbox: false, // tạm ẩn Hộp thư Zalo (D117); bật lại bằng công tắc ở Hệ thống > Cấu hình hoặc Cài đặt Zalo > Trợ lý AI
   aiDraft: true,
   groupSend: true,
   pairing: true,
@@ -130,14 +130,9 @@ export async function updateZaloSettings(patch: Partial<ZaloSettings>): Promise<
   return { ok: true };
 }
 
-/** Zalo chạy được = có token bot trong .env VÀ công tắc tổng đang bật. */
-export function zaloTokenConfigured(): boolean {
-  return !!getEnv().ZALO_BOT_TOKEN;
-}
-
-/** Gửi ảnh vào nhóm Zalo dùng được = có token bot + công tắc tổng + công tắc "gửi nhóm" đều bật. */
+/** Gửi ảnh vào nhóm Zalo dùng được = có ít nhất một bot đã kết nối + công tắc tổng + công tắc "gửi nhóm" đều bật. */
 export async function groupSendEnabled(): Promise<boolean> {
-  if (!zaloTokenConfigured()) return false;
+  if (!(await isZaloConfigured())) return false;
   const s = await getZaloSettings();
   return s.enabled && s.groupSend;
 }

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { setSheetDefaultAction } from "./actions";
 
-/** Đặt hoặc bỏ "trang mẫu mặc định" cho nút Tạo nhanh. */
+/** Đặt hoặc bỏ "trang mẫu mặc định": trang được tick sẵn khi sale bấm "Chọn bộ chất liệu" (D126). */
 export function SheetDefaultToggle({ id, isDefault, disabled }: { id: string; isDefault: boolean; disabled?: boolean }) {
   const [pending, startTransition] = useTransition();
   return (
@@ -14,7 +14,7 @@ export function SheetDefaultToggle({ id, isDefault, disabled }: { id: string; is
       variant={isDefault ? "secondary" : "ghost"}
       size="sm"
       disabled={pending || disabled}
-      title={isDefault ? "Bỏ khỏi trang mẫu mặc định" : "Dùng làm trang mẫu mặc định cho nút Tạo nhanh"}
+      title={isDefault ? "Bỏ khỏi trang mẫu mặc định" : "Dùng làm trang mẫu mặc định (tick sẵn khi sale bấm Chọn bộ chất liệu)"}
       onClick={() =>
         startTransition(async () => {
           const r = await setSheetDefaultAction(id, !isDefault);

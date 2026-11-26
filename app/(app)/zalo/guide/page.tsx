@@ -106,19 +106,23 @@ export default async function ZaloGuidePage() {
         </p>
       </Section>
 
-      <Section id="ket-noi" title="Kết nối bot lần đầu" desc="Làm một lần. Cần quản trị viên có quyền sửa file .env trên máy chủ.">
+      <Section id="ket-noi" title="Kết nối bot" desc="Làm một lần cho mỗi bot, do quản trị viên làm ngay trên web. Kết nối được nhiều bot.">
         <Steps>
           <li>Trên điện thoại mở mini app <b>Zalo Bot Creator</b>, tạo bot và lấy <b>token</b> của bot.</li>
           <li>
-            Trong file <Code>.env</Code> đặt <Code>ZALO_BOT_TOKEN</Code> là token đó. Muốn nhận tin khách và nhận ra nhóm tự động thì đặt thêm <Code>ZALO_WEBHOOK_SECRET</Code> là một chuỗi tự đặt dài 8-256 ký tự, và <Code>APP_URL</Code> là địa chỉ https công khai của web. Khởi động lại web (<Code>docker compose up -d</Code> trên VPS).
+            Vào <AdminLink admin={admin} href="/admin/connections/zalo">Hệ thống &gt; Kết nối &gt; Zalo</AdminLink>, bấm <b>Thêm bot</b>, đặt tên gợi nhớ và dán token. Hệ thống hỏi Zalo ngay, token đúng mới lưu (lưu ở dạng mã hóa, không hiện lại).
           </li>
           <li>
-            Vào <AdminLink admin={admin} href="/admin/zalo">Quản trị &gt; Cài đặt Zalo &gt; Tổng quan</AdminLink>: bấm <b>Kiểm tra token</b> (phải báo kết nối được), rồi <b>Đăng ký webhook với Zalo</b>.
+            Ở bot vừa thêm bấm <b>Đăng ký webhook</b> để bot nhận được tin và tự nhận ra nhóm. Việc này cần <Code>APP_URL</Code> là địa chỉ https công khai của web.
           </li>
-          <li>Gạt công tắc <b>Bật Zalo</b>. Sau đó bật từng chức năng bạn muốn ở các mục còn lại.</li>
+          <li>
+            Vào <AdminLink admin={admin} href="/admin/zalo">Quản trị &gt; Cài đặt Zalo &gt; Tổng quan</AdminLink>, gạt công tắc <b>Bật Zalo</b>. Sau đó bật từng chức năng bạn muốn ở các mục còn lại.
+          </li>
         </Steps>
         <p>
-          Token và chuỗi bí mật chỉ nằm trong <Code>.env</Code>, không nhập trên web để khỏi bị lộ. Máy dev (localhost) không dùng được webhook; vẫn gửi ảnh vào nhóm được nếu thêm nhóm bằng tay.
+          Cần thêm bot khác (ví dụ mỗi nhóm khách một bot riêng) thì lặp lại các bước trên. Mỗi nhóm và mỗi hội thoại tự gắn với bot đang ở trong đó, tin gửi đi luôn qua đúng bot ấy; nhóm thêm bằng tay thì chọn bot ở cột Bot của
+          mục Nhóm và gửi ảnh. Bot đặt sẵn trong file <Code>.env</Code> (<Code>ZALO_BOT_TOKEN</Code>, <Code>ZALO_WEBHOOK_SECRET</Code>) vẫn chạy như trước và hiện chung trong danh sách. Máy dev (localhost) không dùng được webhook; vẫn gửi ảnh vào
+          nhóm được nếu thêm nhóm bằng tay.
         </p>
       </Section>
 
@@ -246,7 +250,7 @@ export default async function ZaloGuidePage() {
       <Section id="su-co" title="Xử lý sự cố">
         <ul>
           <li><b>Gửi ảnh báo lỗi 429</b>: hết hạn mức tháng của bot, hoặc gửi quá dồn. Tăng “Nghỉ giữa hai ảnh”.</li>
-          <li><b>Gửi ảnh báo lỗi 401</b>: token sai hoặc đã bị đổi. Kiểm tra lại <Code>ZALO_BOT_TOKEN</Code> rồi bấm “Kiểm tra token”.</li>
+          <li><b>Gửi ảnh báo lỗi 401</b>: token sai hoặc đã bị đổi. Vào Hệ thống &gt; Kết nối &gt; Zalo, bấm “Kiểm tra token” ở bot của nhóm đó; token đã đổi thì bấm “Đổi token” (bot trong <Code>.env</Code> thì sửa <Code>ZALO_BOT_TOKEN</Code>).</li>
           <li><b>Nhóm không hiện trong danh sách</b>: chưa có webhook, hoặc chưa có ai @bot / trả lời tin của bot trong nhóm. Có thể thêm nhóm bằng tay bằng mã nhóm.</li>
           <li><b>Bot không nhận lệnh của nhân viên</b>: kiểm tra lần lượt (1) công tắc Bật Zalo và Trợ lý nhận lệnh đều bật, (2) webhook đã đăng ký và <Code>ZALO_WEBHOOK_SECRET</Code> khớp, (3) nhân viên đã ghép nối và được gắn tài khoản web, (4) bấm Thử AI.</li>
           <li><b>AI trả lời “chưa có thông tin”</b>: kho kiến thức chưa có bài đó, hoặc bài đang ở trạng thái Nháp/Ngừng, hoặc bài không dành cho AI đó. Xem “Câu hỏi chưa trả lời được” và trang Thử AI ở Thông tin doanh nghiệp.</li>

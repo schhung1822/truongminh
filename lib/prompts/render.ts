@@ -1,3 +1,4 @@
+import { faceClause, type FaceInfo } from "./face-words";
 import { FINISH_LABEL, finishKindOf, finishRule, type FinishKind } from "./finish";
 
 /** Sinh prompt từ mẫu có biến {{ten_bien}}. Phép tính thuần, không phụ thuộc CSDL. */
@@ -59,7 +60,8 @@ export function styleReferenceNote(startIndex: number, count = 1): string {
   return `Reference images ${range} are style/mood reference photos chosen by the sales team: use ONLY their overall visual style (colour palette, mood, lighting, composition, background setting) as inspiration, blending cues from all of them. Do NOT copy their logo, text, specific object shape or any other content — the product and logo already described above always take priority over reference images ${range}.`;
 }
 
-export type MaterialForPrompt = { printTech: string; technique?: string | null };
+/** Màu hai mặt (FaceInfo) không bắt buộc: có thì được ghi vào dòng của ô để AI đối chiếu, xem lib/prompts/face-words.ts. */
+export type MaterialForPrompt = { printTech: string; technique?: string | null } & FaceInfo;
 
 /**
  * Prompt thiết kế: thay biến, và dặn kiểu hoàn thiện (khắc / cắt) của chất liệu.
@@ -87,7 +89,20 @@ export function renderDesignPrompt(
  * `badge` = logo dạng huy hiệu/bảng do người dùng đánh dấu trên logo: quyết định hình dạng tấm khắc.
  * Ảnh tham chiếu số 1 là logo nên ô thứ k (tính từ 1) ứng với ảnh tham chiếu số k + 1.
  * Nếu trang chưa đầy ô thì thêm dòng dặn AI để trống các ô còn lại.
+ *
+ * D123, chống tráo chất liệu giữa các ô và khắc nhầm mặt:
+ * 3. Dòng của ô ghi thêm màu mặt trước / mặt sau bằng chữ (khi chất liệu có dữ liệu), để AI có điểm đối chiếu ngoài thứ tự ảnh.
+ * 4. Hai đoạn dặn ở cuối: cách đọc dải nhãn "CELL n / FRONT / BACK" gắn trên từng ảnh tham chiếu (lib/imaging/reference-tag.ts),
+ *    và quy tắc không tráo hai mặt. Không bắt đầu dòng nào bằng "- " hay "Cell " để không lẫn với hai phần trên.
  */
+/** Cách dùng dải nhãn gắn trên từng ảnh tham chiếu chất liệu (lib/imaging/reference-tag.ts). */
+export const REFERENCE_STRIP_NOTE =
+  "Reference strips: every material reference image carries a white header strip above its two panels. `CELL n` on the strip is the number of the cell that material belongs to, and LEFT = FRONT / RIGHT = BACK name its two panels. Use the strip only to match each image to its cell and to tell the two faces apart. Never draw the strip, its number or its words.";
+
+/** Không tráo hai mặt, và dùng màu ghi trên dòng của ô để tự kiểm tra đã lấy đúng ảnh tham chiếu. */
+export const FACES_NOTE =
+  "Faces: where a cell's line names colours, they are a cross-check (the quoted Vietnamese names are our workshop's own labels). On an ENGRAVED piece the large untouched face is ALWAYS the FRONT panel's material and only the engraved marks show the BACK panel's material: never swap the two faces. If a reference image does not match the colours on its cell's line, it is the wrong reference image for that cell.";
+
 export function buildMaterialsList(materials: MaterialForPrompt[], grid: { cols: number; rows: number }, opts: { badge?: boolean } = {}): string {
   const clean = (s: string) => s.replace(/\s+/g, " ").trim();
   const kinds = materials.map((m) => finishKindOf(m));
@@ -98,7 +113,8 @@ export function buildMaterialsList(materials: MaterialForPrompt[], grid: { cols:
   const cells = materials.map((m, i) => {
     const row = Math.floor(i / grid.cols) + 1;
     const col = (i % grid.cols) + 1;
-    return `Cell ${i + 1} (row ${row}, column ${col}) = reference image ${i + 2}, type ${FINISH_LABEL[kinds[i]]} (technique: ${clean(m.printTech)})`;
+    const faces = faceClause(kinds[i], m);
+    return `Cell ${i + 1} (row ${row}, column ${col}) = reference image ${i + 2}, type ${FINISH_LABEL[kinds[i]]} (technique: ${clean(m.printTech)})${faces ? `; ${faces}` : ""}`;
   });
 
   const total = grid.cols * grid.rows;
@@ -116,5 +132,8 @@ export function buildMaterialsList(materials: MaterialForPrompt[], grid: { cols:
     "",
     "Cells, in reading order (left to right, top to bottom):",
     ...cells,
+    "",
+    REFERENCE_STRIP_NOTE,
+    FACES_NOTE,
   ].join("\n");
 }

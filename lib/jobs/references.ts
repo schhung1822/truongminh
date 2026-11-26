@@ -1,9 +1,10 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { prepareLogoForAi } from "@/lib/imaging/logo-for-ai";
+import { REFERENCE_TAG_VERSION, tagReference } from "@/lib/imaging/reference-tag";
 import { getProvider } from "@/lib/providers";
 import { getPublicUrl, getStorage, usesPublicStorage } from "@/lib/storage";
-import { logoAiKey } from "@/lib/storage/keys";
+import { logoAiKey, refTagKey } from "@/lib/storage/keys";
 import { once, shared } from "./throttle";
 
 /** Hậu tố có trong tên file logo đã chuẩn bị cho AI. Đổi số khi thay cách chuẩn bị logo để buộc tải lại. */
@@ -90,6 +91,38 @@ export async function ensureMaterialUrl(material: {
       return up.url;
     }),
   );
+}
+
+/**
+ * URL ảnh tham chiếu của một chất liệu ĐÃ GẮN dải nhãn cho đúng ô `cell` (số ô trong prompt) và kiểu hàng (D123).
+ * Kho công khai (R2): bản gắn nhãn được tạo một lần, lưu cạnh ảnh gốc rồi dùng lại. Kho không công khai: gắn nhãn rồi
+ * upload lên kho của nhà cung cấp mỗi lần (không lưu đệm vì đường dẫn đệm trong CSDL là của bản chưa gắn nhãn).
+ */
+export async function ensureTaggedMaterialUrl(
+  material: { id: string; code: string; referencePath: string | null },
+  cell: number,
+  kind: "ENGRAVE" | "CUT",
+): Promise<string> {
+  if (!material.referencePath) throw new NoReferenceError(material.code);
+  const referencePath = material.referencePath;
+  const key = refTagKey(referencePath, cell, kind, REFERENCE_TAG_VERSION);
+
+  if (usesPublicStorage()) {
+    return once(`reftag:${key}`, async () => {
+      const storage = getStorage();
+      if (!(await storage.exists(key))) {
+        await storage.put(key, await tagReference(await storage.get(referencePath), { cell, kind }), { contentType: "image/jpeg" });
+      }
+      return getPublicUrl(key);
+    });
+  }
+
+  const provider = getProvider();
+  return shared().uploadLimit(async () => {
+    const buffer = await tagReference(await getStorage().get(referencePath), { cell, kind });
+    const up = await provider.uploadReference({ buffer, fileName: `material-${material.id}-c${cell}.jpg`, contentType: "image/jpeg" });
+    return up.url;
+  });
 }
 
 /** Lỗi không thể tự khắc phục bằng cách thử lại (thiếu ảnh tham chiếu). */

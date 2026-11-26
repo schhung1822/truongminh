@@ -107,7 +107,7 @@ docker compose exec app npm run db:seed
 docker compose exec app npm run db:seed-styles
 ```
 
-Mở `https://tên-miền-của-bạn`, đăng nhập bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD` trong `.env`, **đổi mật khẩu ngay** ở trang Người dùng. Lần đầu Caddy cần vài chục giây để xin chứng chỉ HTTPS; nếu trình duyệt báo lỗi thì chờ một phút rồi tải lại.
+Mở `https://tên-miền-của-bạn`, đăng nhập bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD` trong `.env`, **đổi mật khẩu ngay** ở trang Tài khoản của tôi (bấm vào tên mình ở góc phải > Tài khoản và mật khẩu), rồi vào **Hệ thống > Người dùng** tạo thêm một quản trị viên thứ hai để dự phòng. Lần đầu Caddy cần vài chục giây để xin chứng chỉ HTTPS; nếu trình duyệt báo lỗi thì chờ một phút rồi tải lại.
 
 Sau đó: vào **Quản trị > Chất liệu** nhập chất liệu thật, **Trang mẫu** xếp chất liệu vào trang (số cột x hàng là bố cục một ảnh; trang có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh, ví dụ 80 chất liệu với 8 ô mỗi ảnh ra 10 ảnh), **Cấu hình** kiểm tra model và số dư kie.ai.
 
@@ -182,8 +182,8 @@ Sau đó đặt `STORAGE_DRIVER="r2"` và khởi động lại. Script **không 
 
 ### Thử bot Zalo trên VPS
 Bot Zalo chính thức cần một địa chỉ https công khai để Zalo đẩy tin về, nên VPS có tên miền là chỗ thử bot đúng nhất. Làm sau khi web đã chạy và đăng nhập được:
-1. Trong `.env` điền `ZALO_BOT_TOKEN` (lấy ở mini app Zalo Bot Creator) và `ZALO_WEBHOOK_SECRET` (tự đặt, 8 đến 256 ký tự), rồi `docker compose up -d` để web nhận cấu hình mới. `APP_URL` phải là địa chỉ https của web.
-2. Vào **Quản trị > Cài đặt Zalo > Tổng quan**: bấm **Kiểm tra token**, rồi **Đăng ký webhook với Zalo**, rồi gạt **Bật Zalo**.
+1. Vào **Hệ thống > Kết nối > Zalo**, bấm **Thêm bot**, dán token của bot (lấy ở mini app Zalo Bot Creator). Thêm được nhiều bot; token lưu mã hóa trong CSDL. (Cách cũ vẫn dùng được: điền `ZALO_BOT_TOKEN` và `ZALO_WEBHOOK_SECRET` trong `.env` rồi `docker compose up -d`; bot đó hiện chung trong danh sách.) `APP_URL` phải là địa chỉ https của web.
+2. Ở bot vừa thêm bấm **Kiểm tra token**, rồi **Đăng ký webhook**. Sau đó vào **Quản trị > Cài đặt Zalo > Tổng quan** gạt **Bật Zalo**.
 3. Nhân viên mở chat với bot trên Zalo, gõ `/ghepnoi`; admin vào **Nhân viên và lệnh**, nhập mã 4 số, chọn tài khoản web cho nhân viên đó rồi bấm **Cho phép**.
 4. Vào **Trợ lý AI**, bật **Trợ lý nhận lệnh**, điền tên bot (đúng tên hiển thị trên Zalo) rồi lưu. Cần `IMAGE_PROVIDER="kie"` và khóa kie.ai vì trợ lý dùng model chat của kie.ai.
 5. Mời bot vào nhóm khách (link bot ở Zalo Bot Creator), tag bot trong nhóm để ra lệnh. Xem mục "Tag bot ra lệnh trong nhóm" ở **Zalo > Hướng dẫn Zalo**.
@@ -233,7 +233,7 @@ Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web k
 Bot Zalo **không tự nói chuyện với khách**: nhân viên nói với khách, bot chỉ làm việc khi nhân viên đã ghép nối tag bot (làm ảnh, hỏi kỹ thuật) hoặc bấm "AI soạn" trong Hộp thư. Các chức năng (gửi ảnh vào nhóm, trợ lý nhận lệnh, Hộp thư, ghép nối nhân viên, lệnh, chăm sóc nhóm) bật/tắt và chỉnh ở **Quản trị > Cài đặt Zalo**. Thông tin xưởng cho AI (hồ sơ, bài kiến thức, mức hiển thị Công khai/Nội bộ/Chỉ admin, ngân sách từng AI, trang Thử AI) nằm ở **Quản trị > Thông tin doanh nghiệp**. Hướng dẫn từng bước (kết nối bot, mời bot vào nhóm, tag bot ra lệnh, xử lý sự cố) nằm ngay trong web ở menu **Zalo > Hướng dẫn Zalo**. Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web khởi động lại, trên máy cá nhân chạy `npm run db:deploy`.
 
 ### Nhiều tài khoản Zalo cá nhân trong một Hộp thư (thử nghiệm)
-Ở **Quản trị > Cài đặt Zalo > Tài khoản cá nhân** bấm **Thêm tài khoản (quét QR)**, quét bằng Zalo trên điện thoại của số cần thêm; làm lại cho từng số. Tin nhắn của mọi tài khoản (cả bot) gom về **Zalo > Hộp thư Zalo**, có bộ lọc theo tài khoản; trả lời và gửi ảnh mẫu đi qua đúng số của hội thoại. Máy chủ giữ kết nối nghe tin và tự nối lại sau khi khởi động (cookie lưu mã hóa; khóa ở `ZALO_ACCOUNT_KEY` hoặc file `storage/.secret-key`, nên giữ thư mục storage).
+Ở **Hệ thống > Kết nối > Zalo**, phần Tài khoản Zalo cá nhân, bấm **Thêm tài khoản (quét QR)**, quét bằng Zalo trên điện thoại của số cần thêm; làm lại cho từng số. Tin nhắn của mọi tài khoản (cả bot) gom về **Zalo > Hộp thư Zalo**, có bộ lọc theo tài khoản; trả lời và gửi ảnh mẫu đi qua đúng số của hội thoại. Máy chủ giữ kết nối nghe tin và tự nối lại sau khi khởi động (cookie lưu mã hóa; khóa ở `ZALO_ACCOUNT_KEY` hoặc file `storage/.secret-key`, nên giữ thư mục storage).
 Đây là cách **không chính thức** (thư viện `zca-js` mô phỏng Zalo Web), có nguy cơ khóa tài khoản và có thể hỏng khi Zalo đổi giao thức; mỗi tài khoản chỉ có một kết nối nghe tin (mở Zalo Web cùng tài khoản thì kết nối ở đây bị ngắt). Chỉ chạy một bản web duy nhất (không nhân bản container), vì mỗi tài khoản chỉ nghe được ở một nơi.
 
 ### Tự động đăng kịch bản chăm sóc Zalo (không bắt buộc)
@@ -249,7 +249,7 @@ Trên máy cá nhân bạn bấm đăng bằng tay trong mục **Kịch bản ch
 Phòng marketing đăng bài lên nhóm Facebook; extension Chrome **Data Lead Facebook** **chỉ đọc** comment trên các bài do chính nick của mình đăng và gửi về web, web tách số điện thoại và tạo lead. Không tự đăng, không tự comment, không tự bấm gửi. Thiết kế: `docs/thiet-ke-module-lead-facebook.md`; hướng dẫn đọc hiểu: `docs/huong-dan-lead-facebook.md`; quyết định: D91, D92 trong `docs/DECISIONS.md`.
 1. Cập nhật mã và CSDL trên VPS: `git pull`, `npx prisma migrate deploy` (thêm vai trò Marketing và các bảng `fb_*`, `ext_*`; **sao lưu CSDL trước**), `npm run build`, nạp lại web.
 2. **Quản trị > Người dùng**: tạo tài khoản vai trò **Marketing** cho nhân sự (Sale chỉ thấy lead được gán cho mình).
-3. Menu **Lead Facebook**: Marketing thêm nick Facebook và tạo mã kết nối ở **Kết nối extension**, thêm bài ở **Bài đăng**.
+3. Menu **Lead Facebook**: Marketing thêm nick Facebook và tạo mã kết nối cho từng máy ở **Hệ thống > Kết nối > Extension Facebook**, thêm bài ở **Bài đăng**.
 4. Cài extension cho từng nhân sự: xem `extension/README.md` (build bằng `npm run ext:build`, địa chỉ web cố định lúc build bằng `APP_ORIGIN`). Mỗi máy một mã kết nối; nhiều máy chạy song song được, web tự giữ chỗ để hai máy cùng nick không quét trùng một bài.
 5. (Không bắt buộc) Dọn comment Khác/Spam quá hạn và nhật ký cũ: đặt `FB_CRON_SECRET` (16 ký tự trở lên) trong `.env` rồi thêm vào `crontab -e` dòng chạy mỗi ngày:
 ```
@@ -261,12 +261,12 @@ Chưa kiểm chứng trên Facebook thật: xem mục "Chưa kiểm chứng" tro
 1. Tạo App tại Pinterest Developers, xin Trial access với các scope đọc: `boards:read`, `pins:read`, `user_accounts:read`; nếu cần board bí mật thì xin thêm `boards:read_secret`, `pins:read_secret` và đặt `PINTEREST_INCLUDE_SECRET_BOARDS="true"`.
 2. Đăng ký Redirect URI chính xác là `https://tên-miền/api/pinterest/oauth/callback`.
 3. Điền `PINTEREST_CLIENT_ID` và `PINTEREST_CLIENT_SECRET` vào `.env`, chạy migration/build rồi khởi động lại web.
-4. Admin vào **Thư viện mẫu > Kết nối Pinterest**, bấm kết nối và **Đồng bộ ngay**. Nhân viên xem/copy ảnh, gắn tag phong cách và lọc ở **Mẫu Pinterest**; khi tạo thiết kế ở Bước 2 có thể chọn tối đa 3 pin làm ảnh phong cách tham khảo (picker tự gợi ý pin khách đã thích và board đúng công nghệ chất liệu đang chọn).
+4. Admin vào **Hệ thống > Kết nối > Pinterest**, bấm kết nối và **Đồng bộ ngay**. Nhân viên xem/copy ảnh, gắn tag phong cách và lọc ở **Mẫu Pinterest**; khi tạo thiết kế ở Bước 2 có thể chọn tối đa 3 pin làm ảnh phong cách tham khảo (picker tự gợi ý pin khách đã thích và board đúng công nghệ chất liệu đang chọn).
 
 Token Pinterest chỉ lưu mã hóa trên máy chủ, không đưa vào trình duyệt hoặc Git. Sau mỗi lần thêm/xóa pin trên Pinterest, admin bấm **Đồng bộ ngay** để cập nhật thư viện trong ứng dụng.
 
 ### Tự động đồng bộ Pinterest (không bắt buộc)
-Mặc định phải vào **Thư viện mẫu > Kết nối Pinterest** bấm **Đồng bộ ngay** mỗi khi có ảnh/board mới. Trên VPS có thể cho máy tự đồng bộ định kỳ:
+Mặc định phải vào **Hệ thống > Kết nối > Pinterest** bấm **Đồng bộ ngay** mỗi khi có ảnh/board mới. Trên VPS có thể cho máy tự đồng bộ định kỳ:
 1. Trong `.env` đặt `PINTEREST_SYNC_CRON_SECRET` là một chuỗi dài (16 ký tự trở lên), rồi `docker compose up -d`.
 2. Gõ `crontab -e` và thêm dòng chạy mỗi 6 giờ (thay khóa và tên miền):
 ```

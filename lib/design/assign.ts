@@ -29,3 +29,17 @@ export function validateDesignRequest(input: { materialCount: number; variants: 
   }
   return null;
 }
+
+/** Thiết kế theo mẫu Pinterest (D125): mặc định AI chọn 3 chất liệu, mỗi chất liệu 1 phương án (3 ảnh) để xem nhanh, ít tốn lượt. */
+export const PIN_DESIGN_DEFAULT_MATERIALS = 3;
+export const PIN_DESIGN_DEFAULT_VARIANTS = 1;
+/** Số ảnh mẫu Pinterest tối đa cho một lượt; trùng MAX_STYLE_REF_PINS (lib/image-options.ts), có kiểm thử giữ hai số khớp nhau. */
+export const PIN_DESIGN_MAX_PINS = 3;
+
+/** Kiểm tra thông số "thiết kế theo mẫu Pinterest". Trả về lỗi tiếng Việt hoặc null. */
+export function validatePinDesignRequest(input: { pinCount: number; materialCount: number; variants: number; productType: string }): string | null {
+  if (input.pinCount < 1) return "Vui lòng chọn ít nhất một mẫu Pinterest.";
+  if (input.pinCount > PIN_DESIGN_MAX_PINS) return `Chỉ chọn tối đa ${PIN_DESIGN_MAX_PINS} mẫu Pinterest cho một lượt.`;
+  if (!Number.isInteger(input.materialCount)) return "Số chất liệu không hợp lệ.";
+  return validateDesignRequest({ materialCount: input.materialCount, variants: input.variants, productType: input.productType });
+}

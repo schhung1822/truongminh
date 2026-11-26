@@ -13,7 +13,12 @@ export type SessionUser = {
   email: string;
   name: string;
   role: Role;
+  /** true = đang dùng mật khẩu tạm do quản trị viên đặt: chưa được dùng web cho tới khi tự đổi (xem requireUser). */
+  mustChangePassword: boolean;
 };
+
+/** Trang đặt mật khẩu mới bắt buộc (nằm ngoài khung menu, xem app/(auth)/change-password). */
+export const CHANGE_PASSWORD_PATH = "/change-password";
 
 /**
  * Người đang đăng nhập (hoặc null). Kiểm tra thật trong CSDL mỗi request:
@@ -28,20 +33,33 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const session = await db.authSession.findUnique({
     where: { tokenHash: hashToken(token) },
     include: {
-      user: { select: { id: true, email: true, name: true, role: true, isActive: true } },
+      user: { select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true } },
     },
   });
   if (!session || session.expiresAt.getTime() < Date.now() || !session.user.isActive) {
     return null;
   }
-  const { id, email, name, role } = session.user;
-  return { id, email, name, role };
+  const { id, email, name, role, mustChangePassword } = session.user;
+  return { id, email, name, role, mustChangePassword };
 });
 
-/** Dùng trong trang và Server Action: chưa đăng nhập thì chuyển về /login. */
-export async function requireUser(): Promise<SessionUser> {
+/**
+ * Đã đăng nhập là đủ, KHÔNG đòi đã đổi mật khẩu tạm. Chỉ dùng cho chính trang/thao tác đặt mật khẩu mới;
+ * mọi chỗ khác dùng requireUser.
+ */
+export async function requireSignedIn(): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+/**
+ * Dùng trong trang và Server Action: chưa đăng nhập thì chuyển về /login. Tài khoản còn dùng mật khẩu tạm thì bị đưa
+ * sang trang đặt mật khẩu mới, không xem hay làm được gì khác cho tới khi đổi xong.
+ */
+export async function requireUser(): Promise<SessionUser> {
+  const user = await requireSignedIn();
+  if (user.mustChangePassword) redirect(CHANGE_PASSWORD_PATH);
   return user;
 }
 

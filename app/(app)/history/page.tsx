@@ -46,7 +46,9 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const [sessions, users] = await Promise.all([
     db.consultSession.findMany({
       where: {
-        type: "CATALOG",
+        // phiên ảnh chất liệu, và phiên thiết kế theo mẫu Pinterest (D125, phiên DESIGN không có phiên cha);
+        // lượt thiết kế Bước 2 nằm trong phiên ảnh chất liệu của nó nên không liệt kê riêng
+        OR: [{ type: "CATALOG" }, { type: "DESIGN", parentId: null }],
         ...(sale ? { createdById: sale === "me" ? user.id : sale } : {}),
         ...(fromDate || toEnd ? { createdAt: { ...(fromDate ? { gte: fromDate } : {}), ...(toEnd ? { lt: toEnd } : {}) } } : {}),
         ...(q
@@ -231,6 +233,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
                                             </span>
                                             <span className="text-xs text-muted-foreground">Sale: {s.createdBy.name}</span>
                                             <span className="flex flex-wrap items-center gap-1.5">
+                                              {s.type === "DESIGN" && <Badge variant="outline">Thiết kế theo mẫu Pinterest{s.productType ? ` · ${s.productType}` : ""}</Badge>}
                                               <Badge>{done.length}/{s.images.length} ảnh xong</Badge>
                                               {running > 0 && <Badge variant="secondary">{running} đang tạo</Badge>}
                                               {failed > 0 && <Badge variant="destructive">{failed} lỗi</Badge>}

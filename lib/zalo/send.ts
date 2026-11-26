@@ -7,7 +7,7 @@ import { shared } from "@/lib/jobs/throttle";
 import { getStorage } from "@/lib/storage";
 import { buildCaption, publicSessionUrl } from "./caption";
 import { ZaloError } from "./client";
-import { getZaloClient } from "./index";
+import { getBotClient, NO_BOT_MESSAGE } from "./index";
 import { getZaloSettings, groupSendEnabled } from "./settings";
 import { toJpeg } from "@/lib/imaging/webp";
 
@@ -22,7 +22,8 @@ export type DeliverResult =
   | { outcome: "skipped" }
   | { outcome: "failed"; error: string; stop: boolean };
 
-type GroupRef = { id: string; chatId: string };
+/** botId: bot đang ở trong nhóm (null = bot trong .env / bot mặc định). */
+type GroupRef = { id: string; chatId: string; botId: string | null };
 
 function errText(e: unknown): string {
   return (e instanceof Error ? e.message : String(e)).slice(0, 500);
@@ -33,8 +34,8 @@ function errText(e: unknown): string {
  * trừ khi `force`. Toàn hệ thống gửi lần lượt từng ảnh theo thứ tự đến (một hàng đợi chung).
  */
 export async function deliverImage(imageId: string, group: GroupRef, opts?: { force?: boolean }): Promise<DeliverResult> {
-  const client = getZaloClient();
-  if (!client) return { outcome: "failed", error: "Chưa cấu hình ZALO_BOT_TOKEN.", stop: true };
+  const client = await getBotClient(group.botId);
+  if (!client) return { outcome: "failed", error: NO_BOT_MESSAGE, stop: true };
   if (!(await groupSendEnabled())) return { outcome: "failed", error: "Chức năng gửi ảnh vào nhóm Zalo đang tắt (Quản trị > Zalo).", stop: true };
 
   const settings = await getZaloSettings(); // mẫu chữ đi kèm ảnh và khoảng nghỉ giữa các ảnh
@@ -111,7 +112,7 @@ export type SessionSendSummary = { total: number; sent: number; skipped: number;
 
 /** Gửi mọi ảnh đã xong của một phiên vào một nhóm (theo thứ tự hiển thị). Ảnh đã gửi vào nhóm này thì bỏ qua. */
 export async function sendSessionImages(sessionId: string, groupId: string, opts?: { force?: boolean }): Promise<SessionSendSummary> {
-  const group = await db.zaloGroup.findUnique({ where: { id: groupId }, select: { id: true, chatId: true, isActive: true } });
+  const group = await db.zaloGroup.findUnique({ where: { id: groupId }, select: { id: true, chatId: true, isActive: true, botId: true } });
   if (!group || !group.isActive) return { total: 0, sent: 0, skipped: 0, failed: 0, error: "Nhóm Zalo không tồn tại hoặc đang tắt." };
 
   const images = await db.generatedImage.findMany({

@@ -6,7 +6,7 @@ import { ChatError, getChatProvider } from "@/lib/ai/chat";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { buildPdf, buildZip } from "@/lib/export/build";
-import { todayKey } from "@/lib/jobs/limits";
+import { COUNTED_USAGE, todayKey } from "@/lib/jobs/limits";
 import { compareSessionImages } from "@/lib/jobs/order";
 import { extractUnknown } from "@/lib/knowledge/rules";
 import { prepareKnowledgePrompt, recordKnowledgeUse } from "@/lib/knowledge";
@@ -17,7 +17,7 @@ import { handleAgentMessage } from "./agent";
 import { buildChatMessages } from "./bot-prompt";
 import { ZaloError, type ZaloClient } from "./client";
 import { helpText, parseCommand, PUBLIC_COMMANDS, type CommandName } from "./commands";
-import { getZaloClient } from "./index";
+import { envBotClient, getBotClient, NO_BOT_MESSAGE } from "./index";
 import { sendPersonalAttachments, sendPersonalText, type PersonalAttachment } from "./personal/send";
 import { getZaloSettings, type ZaloSettings } from "./settings";
 import { preview, splitMessage, stripMarkdown } from "./text";
@@ -90,15 +90,18 @@ function classify(ev: ZaloEvent): { kind: Kind; text: string } {
   }
 }
 
-/** Điểm vào duy nhất cho webhook. Không bao giờ ném lỗi ra ngoài (Zalo chỉ cần nhận 200). */
-export async function processWebhook(ev: ZaloEvent): Promise<void> {
+/**
+ * Điểm vào duy nhất cho webhook. Không bao giờ ném lỗi ra ngoài (Zalo chỉ cần nhận 200).
+ * `botId` = bot vừa nhận tin (null = bot đặt trong .env): nhóm và hội thoại được ghi lại là của bot đó, tin trả lời đi qua đúng bot đó.
+ */
+export async function processWebhook(ev: ZaloEvent, botId: string | null = null): Promise<void> {
   try {
     const msg = ev.message;
     const chatId = msg?.chat?.id;
     if (!msg || typeof chatId !== "string" || chatId.length === 0 || chatId.length > 100) return;
     if (msg.from?.is_bot) return;
 
-    const client = getZaloClient();
+    const client = botId ? await getBotClient(botId) : envBotClient();
     const s = await getZaloSettings();
     if (!client || !s.enabled) return;
 
@@ -108,20 +111,20 @@ export async function processWebhook(ev: ZaloEvent): Promise<void> {
       const now = new Date();
       await db.zaloGroup.upsert({
         where: { chatId },
-        create: { chatId, name: `Nhóm mới (${chatId.slice(0, 6)})`, lastSeenAt: now },
-        update: { lastSeenAt: now },
+        create: { chatId, name: `Nhóm mới (${chatId.slice(0, 6)})`, lastSeenAt: now, botId },
+        update: { lastSeenAt: now, botId },
       });
     }
 
     if (!s.inbox && !s.commands && !s.pairing && !s.agent) return;
 
-    await serial(chatId, () => handleIncoming(client, s, ev, isGroup));
+    await serial(chatId, () => handleIncoming(client, s, ev, isGroup, botId));
   } catch (e) {
     console.error("Zalo webhook: lỗi xử lý tin:", errText(e));
   }
 }
 
-async function handleIncoming(client: ZaloClient, s: ZaloSettings, ev: ZaloEvent, isGroup: boolean) {
+async function handleIncoming(client: ZaloClient, s: ZaloSettings, ev: ZaloEvent, isGroup: boolean, botId: string | null) {
   const msg = ev.message!;
   const chatId = msg.chat!.id!;
   const { kind, text } = classify(ev);
@@ -131,8 +134,8 @@ async function handleIncoming(client: ZaloClient, s: ZaloSettings, ev: ZaloEvent
   const name = (msg.from?.display_name ?? "").trim().slice(0, 150) || (isGroup ? "Nhóm Zalo" : "Khách Zalo");
   const contact = await db.zaloContact.upsert({
     where: { chatId },
-    create: { chatId, chatType: isGroup ? "GROUP" : "PRIVATE", displayName: name },
-    update: isGroup ? {} : { displayName: name },
+    create: { chatId, chatType: isGroup ? "GROUP" : "PRIVATE", displayName: name, botId },
+    update: isGroup ? { botId } : { displayName: name, botId }, // bot nhận tin gần nhất là bot của cuộc chat này
   });
 
   // Lệnh gõ nhanh / ghép nối (chỉ chat riêng)
@@ -314,7 +317,7 @@ async function statusText(): Promise<string> {
 }
 
 async function todayText(): Promise<string> {
-  const rows = await db.usageLog.groupBy({ by: ["userId"], where: { day: todayKey() }, _count: { _all: true } });
+  const rows = await db.usageLog.groupBy({ by: ["userId"], where: { day: todayKey(), ...COUNTED_USAGE }, _count: { _all: true } }); // không tính ảnh lỗi, giống hạn mức
   if (rows.length === 0) return "Hôm nay chưa có lượt tạo ảnh nào.";
   const users = await db.user.findMany({ where: { id: { in: rows.map((r) => r.userId) } }, select: { id: true, name: true } });
   const name = new Map(users.map((u) => [u.id, u.name]));
@@ -338,8 +341,8 @@ export async function sendHumanReply(user: { id: string }, contactId: string, ra
     const error = await sendPersonalText(contact, user.id, rawText);
     return error ? { ok: false, error } : { ok: true };
   }
-  const client = getZaloClient();
-  if (!client) return { ok: false, error: "Chưa cấu hình bot Zalo." };
+  const client = await getBotClient(contact.botId);
+  if (!client) return { ok: false, error: NO_BOT_MESSAGE };
   const chunks = splitMessage(stripMarkdown(rawText));
   if (chunks.length === 0) return { ok: false, error: "Vui lòng nhập nội dung." };
 
@@ -359,8 +362,8 @@ export async function sendSessionToContact(user: { id: string }, contactId: stri
   if (!s.enabled) return { ok: false, error: "Zalo đang tắt." };
   const contact = await db.zaloContact.findUnique({ where: { id: contactId } });
   if (!contact) return { ok: false, error: "Không tìm thấy hội thoại." };
-  const client = getZaloClient();
-  if (!client && !contact.accountId) return { ok: false, error: "Chưa cấu hình bot Zalo." };
+  const client = contact.accountId ? null : await getBotClient(contact.botId);
+  if (!client && !contact.accountId) return { ok: false, error: NO_BOT_MESSAGE };
   const session = await db.consultSession.findUnique({
     where: { id: sessionId },
     include: { logo: { include: { brand: { include: { customer: true } } } } },
@@ -407,7 +410,7 @@ export async function sendSessionToContact(user: { id: string }, contactId: stri
     if (r.sent === 0) return { ok: false, error: r.error ?? "Gửi không thành công." };
     return { ok: true, sent: r.sent };
   }
-  if (!client) return { ok: false, error: "Chưa cấu hình bot Zalo." };
+  if (!client) return { ok: false, error: NO_BOT_MESSAGE };
 
   const sent = await serial(contact.chatId, async (): Promise<SendResult & { sent?: number }> => {
     try {

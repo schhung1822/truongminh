@@ -1,17 +1,20 @@
 import "server-only";
-import type { GeneratedImage } from "@/generated/prisma/client";
+import type { GeneratedImage, Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { getProvider } from "@/lib/providers";
 import { ProviderFatalError, ProviderRateLimitError } from "@/lib/providers/types";
+import { stitchTiles } from "@/lib/imaging/stitch";
 import { toWebp } from "@/lib/imaging/webp";
 import { getStorage } from "@/lib/storage";
 import { mockupKey } from "@/lib/storage/keys";
 import { mapLimit } from "./async";
 import { renderFinal } from "./finish";
 import { ensurePinterestPinUrl, PinterestReferenceError } from "./pinterest-reference";
-import { ensureLogoUrl, ensureMaterialUrl, NoReferenceError } from "./references";
+import { finishKindOf } from "@/lib/prompts/finish";
+import { ensureLogoUrl, ensureMaterialUrl, ensureTaggedMaterialUrl, NoReferenceError } from "./references";
 import { getStyleRefPinIds, MAX_ATTEMPTS, type LayoutSnapshot } from "./snapshot";
+import { readTiles, TILE_ASPECT, type ImageTile } from "./tiles";
 import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
 import {
   ACTIVE_CAP_WAIT_MS,
@@ -89,9 +92,48 @@ async function deferImage(id: string, waitMs: number, reason: string) {
  * cửa sổ 10 giây. Trả số ms phải chờ, 0 = được gửi ngay.
  */
 async function submitGate(): Promise<number> {
-  const active = await db.generatedImage.count({ where: { status: "PROCESSING" } });
+  // đếm theo TÁC VỤ: ảnh chất lượng cao (D120) chạy nhiều tác vụ cùng lúc, mỗi mảnh chưa xong là một tác vụ
+  const rows = await db.generatedImage.findMany({ where: { status: "PROCESSING" }, select: { tiles: true } });
+  const active = rows.reduce((n, r) => n + (readTiles(r.tiles)?.filter((t) => !t.path).length ?? 1), 0);
   if (active >= MAX_ACTIVE_TASKS) return ACTIVE_CAP_WAIT_MS;
   return reserveSubmitSlot(shared().throttle);
+}
+
+/** Lưu trạng thái các mảnh của một ảnh chất lượng cao (mã tác vụ, ảnh đã tải về). */
+async function saveTiles(imageId: string, tiles: ImageTile[]): Promise<void> {
+  await db.generatedImage.update({ where: { id: imageId }, data: { tiles: tiles as unknown as Prisma.InputJsonValue } });
+}
+
+/**
+ * Gửi các mảnh CHƯA gửi của một ảnh chất lượng cao, mỗi mảnh một tác vụ AI với prompt và ảnh tham chiếu riêng của nó.
+ * Mã tác vụ được lưu ngay sau từng lần gửi: lỗi giữa chừng (429, mất mạng) thì lần sau chỉ gửi nốt mảnh còn thiếu, không
+ * gửi trùng mảnh đã gửi (không tốn tiền hai lần). Mảnh đã có ảnh (path) hoặc đang chạy (taskId) được giữ nguyên.
+ * Trả false nếu phải dừng giữa chừng để chờ tới lượt (ảnh đã được hẹn giờ gửi lại).
+ */
+async function submitTiles(img: { id: string; model: string; resolution: string }, tiles: ImageTile[], logoUrl: string, materialUrls: string[]): Promise<boolean> {
+  let first = true; // suất gửi của mảnh đầu đã được giữ ở cổng giữ nhịp chung của submitImage
+  for (const tile of tiles) {
+    if (tile.path || tile.taskId) continue;
+    if (!first && getProvider().name === "kie") {
+      const wait = await submitGate();
+      if (wait > 0) {
+        await deferImage(img.id, wait, "Hệ thống đang đông, ảnh đang xếp hàng.");
+        return false;
+      }
+    }
+    first = false;
+    const { taskId } = await getProvider().createTask({
+      model: img.model,
+      prompt: tile.prompt,
+      inputUrls: [logoUrl, ...materialUrls.slice(tile.from, tile.from + tile.count)], // ảnh 1 là logo, sau đó đúng các chất liệu của mảnh
+      aspectRatio: TILE_ASPECT,
+      resolution: img.resolution,
+      callbackUrl: callbackUrl(),
+    });
+    tile.taskId = taskId;
+    await saveTiles(img.id, tiles);
+  }
+  return true;
 }
 
 /** Gửi tác vụ sang nhà cung cấp cho một ảnh PENDING. An toàn khi nhiều nơi cùng gọi (chỉ một nơi "chiếm" được). */
@@ -125,12 +167,19 @@ export async function submitImage(imageId: string): Promise<void> {
     const materials = await db.material.findMany({ where: { id: { in: snapshot.cells.map((c) => c.materialId) } } });
     const byId = new Map(materials.map((m) => [m.id, m]));
 
+    // Ảnh catalog: mỗi ảnh tham chiếu được gắn dải nhãn "CELL n / FRONT / BACK" đúng với số ô ghi trong prompt (D123).
+    // Ảnh chất lượng cao: mỗi mảnh có prompt riêng đánh số ô lại từ 1, nên số trên nhãn tính theo vị trí trong mảnh.
+    const tilesForRefs = img.kind === "SHEET" ? readTiles(img.tiles) : null;
+    const cellNumber = (i: number): number => {
+      const tile = tilesForRefs?.find((t) => i >= t.from && i < t.from + t.count);
+      return tile ? i - tile.from + 1 : i + 1;
+    };
     const [logoUrl, ...materialUrls] = await Promise.all([
       ensureLogoUrl(img.session.logo),
-      ...snapshot.cells.map((c) => {
+      ...snapshot.cells.map((c, i) => {
         const m = byId.get(c.materialId);
         if (!m) throw new NoReferenceError(c.code);
-        return ensureMaterialUrl(m);
+        return img.kind === "SHEET" ? ensureTaggedMaterialUrl(m, cellNumber(i), finishKindOf(m)) : ensureMaterialUrl(m);
       }),
     ]);
 
@@ -145,6 +194,18 @@ export async function submitImage(imageId: string): Promise<void> {
       }
       const pinById = new Map(pins.map((p) => [p.id, p]));
       styleRefUrls = await Promise.all(pinterestPinIds.map((id) => ensurePinterestPinUrl(pinById.get(id)!)));
+    }
+
+    // Ảnh chất lượng cao (D120): gửi từng mảnh thành tác vụ riêng, chuyển sang PROCESSING khi mọi mảnh đã được gửi
+    const tiles = readTiles(img.tiles);
+    if (tiles) {
+      if (!(await submitTiles(img, tiles, logoUrl, materialUrls))) return;
+      await db.generatedImage.updateMany({
+        where: { id: imageId, status: "PENDING" },
+        data: { status: "PROCESSING", taskId: tiles.find((t) => t.taskId && !t.path)?.taskId ?? tiles.find((t) => t.taskId)?.taskId ?? null, lastPolledAt: null },
+      });
+      clearDeferred(shared().throttle, imageId);
+      return;
     }
 
     const { taskId } = await getProvider().createTask({
@@ -180,7 +241,8 @@ export async function pollImage(img: GeneratedImage): Promise<void> {
     await failOrRetry(img.id, MAX_ATTEMPTS, "Quá thời gian chờ nhà cung cấp tạo ảnh.", false);
     return;
   }
-  if (!img.taskId) {
+  const tiles = readTiles(img.tiles);
+  if (!tiles && !img.taskId) {
     await failOrRetry(img.id, img.attempt, "Thiếu mã tác vụ.", true);
     return;
   }
@@ -194,6 +256,11 @@ export async function pollImage(img: GeneratedImage): Promise<void> {
     data: { lastPolledAt: new Date() },
   });
   if (claim.count === 0) return;
+  if (tiles) {
+    await pollTiles(img, tiles);
+    return;
+  }
+  if (!img.taskId) return; // không xảy ra (đã kiểm tra ở trên), để kiểu dữ liệu chắc chắn
 
   let info;
   try {
@@ -218,19 +285,108 @@ export async function pollImage(img: GeneratedImage): Promise<void> {
   await shared().finalizeLimit(() => finalizeImage(img.id, info.resultUrl ?? "", info.credits));
 }
 
-async function finalizeImage(imageId: string, resultUrl: string, credits?: number): Promise<void> {
-  try {
-    const img = await db.generatedImage.findUnique({
-      where: { id: imageId },
-      include: { session: { include: { logo: { include: { brand: true } } } } },
-    });
-    if (!img || img.status !== "PROCESSING") return;
-    if (!resultUrl) throw new Error("Nhà cung cấp không trả về đường dẫn ảnh.");
+/**
+ * Hỏi nhà cung cấp về từng mảnh đang chạy của một ảnh chất lượng cao (D120). Mảnh xong thì tải về kho ngay (link của nhà
+ * cung cấp sẽ hết hạn). Mảnh lỗi thì chỉ mảnh đó được gửi lại ở lần thử sau, các mảnh đã xong giữ nguyên (không tốn tiền
+ * lại). Khi mọi mảnh đã có ảnh thì ghép và hoàn thiện như một ảnh thường.
+ */
+async function pollTiles(img: GeneratedImage, tiles: ImageTile[]): Promise<void> {
+  for (const [i, tile] of tiles.entries()) {
+    if (tile.path) continue;
+    if (!tile.taskId) {
+      await failOrRetry(img.id, img.attempt, `Thiếu mã tác vụ của mảnh ${i + 1}.`, true);
+      return;
+    }
+    let info;
+    try {
+      info = await getProvider().getTask(tile.taskId);
+    } catch (e) {
+      console.error(`getTask ${img.id} mảnh ${i + 1} lỗi (sẽ hỏi lại):`, errorText(e));
+      continue; // lỗi mạng thoáng qua: hỏi lại ở lượt sau
+    }
+    if (info.status === "PROCESSING") continue;
+    if (info.status === "FAILED") {
+      tile.taskId = null; // lần thử sau chỉ gửi lại mảnh này
+      await saveTiles(img.id, tiles);
+      await failOrRetry(img.id, img.attempt, info.error ?? `Nhà cung cấp báo lỗi ở mảnh ${i + 1}.`, true);
+      return;
+    }
 
-    const provider = getProvider();
-    const { buffer } = await provider.downloadResult(resultUrl);
+    // SUCCESS: khóa lâu hơn trong lúc tải ảnh để request khác không làm trùng
+    await db.generatedImage.updateMany({ where: { id: img.id, status: "PROCESSING" }, data: { lastPolledAt: new Date(Date.now() + FINALIZE_LOCK_MS) } });
+    try {
+      if (!info.resultUrl) throw new Error("Nhà cung cấp không trả về đường dẫn ảnh.");
+      const resultUrl = info.resultUrl;
+      const brand = await db.consultSession.findUnique({ where: { id: img.sessionId }, select: { logo: { select: { brandId: true } } } });
+      const key = mockupKey(brand?.logo.brandId ?? "tiles");
+      await shared().finalizeLimit(async () => {
+        const { buffer } = await getProvider().downloadResult(resultUrl);
+        // nén nhẹ tay hơn ảnh thường: mảnh còn được ghép và nén thêm một lần nữa khi ra ảnh hoàn thiện
+        await getStorage().put(key, await toWebp(buffer, TILE_WEBP_QUALITY), { contentType: "image/webp" });
+      });
+      tile.path = key;
+      tile.credits = info.credits ?? null;
+      await saveTiles(img.id, tiles);
+    } catch (e) {
+      console.error(`Tải mảnh ${i + 1} của ảnh ${img.id} lỗi (sẽ thử lại):`, errorText(e));
+      await db.generatedImage.updateMany({ where: { id: img.id, status: "PROCESSING" }, data: { lastPolledAt: null } });
+      return;
+    }
+  }
+
+  if (tiles.every((t) => t.path)) {
+    await db.generatedImage.updateMany({ where: { id: img.id, status: "PROCESSING" }, data: { lastPolledAt: new Date(Date.now() + FINALIZE_LOCK_MS) } });
+    await shared().finalizeLimit(() => finalizeTiles(img.id));
+  } else {
+    // còn mảnh đang chạy: nhả khóa tải ảnh (nếu vừa đặt) về nhịp hỏi bình thường
+    await db.generatedImage.updateMany({ where: { id: img.id, status: "PROCESSING" }, data: { lastPolledAt: new Date() } });
+  }
+}
+
+/** Chất lượng WebP khi lưu từng mảnh của ảnh chất lượng cao. */
+const TILE_WEBP_QUALITY = 95;
+
+/** Mọi mảnh đã tải về: ghép thành một ảnh 2 cột rồi lưu ảnh gốc và ảnh hoàn thiện như ảnh thường. */
+async function finalizeTiles(imageId: string): Promise<void> {
+  await finalizeWith(imageId, async (img) => {
+    const tiles = readTiles(img.tiles);
+    if (!tiles || tiles.some((t) => !t.path)) throw new Error("Thiếu ảnh của một mảnh.");
     const storage = getStorage();
-    // Tải ảnh về, nén WebP rồi lưu lên kho (không lưu link của nhà cung cấp vì sẽ hết hạn); CSDL chỉ lưu key.
+    const buffers = await Promise.all(tiles.map(async (t) => ({ buffer: await storage.get(t.path!), count: t.count })));
+    const known = tiles.filter((t) => typeof t.credits === "number");
+    return { buffer: await stitchTiles(buffers), credits: known.length > 0 ? known.reduce((n, t) => n + (t.credits ?? 0), 0) : undefined };
+  });
+}
+
+async function finalizeImage(imageId: string, resultUrl: string, credits?: number): Promise<void> {
+  await finalizeWith(imageId, async () => {
+    if (!resultUrl) throw new Error("Nhà cung cấp không trả về đường dẫn ảnh.");
+    const { buffer } = await getProvider().downloadResult(resultUrl);
+    return { buffer, credits };
+  });
+}
+
+type FinalizeRow = NonNullable<Awaited<ReturnType<typeof loadForFinalize>>>;
+
+function loadForFinalize(imageId: string) {
+  return db.generatedImage.findUnique({
+    where: { id: imageId },
+    include: { session: { include: { logo: { include: { brand: true } } } } },
+  });
+}
+
+/**
+ * Phần chung của việc hoàn thiện: lấy ảnh gốc AI (`getOriginal`: tải từ nhà cung cấp, hoặc ghép từ các mảnh), lưu lên kho,
+ * vẽ ảnh hoàn thiện và đánh dấu SUCCESS. Hỏng thì đếm số lần và thử lại ở lượt hỏi sau, quá số lần thì báo lỗi.
+ */
+async function finalizeWith(imageId: string, getOriginal: (img: FinalizeRow) => Promise<{ buffer: Buffer; credits?: number }>): Promise<void> {
+  try {
+    const img = await loadForFinalize(imageId);
+    if (!img || img.status !== "PROCESSING") return;
+
+    const { buffer, credits } = await getOriginal(img);
+    const storage = getStorage();
+    // Nén WebP rồi lưu lên kho (không lưu link của nhà cung cấp vì sẽ hết hạn); CSDL chỉ lưu key.
     const brandId = img.session.logo.brandId;
     const originalKey = mockupKey(brandId);
     await storage.put(originalKey, await toWebp(buffer), { contentType: "image/webp" }); // giữ ảnh gốc ngay: link của nhà cung cấp sẽ hết hạn

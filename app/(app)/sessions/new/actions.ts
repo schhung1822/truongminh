@@ -115,13 +115,18 @@ export type LogoSessionOption = {
   failed: number;
   running: number;
   total: number;
+  /** phiên thiết kế theo mẫu Pinterest (D125): loại sản phẩm; phiên ảnh chất liệu thì null */
+  pinDesign: string | null;
 };
+
+/** Phiên hiện ở danh sách: phiên ảnh chất liệu, và phiên thiết kế theo mẫu Pinterest (phiên DESIGN không có phiên cha). */
+const TOP_LEVEL_SESSION = { OR: [{ type: "CATALOG" as const }, { type: "DESIGN" as const, parentId: null }] };
 
 /** Các phiên tư vấn đã tạo với một logo (mới nhất trước). */
 export async function listLogoSessionsAction(logoId: string): Promise<{ sessions: LogoSessionOption[] }> {
   await requireUser();
   const sessions = await db.consultSession.findMany({
-    where: { logoId, type: "CATALOG" },
+    where: { logoId, ...TOP_LEVEL_SESSION },
     orderBy: { createdAt: "desc" },
     take: 50,
     include: {
@@ -142,6 +147,7 @@ export async function listLogoSessionsAction(logoId: string): Promise<{ sessions
         failed,
         running: s.images.length - done - failed,
         total: s.images.length,
+        pinDesign: s.type === "DESIGN" ? (s.productType ?? "Thiết kế") : null,
       };
     }),
   };

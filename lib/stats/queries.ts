@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { COUNTED_USAGE } from "@/lib/jobs/limits";
 import { zonedStartOfDay } from "@/lib/time";
 import { addDays } from "./range";
 import type { UsageRow } from "./aggregate";
@@ -18,7 +19,11 @@ export function rangeBounds(from: string, to: string, tz: string): { start: Date
   return { start, end };
 }
 
-/** Lượt tạo ảnh gom theo (ngày, người, loại ảnh) kèm số ảnh xong/lỗi và token. Mỗi dòng usage_logs là một ảnh tạo hoặc tạo lại. */
+/**
+ * Lượt tạo ảnh gom theo (ngày, người, loại ảnh) kèm số lượt xong/lỗi và token. Mỗi dòng usage_logs là một lượt (một tác vụ
+ * AI): ảnh thường có một dòng, ảnh chất lượng cao (D120) có mỗi mảnh một dòng. Token của ảnh được chia đều cho các dòng
+ * của nó để không bị cộng trùng.
+ */
 export async function loadUsageRows(from: string, to: string): Promise<UsageRow[]> {
   const rows = await db.$queryRaw<
     { day: string; userId: string; kind: "SHEET" | "DESIGN"; n: unknown; ok: unknown; failed: unknown; tokens: unknown }[]
@@ -27,7 +32,7 @@ export async function loadUsageRows(from: string, to: string): Promise<UsageRow[
            COUNT(*) AS n,
            COUNT(CASE WHEN gi.status = 'SUCCESS' THEN 1 END) AS ok,
            COUNT(CASE WHEN gi.status = 'FAILED' THEN 1 END) AS failed,
-           COALESCE(SUM(gi.costCredits), 0) AS tokens
+           COALESCE(SUM(gi.costCredits / GREATEST(1, (SELECT COUNT(*) FROM usage_logs u2 WHERE u2.imageId = gi.id))), 0) AS tokens
     FROM usage_logs ul
     LEFT JOIN generated_images gi ON gi.id = ul.imageId
     WHERE ul.day >= ${from} AND ul.day <= ${to}
@@ -134,8 +139,8 @@ export async function loadSessionCount(start: Date, end: Date): Promise<{ catalo
   };
 }
 
-/** Số lượt mỗi người đã dùng trong ngày `today` (để so với hạn mức ngày). */
+/** Số lượt mỗi người đã dùng trong ngày `today` (để so với hạn mức ngày): đếm giống hạn mức, không gồm ảnh lỗi. */
 export async function loadTodayByUser(today: string): Promise<Map<string, number>> {
-  const groups = await db.usageLog.groupBy({ by: ["userId"], where: { day: today }, _count: { _all: true } });
+  const groups = await db.usageLog.groupBy({ by: ["userId"], where: { day: today, ...COUNTED_USAGE }, _count: { _all: true } });
   return new Map(groups.map((g) => [g.userId, g._count._all]));
 }

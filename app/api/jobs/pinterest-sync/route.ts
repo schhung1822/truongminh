@@ -10,7 +10,7 @@ function sameSecret(a: string, b: string): boolean {
 }
 
 /**
- * Đồng bộ lại board/pin của (các) tài khoản Pinterest đã kết nối, để không phải vào /admin/pinterest bấm tay.
+ * Đồng bộ lại board/pin của (các) tài khoản Pinterest đã kết nối, để không phải vào /admin/connections/pinterest bấm tay.
  * Dành cho máy chủ VPS gọi định kỳ, ví dụ mỗi 6 giờ:
  *   curl -fsS -X POST -H "x-cron-secret: $PINTEREST_SYNC_CRON_SECRET" https://tên-miền/api/jobs/pinterest-sync
  * Cần PINTEREST_SYNC_CRON_SECRET trong .env. Không qua đăng nhập (xem proxy.ts) nên khóa là bắt buộc.

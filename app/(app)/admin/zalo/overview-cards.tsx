@@ -36,7 +36,7 @@ export function MasterSwitch({ enabled, tokenSet }: { enabled: boolean; tokenSet
             <span className="text-sm text-muted-foreground">
               {tokenSet
                 ? "Công tắc tổng cho mọi chức năng Zalo. Tắt là bot ngừng gửi ảnh, ngừng nhận tin và ngừng trả lời; cấu hình vẫn được giữ nguyên."
-                : "Chưa có ZALO_BOT_TOKEN trong .env nên chưa bật được. Xem Hướng dẫn, bước 1."}
+                : "Chưa kết nối bot Zalo nào nên chưa bật được. Thêm bot ở Hệ thống > Kết nối > Zalo."}
             </span>
           </span>
         </label>

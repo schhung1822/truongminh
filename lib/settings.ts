@@ -12,6 +12,8 @@ export const settingsSchema = z.object({
   /** số chất liệu AI chọn cho mỗi logo khi tự tạo ảnh mẫu (D115) */
   autoMaterialCount: z.coerce.number().refine((v) => (AUTO_MATERIAL_COUNTS as readonly number[]).includes(v), "Số chất liệu AI chọn không hợp lệ."),
   dailyLimitPerSale: z.coerce.number().int("Phải là số nguyên.").min(0).max(100000),
+  /** ô "Chất lượng cao" (D120) mặc định bật hay tắt khi tạo ảnh mẫu; cũng dùng cho nơi không có ô chọn (tải logo lên, bot Zalo) */
+  qualityDefault: z.boolean(),
   workshopName: z.string().trim().max(100),
   footerNote: z.string().trim().max(200),
   /** dòng ghi chú ngay dưới tên xưởng ở chân ảnh */
@@ -31,6 +33,7 @@ export const SETTING_DEFAULTS: Settings = {
   defaultResolution: "2K",
   autoMaterialCount: 24,
   dailyLimitPerSale: 60,
+  qualityDefault: false,
   workshopName: "Xưởng in Trường Minh",
   footerNote: "",
   footerDisclaimer: "Hình minh họa",

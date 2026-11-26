@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import { getEnv } from "@/lib/env";
+import { isZaloConfigured } from "@/lib/zalo";
 import { getZaloSettings } from "@/lib/zalo/settings";
 import { StaffSettings } from "../staff-settings";
 import { PairingBoard } from "../zalo-pairing";
@@ -11,9 +11,9 @@ export const metadata: Metadata = { title: "Zalo: nhân viên và lệnh" };
 
 export default async function ZaloStaffPage() {
   await requireAdmin();
-  const env = getEnv();
-  const [settings, pairing, staff, users] = await Promise.all([
+  const [settings, configured, pairing, staff, users] = await Promise.all([
     getZaloSettings(),
+    isZaloConfigured(),
     db.zaloContact.findMany({ where: { role: "CUSTOMER", pairCode: { not: null } }, orderBy: { pairRequestedAt: "desc" } }),
     db.zaloContact.findMany({ where: { role: "STAFF" }, orderBy: { displayName: "asc" } }),
     db.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -22,7 +22,7 @@ export default async function ZaloStaffPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <StaffSettings initial={settings} tokenSet={!!env.ZALO_BOT_TOKEN} />
+      <StaffSettings initial={settings} tokenSet={configured} />
 
       <Card>
         <CardHeader>

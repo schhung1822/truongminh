@@ -1,107 +1,22 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2Icon, Loader2Icon, PlugIcon, PlusIcon, SendIcon, Trash2Icon, XCircleIcon } from "lucide-react";
+import { Loader2Icon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  addGroupAction,
-  checkConnectionAction,
-  deleteGroupAction,
-  registerWebhookAction,
-  testGroupAction,
-  updateGroupAction,
-  type ActionResult,
-} from "./actions";
+import { addGroupAction, deleteGroupAction, testGroupAction, updateGroupAction, type ActionResult } from "./actions";
 
 function report(r: ActionResult) {
   if (r.error) toast.error(r.error);
   else if (r.ok) toast.success(r.ok);
 }
 
-function Status({ ok, children }: { ok: boolean; children: React.ReactNode }) {
-  const Icon = ok ? CheckCircle2Icon : XCircleIcon;
-  return (
-    <p className={`flex items-center gap-2 text-sm ${ok ? "text-emerald-700" : "text-muted-foreground"}`}>
-      <Icon className="size-4 shrink-0" /> {children}
-    </p>
-  );
-}
-
-export function ConnectionCard({
-  tokenSet,
-  secretSet,
-  webhookUrl,
-  isHttps,
-}: {
-  tokenSet: boolean;
-  secretSet: boolean;
-  webhookUrl: string;
-  isHttps: boolean;
-}) {
-  const [pending, startTransition] = useTransition();
-  const [busy, setBusy] = useState<string | null>(null);
-
-  function run(name: string, fn: () => Promise<ActionResult>) {
-    setBusy(name);
-    startTransition(async () => {
-      report(await fn());
-      setBusy(null);
-    });
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Kết nối bot</CardTitle>
-        <CardDescription>
-          Token và chuỗi bí mật đặt trong file .env trên máy chủ (không nhập ở đây để khỏi lộ), rồi khởi động lại.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <Status ok={tokenSet}>{tokenSet ? "Đã có ZALO_BOT_TOKEN" : "Chưa có ZALO_BOT_TOKEN trong .env (tính năng Zalo đang tắt)"}</Status>
-        <Status ok={secretSet}>
-          {secretSet ? "Đã có ZALO_WEBHOOK_SECRET" : "Chưa có ZALO_WEBHOOK_SECRET (không dùng được webhook, vẫn thêm nhóm bằng tay được)"}
-        </Status>
-        <p className="text-sm text-muted-foreground">
-          Địa chỉ webhook: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{webhookUrl}</code>
-          {!isHttps && " (APP_URL chưa phải https công khai nên Zalo chưa gọi được)"}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-9" disabled={!tokenSet || pending} onClick={() => run("check", checkConnectionAction)}>
-            {busy === "check" ? <Loader2Icon className="animate-spin" /> : <PlugIcon />} Kiểm tra token
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9"
-            disabled={!tokenSet || !secretSet || !isHttps || pending}
-            onClick={() => run("webhook", registerWebhookAction)}
-          >
-            {busy === "webhook" ? <Loader2Icon className="animate-spin" /> : <SendIcon />} Đăng ký webhook với Zalo
-          </Button>
-        </div>
-        <details className="text-sm text-muted-foreground">
-          <summary className="cursor-pointer font-medium text-foreground">Cách mời bot vào nhóm</summary>
-          <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>Mở mini app Zalo Bot Creator, chọn bot, lấy link của bot ở trang thông tin bot.</li>
-            <li>Gửi link đó vào nhóm Zalo. Trưởng nhóm bấm vào link và xác nhận thêm bot vào nhóm.</li>
-            <li>
-              Trong nhóm, nhờ ai đó trả lời tin bot vừa gửi hoặc gõ @tên bot. Nhóm sẽ hiện ở danh sách bên dưới (cần bật webhook). Nếu chưa
-              bật webhook, lấy mã nhóm (chat.id) rồi thêm bằng tay.
-            </li>
-            <li>Bấm &quot;Gửi tin thử&quot; để chắc chắn bot gửi được, rồi đặt tên nhóm để bot nhận ra khách khi nhân viên tag bot ra lệnh.</li>
-          </ol>
-          <p className="mt-2">Zalo ghi chú tính năng bot trong nhóm đang thử nghiệm nên có thể thay đổi.</p>
-        </details>
-      </CardContent>
-    </Card>
-  );
-}
+/** Bot để gán cho nhóm. value rỗng = bot trong .env (hoặc bot mặc định khi .env không có token). */
+export type BotOption = { value: string; label: string };
 
 type Group = {
   id: string;
@@ -109,9 +24,11 @@ type Group = {
   name: string;
   isActive: boolean;
   lastSeen: string | null;
+  /** bot đang ở trong nhóm; rỗng = bot trong .env / bot mặc định */
+  botId: string;
 };
 
-function GroupRow({ group, tokenSet }: { group: Group; tokenSet: boolean }) {
+function GroupRow({ group, tokenSet, bots }: { group: Group; tokenSet: boolean; bots: BotOption[] }) {
   const [name, setName] = useState(group.name);
   const [pending, startTransition] = useTransition();
 
@@ -134,6 +51,17 @@ function GroupRow({ group, tokenSet }: { group: Group; tokenSet: boolean }) {
           {group.lastSeen ? ` · thấy lần cuối ${group.lastSeen}` : ""}
         </p>
       </TableCell>
+      {bots.length > 1 && (
+        <TableCell>
+          <NativeSelect value={group.botId} disabled={pending} onChange={(e) => patch({ botId: e.target.value })} aria-label={`Bot của nhóm ${group.name}`} className="h-9 min-w-40">
+            {bots.map((b) => (
+              <option key={b.value} value={b.value}>
+                {b.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </TableCell>
+      )}
       <TableCell>
         <Switch checked={group.isActive} disabled={pending} onCheckedChange={(v) => patch({ isActive: v })} aria-label="Bật nhóm" />
       </TableCell>
@@ -164,14 +92,20 @@ function GroupRow({ group, tokenSet }: { group: Group; tokenSet: boolean }) {
   );
 }
 
-export function GroupsBoard({ groups, tokenSet }: { groups: Group[]; tokenSet: boolean }) {
+/**
+ * Danh sách nhóm. `bots` có từ hai lựa chọn trở lên (đã kết nối nhiều bot) thì mỗi nhóm hiện thêm ô chọn bot: nhóm tự nhận
+ * qua webhook đã gắn sẵn đúng bot, nhóm thêm bằng tay thì quản trị viên chọn bot đang ở trong nhóm đó.
+ */
+export function GroupsBoard({ groups, tokenSet, bots }: { groups: Group[]; tokenSet: boolean; bots: BotOption[] }) {
+  const multi = bots.length > 1;
   const [name, setName] = useState("");
   const [chatId, setChatId] = useState("");
+  const [botId, setBotId] = useState(bots[0]?.value ?? "");
   const [pending, startTransition] = useTransition();
 
   function add() {
     startTransition(async () => {
-      const r = await addGroupAction({ name, chatId });
+      const r = await addGroupAction({ name, chatId, botId: multi ? botId : null });
       report(r);
       if (r.ok) {
         setName("");
@@ -190,13 +124,14 @@ export function GroupsBoard({ groups, tokenSet }: { groups: Group[]; tokenSet: b
             <TableHeader>
               <TableRow>
                 <TableHead>Nhóm</TableHead>
+                {multi && <TableHead>Bot</TableHead>}
                 <TableHead>Bật</TableHead>
                 <TableHead className="text-right">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {groups.map((g) => (
-                <GroupRow key={`${g.id}:${g.name}`} group={g} tokenSet={tokenSet} />
+                <GroupRow key={`${g.id}:${g.name}`} group={g} tokenSet={tokenSet} bots={bots} />
               ))}
             </TableBody>
           </Table>
@@ -217,6 +152,18 @@ export function GroupsBoard({ groups, tokenSet }: { groups: Group[]; tokenSet: b
           Mã nhóm (chat id)
           <Input value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="Dán chat.id của nhóm" className="h-10" />
         </label>
+        {multi && (
+          <label className="flex min-w-40 flex-col gap-1 text-sm">
+            Bot đang ở trong nhóm
+            <NativeSelect value={botId} onChange={(e) => setBotId(e.target.value)} className="h-10">
+              {bots.map((b) => (
+                <option key={b.value} value={b.value}>
+                  {b.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+        )}
         <Button type="submit" className="h-10" disabled={pending}>
           {pending ? <Loader2Icon className="animate-spin" /> : <PlusIcon />} Thêm nhóm
         </Button>

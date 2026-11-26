@@ -1,4 +1,6 @@
 import "server-only";
+import { REFERENCE_TAG_VERSION } from "@/lib/imaging/reference-tag";
+import { refTagKeys } from "@/lib/storage/keys";
 import { db } from "@/lib/db";
 import { getStorage } from "@/lib/storage";
 import { getQuotedMaterialIds } from "./usage";
@@ -41,7 +43,9 @@ export async function deleteMaterials(ids: string[]): Promise<DeleteMaterialsRes
     }
     result.deleted.push(m.code);
     // dọn file ảnh mẫu của chất liệu (lỗi dọn file không làm hỏng kết quả xóa); không đụng tới ảnh đã tạo (finalPath/originalPath của GeneratedImage)
-    const files = [m.layer1Path, m.layer2Path, m.productPhotoPath, m.referencePath].filter((k): k is string => !!k);
+    const files = [m.layer1Path, m.layer2Path, m.productPhotoPath, m.referencePath, ...(m.referencePath ? refTagKeys(m.referencePath, REFERENCE_TAG_VERSION) : [])].filter(
+      (k): k is string => !!k,
+    );
     await Promise.all(files.map((k) => storage.delete(k).catch(() => {})));
   }
   const found = new Set(materials.map((m) => m.id));

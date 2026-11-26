@@ -5,11 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DailyBars } from "@/components/stats/daily-bars";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import { getEnv } from "@/lib/env";
+import { isZaloConfigured } from "@/lib/zalo";
 import { getZaloSettings, type ZaloSettings } from "@/lib/zalo/settings";
 import { loadZaloStats } from "@/lib/zalo/stats";
 import { CleanupCard, MasterSwitch } from "./overview-cards";
-import { ConnectionCard } from "./zalo-board";
 
 export const metadata: Metadata = { title: "Cài đặt Zalo" };
 
@@ -29,19 +28,37 @@ function featureRows(s: ZaloSettings): Row[] {
 
 export default async function ZaloAdminPage() {
   await requireAdmin();
-  const env = getEnv();
-  const [settings, stats, messages] = await Promise.all([getZaloSettings(), loadZaloStats(), db.zaloMessage.count()]);
+  const [settings, stats, messages, configured, dbBots, personal] = await Promise.all([
+    getZaloSettings(),
+    loadZaloStats(),
+    db.zaloMessage.count(),
+    isZaloConfigured(),
+    db.zaloBot.count({ where: { isActive: true } }),
+    db.zaloAccount.count(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
-      <ConnectionCard
-        tokenSet={!!env.ZALO_BOT_TOKEN}
-        secretSet={!!env.ZALO_WEBHOOK_SECRET}
-        webhookUrl={`${env.APP_URL.replace(/\/$/, "")}/api/webhooks/zalo`}
-        isHttps={env.APP_URL.startsWith("https://")}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            Kết nối Zalo
+            <Badge variant={configured ? "default" : "secondary"}>{configured ? "Đã có bot" : "Chưa có bot"}</Badge>
+          </CardTitle>
+          <CardDescription>
+            {configured
+              ? `Đang kết nối ${dbBots > 0 ? `${dbBots} bot thêm trên web` : "bot đặt trong file .env"}${personal > 0 ? ` và ${personal} tài khoản Zalo cá nhân` : ""}.`
+              : "Chưa kết nối bot Zalo nào nên các chức năng bên dưới chưa chạy."}{" "}
+            Thêm bot, đổi token, đăng ký webhook và quét QR tài khoản Zalo cá nhân nay nằm ở{" "}
+            <Link href="/admin/connections/zalo" className="underline underline-offset-4">
+              Hệ thống &gt; Kết nối &gt; Zalo
+            </Link>
+            .
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
-      <MasterSwitch enabled={settings.enabled} tokenSet={!!env.ZALO_BOT_TOKEN} />
+      <MasterSwitch enabled={settings.enabled} tokenSet={configured} />
 
       <Card>
         <CardHeader>

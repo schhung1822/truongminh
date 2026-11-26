@@ -466,6 +466,11 @@ function ImageCard({
           <p className="min-w-0 flex-1 truncate font-medium" title={img.label}>
             {img.label}
           </p>
+          {img.quality && (
+            <Badge variant="secondary" title="AI vẽ từng mảnh 4 chất liệu rồi ghép lại, mỗi mảnh tính một lượt">
+              Chất lượng cao
+            </Badge>
+          )}
           {pickedCount > 0 && <Badge variant="outline" className="border-primary text-primary">Đã chọn {pickedCount}</Badge>}
           {img.status !== "SUCCESS" && <StatusBadge img={img} />}
         </div>

@@ -1,4 +1,4 @@
-import { MAX_MATERIALS_PER_IMAGE } from "@/lib/image-options";
+import { MAX_MATERIALS_PER_IMAGE, QUALITY_TILE_CELLS } from "@/lib/image-options";
 
 /**
  * Một trang mẫu có thể chứa nhiều chất liệu hơn số ô của một ảnh. Khi tạo ảnh, danh sách chất liệu
@@ -22,6 +22,23 @@ export function splitIntoImages<T>(items: readonly T[], cols: number, rows: numb
 /** Số ảnh sẽ được tạo từ một trang mẫu có `usable` chất liệu dùng được. */
 export function countSheetImages(usable: number, cols: number, rows: number): number {
   return usable <= 0 ? 0 : Math.ceil(usable / materialsPerImage(cols, rows));
+}
+
+/**
+ * Số tác vụ AI (= số lượt tính vào hạn mức, = số lần trả tiền) để tạo MỘT ảnh có `materials` chất liệu.
+ * Ảnh thường: 1. Chế độ chất lượng cao (D120): AI vẽ từng mảnh 4 chất liệu rồi ghép, nên bằng số mảnh.
+ */
+export function tasksForImage(materials: number, quality: boolean): number {
+  if (materials <= 0) return 0;
+  return quality ? Math.ceil(materials / QUALITY_TILE_CELLS) : 1;
+}
+
+/** Tổng số tác vụ AI khi tạo một trang mẫu có `usable` chất liệu dùng được (trang dài chia nhiều ảnh). */
+export function countSheetTasks(usable: number, cols: number, rows: number, quality: boolean): number {
+  const size = materialsPerImage(cols, rows);
+  let total = 0;
+  for (let left = usable; left > 0; left -= size) total += tasksForImage(Math.min(size, left), quality);
+  return total;
 }
 
 /** Tên hiển thị của một ảnh: trang nhiều ảnh thì thêm "(2/10)" để phân biệt. */

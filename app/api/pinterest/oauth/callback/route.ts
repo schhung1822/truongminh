@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { logActivity } from "@/lib/activity";
 import { requireAdmin } from "@/lib/auth/dal";
 import { encryptSecret } from "@/lib/crypto/secret-box";
 import { db } from "@/lib/db";
@@ -8,7 +9,7 @@ import { exchangeCode, getAccount, PinterestApiError } from "@/lib/pinterest/cli
 import { PINTEREST_STATE_COOKIE } from "@/lib/pinterest/oauth-state";
 
 function toAdminError(message: string): NextResponse {
-  return NextResponse.redirect(`${getEnv().APP_URL.replace(/\/+$/, "")}/admin/pinterest?error=${encodeURIComponent(message)}`);
+  return NextResponse.redirect(`${getEnv().APP_URL.replace(/\/+$/, "")}/admin/connections/pinterest?error=${encodeURIComponent(message)}`);
 }
 
 /** Pinterest chuyển người dùng về đây sau khi họ bấm "Cho phép" (hoặc "Từ chối") ở trang xác nhận quyền. */
@@ -58,11 +59,12 @@ export async function GET(req: Request) {
         lastSyncError: null,
       },
     });
+    await logActivity({ actor: admin, action: "PINTEREST_CONNECT", target: `@${info.username}` });
   } catch (e) {
     const message = e instanceof PinterestApiError ? e.message : e instanceof Error ? e.message : "Lỗi không rõ.";
     console.error("Kết nối Pinterest thất bại:", message);
     return toAdminError(`Không kết nối được: ${message}`);
   }
 
-  return NextResponse.redirect(`${getEnv().APP_URL.replace(/\/+$/, "")}/admin/pinterest?connected=1`);
+  return NextResponse.redirect(`${getEnv().APP_URL.replace(/\/+$/, "")}/admin/connections/pinterest?connected=1`);
 }

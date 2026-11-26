@@ -1,136 +1,171 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ChevronRightIcon, PinIcon, XIcon } from "lucide-react";
-import { toast } from "sonner";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { ArrowLeftIcon, XIcon } from "lucide-react";
+import type { PickerPin } from "@/app/(app)/sessions/[id]/design/pinterest-actions";
+import { Button } from "@/components/ui/button";
 import { Explorer } from "@/components/customers/explorer";
-import { QuickCreate, type QuickCreateData } from "@/components/customers/quick-create";
-import { useFolderNav } from "@/components/customers/use-folder-nav";
-import { FolderTile, TileGrid } from "@/components/folder-ui";
-import { cn } from "@/lib/utils";
+import { LogoPanel } from "@/components/customers/logo-panel";
+import { preselectedSheets } from "@/lib/default-sheets";
+import type { QuickCreateData } from "@/components/customers/quick-create";
 import {
-  listLogoFavoritePinsAction,
-  listLogoSessionsAction,
-  removeLogoFavoritePinAction,
-  type CustomerOption,
-  type LogoFavoritePinOption,
-  type LogoSessionOption,
-} from "../sessions/new/actions";
+  useFolderNav,
+  type FolderNavInitial,
+} from "@/components/customers/use-folder-nav";
+import type { CustomerOption } from "../sessions/new/actions";
+import {
+  ConfirmStep,
+  SheetsStep,
+  type SheetOption,
+} from "../sessions/new/sheets-steps";
+
+type Step = "browse" | "sheets" | "confirm";
+
+const subscribeNever = () => () => {};
+const pinInUrl = () => new URLSearchParams(window.location.search).get("pin");
 
 /**
- * Trang Khách hàng: duyệt thư mục Khách hàng > Thương hiệu > Logo, mở lại các phiên đã làm,
- * và TẠO NGAY phiên mới với logo đang chọn (nút Tạo nhanh dùng trang mẫu mặc định) mà không cần qua Trang chính.
+ * Trang Khách hàng: duyệt thư mục Khách hàng > Thương hiệu > Logo, mở lại các phiên đã làm, và tạo phiên mới với logo
+ * đang chọn NGAY TẠI ĐÂY, đủ các cách như ở Trang chính: AI chọn chất liệu, Tất cả chất liệu, hoặc tự
+ * chọn trang mẫu rồi xác nhận. Không còn phải chuyển sang Trang chính để chọn trang mẫu.
  */
-export function CustomerBrowser({ customers, quick }: { customers: CustomerOption[]; quick: QuickCreateData }) {
-  const nav = useFolderNav(customers, null);
-  return (
-    <Explorer
-      nav={nav}
-      autoCreate
-      logoFooter={
-        nav.logo ? (
-          <LogoPanel key={nav.logo.id} logoId={nav.logo.id} quick={quick} />
-        ) : (
-          <p className="border-t pt-4 text-sm text-muted-foreground">
-            Tải logo mới lên để AI tự chọn chất liệu hợp và tạo ảnh mẫu, hoặc bấm vào một logo có sẵn để tạo phiên mới hay xem các phiên đã làm.
-          </p>
-        )
-      }
-    />
-  );
-}
+export function CustomerBrowser({
+  customers,
+  sheets,
+  quick,
+  initial,
+  pin,
+}: {
+  customers: CustomerOption[];
+  sheets: SheetOption[];
+  quick: QuickCreateData;
+  /** mở thẳng tới logo này (trang được gọi với ?logoId=) */
+  initial: FolderNavInitial | null;
+  /** mẫu Pinterest đã chọn ở trang Mẫu Pinterest (?pin=): chọn logo xong thì hộp thiết kế theo mẫu tự mở với mẫu này */
+  pin: PickerPin | null;
+}) {
+  const nav = useFolderNav(customers, initial);
+  const [step, setStep] = useState<Step>("browse");
+  // tick sẵn các trang mẫu mặc định, giống Trang chính
+  const [selectedSheets, setSelectedSheets] = useState<Set<string>>(() => preselectedSheets(sheets));
+  const { customer, brand, logo } = nav;
+  // Mẫu Pinterest chỉ còn "đang cầm" khi nó còn trên địa chỉ trang. Hộp thiết kế theo mẫu xóa nó khỏi địa chỉ sau khi tạo
+  // xong; nhờ vậy bấm Quay lại từ trang phiên (Next dựng lại trang này từ dữ liệu cũ, vẫn còn `pin`) không mở lại hộp.
+  const urlPinId = useSyncExternalStore(subscribeNever, pinInUrl, () => pin?.id ?? null);
+  const [pinDismissed, setPinDismissed] = useState(false);
+  const activePin = pin && !pinDismissed && urlPinId === pin.id ? pin : null;
 
-function LogoPanel({ logoId, quick }: { logoId: string; quick: QuickCreateData }) {
-  const [sessions, setSessions] = useState<LogoSessionOption[] | null>(null);
-  const [favorites, setFavorites] = useState<LogoFavoritePinOption[] | null>(null);
-
+  // Mở thẳng tới một logo: nạp danh sách logo của thương hiệu đó (bình thường chỉ nạp khi bấm mở thư mục)
   useEffect(() => {
-    let cancelled = false;
-    listLogoSessionsAction(logoId).then((r) => {
-      if (!cancelled) setSessions(r.sessions);
-    });
-    listLogoFavoritePinsAction(logoId).then((r) => {
-      if (!cancelled) setFavorites(r.favorites);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [logoId]);
+    if (initial) nav.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy một lần lúc mở trang
+  }, []);
 
-  function removeFavorite(favoriteId: string) {
-    setFavorites((cur) => cur?.filter((f) => f.id !== favoriteId) ?? cur);
-    void removeLogoFavoritePinAction(favoriteId).then((r) => {
-      if (r.error) toast.error(r.error);
-    });
+  // Ghi logo đang chọn lên địa chỉ trang: bấm vào một phiên rồi Quay lại (hoặc tải lại trang) là về đúng logo này,
+  // không bị trả về danh sách khách hàng từ đầu.
+  const logoId = logo?.id ?? null;
+  const pinId = activePin?.id ?? null;
+  useEffect(() => {
+    const sp = new URLSearchParams();
+    if (logoId) sp.set("logoId", logoId);
+    if (pinId) sp.set("pin", pinId);
+    const url = sp.size > 0 ? `/customers?${sp.toString()}` : "/customers";
+    if (window.location.pathname + window.location.search !== url)
+      window.history.replaceState(null, "", url);
+  }, [logoId, pinId]);
+
+  // Đang chọn trang mẫu / xác nhận cho logo đã chọn: thay khung duyệt thư mục bằng các bước đó, có nút quay lại.
+  if (step !== "browse" && customer && brand && logo) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10"
+            onClick={() => setStep("browse")}
+          >
+            <ArrowLeftIcon /> Về thư mục {brand.name}
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            Tạo ảnh mẫu cho <b className="text-foreground">{customer.name}</b> ·{" "}
+            {brand.name} ·{" "}
+            {step === "sheets"
+              ? "Bước 1/2: chọn trang mẫu"
+              : "Bước 2/2: xác nhận"}
+          </p>
+        </div>
+        {step === "sheets" ? (
+          <SheetsStep
+            sheets={sheets}
+            selected={selectedSheets}
+            onChange={setSelectedSheets}
+            onNext={() => setStep("confirm")}
+          />
+        ) : (
+          <ConfirmStep
+            customer={customer}
+            brand={brand}
+            logo={logo}
+            sheets={sheets.filter((x) => selectedSheets.has(x.id))}
+            quota={quick.quota}
+            showCost={quick.showCost}
+            imageModel={quick.imageModel}
+            qualityDefault={quick.qualityDefault}
+            onBack={() => setStep("sheets")}
+          />
+        )}
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-4 border-t pt-4">
-      <div className="flex flex-wrap gap-2">
-        <QuickCreate logoId={logoId} data={quick}>
-          <Link href={`/?logoId=${encodeURIComponent(logoId)}`} className={cn(buttonVariants({ variant: "outline" }), "h-12 px-5")}>
-            Chọn trang mẫu khác
-            <ChevronRightIcon />
-          </Link>
-        </QuickCreate>
-        <Link href={`/pinterest?logoId=${encodeURIComponent(logoId)}`} className={cn(buttonVariants({ variant: "outline" }), "h-12 px-5")}>
-          <PinIcon /> Chọn mẫu Pinterest cho khách
-        </Link>
-      </div>
-
-      {favorites && favorites.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium">Pin khách đã thích ({favorites.length})</p>
-          <div className="flex flex-wrap gap-2">
-            {favorites.map((f) => (
-              <div key={f.id} className="group relative size-16 overflow-hidden rounded-lg border">
-                <img src={f.sourceImageUrl} alt={f.title ?? "Pin"} className="size-full object-cover" loading="lazy" />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-0.5 right-0.5 size-5 opacity-0 transition-opacity group-hover:opacity-100"
-                  title="Bỏ lưu pin này"
-                  aria-label="Bỏ lưu pin này"
-                  onClick={() => removeFavorite(f.id)}
-                >
-                  <XIcon className="size-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
+    <div className="flex flex-col gap-3">
+      {activePin && (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-lg border bg-primary/5 p-2 text-sm"
+          role="status"
+        >
+          <img
+            src={activePin.sourceImageUrl}
+            alt={activePin.title ?? "Mẫu Pinterest đã chọn"}
+            className="size-14 shrink-0 rounded-md border object-cover"
+          />
+          <span className="min-w-0 flex-1">
+            <b>Đang cầm một mẫu Pinterest.</b>{" "}
+            {logo
+              ? "Bấm nút Mẫu Pinterest bên dưới để thiết kế logo này theo mẫu."
+              : "Mở thư mục khách hàng rồi bấm vào logo cần thiết kế theo mẫu này."}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setPinDismissed(true)}
+          >
+            <XIcon /> Bỏ mẫu này
+          </Button>
         </div>
       )}
-
-      <p className="text-sm text-muted-foreground">
-        {sessions === null
-          ? "Đang tải các phiên..."
-          : sessions.length === 0
-            ? "Logo này chưa có phiên nào."
-            : `${sessions.length} phiên đã làm với logo này:`}
-      </p>
-      {sessions && sessions.length > 0 && (
-        <TileGrid>
-          {sessions.map((s) => (
-            <FolderTile
-              key={s.id}
-              href={`/sessions/${s.id}`}
-              name={`Phiên ${s.createdAt}`}
-              subtitle={s.creatorName}
-              footer={
-                s.running > 0
-                  ? `${s.running} đang tạo · ${s.done}/${s.total} xong`
-                  : s.failed > 0
-                    ? `${s.failed} lỗi · ${s.done}/${s.total} xong`
-                    : `${s.done}/${s.total} ảnh xong`
-              }
-              tone={s.running > 0 ? "busy" : s.failed > 0 ? "error" : "default"}
+      <Explorer
+        nav={nav}
+        autoCreate
+        logoFooter={
+          logo ? (
+            <LogoPanel
+              key={`${logo.id}:${activePin?.id ?? ""}`}
+              logoId={logo.id}
+              quick={quick}
+              onPickSheets={() => setStep("sheets")}
+              initialPins={activePin ? [activePin] : undefined}
             />
-          ))}
-        </TileGrid>
-      )}
+          ) : (
+            <p className="border-t pt-4 text-sm text-muted-foreground">
+              Bấm vào một logo để tạo ảnh mẫu hoặc xem các phiên đã làm.
+            </p>
+          )
+        }
+      />
     </div>
   );
 }

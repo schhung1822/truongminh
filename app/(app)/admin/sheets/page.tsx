@@ -35,8 +35,8 @@ export default async function SheetsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Trang mẫu</h1>
           <p className="text-muted-foreground">
-            Số cột x hàng là bố cục của một ảnh. Trang có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh (ví dụ 80 chất liệu, mỗi ảnh 8 ô: 10 ảnh). Trang đánh dấu <b>Mặc định</b> sẽ được dùng cho nút &quot;Tạo nhanh&quot;
-            (sale không cần chọn trang mẫu). Có thể đặt nhiều trang mặc định.
+            Số cột x hàng là bố cục của một ảnh. Trang có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh (ví dụ 80 chất liệu, mỗi ảnh 8 ô: 10 ảnh). Trang đánh dấu <b>Mặc định</b> sẽ được tick sẵn khi sale bấm &quot;Chọn bộ chất liệu&quot;
+            (sale chỉ cần bấm tiếp, không phải tự chọn). Có thể đặt nhiều trang mặc định.
           </p>
         </div>
         <Link href="/admin/sheets/new" className={buttonVariants({ className: "h-10" })}>

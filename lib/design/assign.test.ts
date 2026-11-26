@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assignStyles, validateDesignRequest } from "./assign";
+import { MAX_STYLE_REF_PINS } from "@/lib/image-options";
+import { PIN_DESIGN_MAX_PINS, validatePinDesignRequest, assignStyles, validateDesignRequest } from "./assign";
 
 describe("assignStyles", () => {
   it("các phương án của cùng một chất liệu dùng kiểu khác nhau khi đủ kiểu", () => {
@@ -48,5 +49,30 @@ describe("validateDesignRequest", () => {
   it("chặn tạo quá nhiều ảnh một lần", () => {
     expect(validateDesignRequest({ materialCount: 10, variants: 4, productType: "x" })).toMatch(/vượt giới hạn/);
     expect(validateDesignRequest({ materialCount: 11, variants: 1, productType: "x" })).toMatch(/tối đa 10 chất liệu/);
+  });
+});
+
+describe("validatePinDesignRequest", () => {
+  const ok = { pinCount: 1, materialCount: 3, variants: 1, productType: "Móc khóa" };
+
+  it("hợp lệ với 1 đến 3 mẫu", () => {
+    expect(validatePinDesignRequest(ok)).toBeNull();
+    expect(validatePinDesignRequest({ ...ok, pinCount: 3 })).toBeNull();
+  });
+
+  it("chặn không có mẫu hoặc quá nhiều mẫu", () => {
+    expect(validatePinDesignRequest({ ...ok, pinCount: 0 })).toMatch(/ít nhất một mẫu/);
+    expect(validatePinDesignRequest({ ...ok, pinCount: 4 })).toMatch(/tối đa 3 mẫu/);
+  });
+
+  it("các thông số còn lại kiểm tra như Bước 2", () => {
+    expect(validatePinDesignRequest({ ...ok, materialCount: 2.5 })).toMatch(/Số chất liệu không hợp lệ/);
+    expect(validatePinDesignRequest({ ...ok, materialCount: 0 })).toMatch(/ít nhất một chất liệu/);
+    expect(validatePinDesignRequest({ ...ok, productType: " " })).toMatch(/loại sản phẩm/);
+    expect(validatePinDesignRequest({ ...ok, variants: 9 })).toMatch(/từ 1 đến 4/);
+  });
+
+  it("số mẫu tối đa khớp số ảnh phong cách tối đa của một ảnh thiết kế", () => {
+    expect(PIN_DESIGN_MAX_PINS).toBe(MAX_STYLE_REF_PINS);
   });
 });

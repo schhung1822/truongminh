@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useTransition } from "react";
-import { CopyIcon, Loader2Icon, PauseIcon, PlayIcon, ShieldOffIcon } from "lucide-react";
+import { CopyIcon, Loader2Icon, PauseIcon, PlayIcon, PlusIcon, ShieldOffIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -96,9 +96,13 @@ export function AccountActions({ id, status, canReenable }: { id: string; status
   );
 }
 
-export function TokenForm({ accounts }: { accounts: { id: string; displayName: string }[] }) {
+/**
+ * Ô tạo mã kết nối cho một máy mới của MỘT nick (nằm ngay trong thẻ của nick đó). Mã gốc chỉ hiện đúng một lần ở đây.
+ */
+export function MachineTokenForm({ accountId }: { accountId: string }) {
   const [state, action, pending] = useActionState<FbFormState, FormData>(createTokenAction, {});
-  useToastOnOk(state);
+  const formRef = useRef<HTMLFormElement>(null);
+  useToastOnOk(state, () => formRef.current?.reset());
 
   async function copy(token: string) {
     try {
@@ -109,12 +113,8 @@ export function TokenForm({ accounts }: { accounts: { id: string; displayName: s
     }
   }
 
-  if (accounts.length === 0) {
-    return <p className="text-sm text-muted-foreground">Hãy thêm một nick Facebook ở mục trên trước khi tạo mã.</p>;
-  }
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {state.token && (
         <Alert>
           <AlertTitle>Mã kết nối (chỉ hiện một lần)</AlertTitle>
@@ -126,36 +126,25 @@ export function TokenForm({ accounts }: { accounts: { id: string; displayName: s
                 Sao chép mã
               </Button>
             </div>
-            <span>Dán mã này vào trang Cài đặt của extension. Đóng trang này là không xem lại được; lỡ mất thì thu hồi và tạo mã mới.</span>
+            <span>Dán mã này vào trang Cài đặt của extension trên máy đó. Rời trang này là không xem lại được; lỡ mất thì thu hồi và tạo mã mới.</span>
           </AlertDescription>
         </Alert>
       )}
-      <form action={action} className="grid gap-4 sm:grid-cols-3">
-        {state.error && (
-          <Alert variant="destructive" className="sm:col-span-3">
-            <AlertDescription>{state.error}</AlertDescription>
-          </Alert>
-        )}
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="tok-acc">Nick Facebook</Label>
-          <NativeSelect id="tok-acc" name="accountId" required defaultValue={accounts[0].id}>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.displayName}
-              </option>
-            ))}
-          </NativeSelect>
+      {state.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{state.error}</AlertDescription>
+        </Alert>
+      )}
+      <form ref={formRef} action={action} className="flex flex-wrap items-end gap-2">
+        <input type="hidden" name="accountId" value={accountId} />
+        <div className="flex min-w-56 flex-1 flex-col gap-1.5 sm:max-w-sm">
+          <Label htmlFor={`tok-label-${accountId}`}>Thêm máy: tên máy</Label>
+          <Input id={`tok-label-${accountId}`} name="label" required maxLength={100} className="h-10" placeholder="Máy Lan, Chrome chính" />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="tok-label">Tên máy</Label>
-          <Input id="tok-label" name="label" required maxLength={100} className="h-10" placeholder="Máy Lan, Chrome chính" />
-        </div>
-        <div className="flex items-end">
-          <Button type="submit" className="h-10 px-4" disabled={pending}>
-            {pending && <Loader2Icon className="animate-spin" />}
-            Tạo mã kết nối
-          </Button>
-        </div>
+        <Button type="submit" variant="outline" className="h-10 px-4" disabled={pending}>
+          {pending ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
+          Tạo mã kết nối
+        </Button>
       </form>
     </div>
   );

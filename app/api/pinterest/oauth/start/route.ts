@@ -6,7 +6,7 @@ import { getEnv, getPinterestConfig } from "@/lib/env";
 import { buildAuthorizeUrl } from "@/lib/pinterest/client";
 import { PINTEREST_STATE_COOKIE } from "@/lib/pinterest/oauth-state";
 
-/** Bấm "Kết nối Pinterest" ở /admin/pinterest đi vào đây, chuyển sang trang Pinterest để xác nhận quyền. */
+/** Bấm "Kết nối Pinterest" ở /admin/connections/pinterest đi vào đây, chuyển sang trang Pinterest để xác nhận quyền. */
 export async function GET() {
   await requireAdmin();
   const config = getPinterestConfig();

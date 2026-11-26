@@ -253,7 +253,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
             <TableBody>
               {userRows.map(({ u, t }) => {
                 const usedToday = todayByUser.get(u.id) ?? 0;
-                const near = u.role === "SALE" && settings.dailyLimitPerSale > 0 && usedToday >= settings.dailyLimitPerSale * 0.8;
+                const near = u.role !== "ADMIN" && settings.dailyLimitPerSale > 0 && usedToday >= settings.dailyLimitPerSale * 0.8;
                 return (
                   <TableRow key={u.id} className={cn(!u.isActive && "opacity-60")}>
                     <TableCell>

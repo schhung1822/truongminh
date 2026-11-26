@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { finishRule } from "./finish";
-import { buildMaterialsList, extractVariables, renderDesignPrompt, renderPrompt, styleReferenceNote, validateTemplate } from "./render";
+import { buildMaterialsList, extractVariables, FACES_NOTE, REFERENCE_STRIP_NOTE, renderDesignPrompt, renderPrompt, styleReferenceNote, validateTemplate } from "./render";
 
 describe("styleReferenceNote", () => {
   it("nhắc đúng số thứ tự ảnh tham chiếu và dặn không chép nội dung (một ảnh)", () => {
@@ -109,9 +109,28 @@ describe("buildMaterialsList", () => {
 
   it("trang chưa đầy: dặn AI để trống các ô còn lại", () => {
     const list = buildMaterialsList(Array.from({ length: 6 }, () => m("y")), { cols: 2, rows: 5 });
-    expect(list.split("\n").at(-1)).toBe("Cells 7 to 10: leave completely empty (plain white).");
+    expect(cellLines(list).at(-1)).toBe("Cells 7 to 10: leave completely empty (plain white).");
     const one = buildMaterialsList(Array.from({ length: 9 }, () => m("y")), { cols: 2, rows: 5 });
-    expect(one.split("\n").at(-1)).toBe("Cell 10: leave completely empty (plain white).");
+    expect(cellLines(one).at(-1)).toBe("Cell 10: leave completely empty (plain white).");
+  });
+
+  it("D123: dòng của ô ghi màu mặt trước / mặt sau khi chất liệu có dữ liệu, hàng cắt chỉ ghi mặt trước", () => {
+    const engrave = { printTech: "Khắc laser", technique: "khac-laser", frontColorName: "đen xanh than", frontColorFamily: "den", backColorName: "trắng", backColorFamily: "trang", surfaceFinish: "mo" };
+    const cut = { printTech: "Cắt laser", technique: "cat-laser", frontColorName: "bạc gương", frontColorFamily: "bac", backColorName: "xám", backColorFamily: "xam", surfaceFinish: "guong" };
+    expect(cellLines(buildMaterialsList([engrave, cut], { cols: 2, rows: 1 }))).toEqual([
+      'Cell 1 (row 1, column 1) = reference image 2, type ENGRAVED (technique: Khắc laser); untouched face = FRONT panel: matte black "đen xanh than"; engraved marks = BACK panel: white "trắng"',
+      'Cell 2 (row 1, column 2) = reference image 3, type CUT-ONLY (technique: Cắt laser); material (FRONT panel only): mirror silver "bạc gương"',
+    ]);
+  });
+
+  it("D123: cuối danh sách dặn cách đọc dải nhãn trên ảnh tham chiếu và không tráo hai mặt", () => {
+    const list = buildMaterialsList([m("Khắc laser", "khac-laser")], { cols: 1, rows: 1 });
+    expect(list).toContain(REFERENCE_STRIP_NOTE);
+    expect(list).toContain(FACES_NOTE);
+    expect(list.split("\n").at(-1)).toBe(FACES_NOTE);
+    expect(REFERENCE_STRIP_NOTE).toMatch(/`CELL n` on the strip is the number of the cell/);
+    expect(REFERENCE_STRIP_NOTE).toMatch(/Never draw the strip, its number or its words/);
+    expect(FACES_NOTE).toMatch(/never swap the two faces/);
   });
 
   it("gộp khoảng trắng và xuống dòng trong tên công nghệ in", () => {

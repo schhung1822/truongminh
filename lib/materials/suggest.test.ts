@@ -36,6 +36,33 @@ describe("catalogLine", () => {
 });
 
 describe("buildPickMessages", () => {
+  it("D125, có mẫu sản phẩm khách thích: nói rõ ảnh nào là logo, ảnh nào là mẫu, nêu loại sản phẩm và công nghệ ưu tiên", () => {
+    const { user } = buildPickMessages({ count: 3, materials: catalog, sample: { images: 2, productType: "  Móc   khóa ", techniques: ["Khắc laser"] } });
+    expect(user).toContain("Ảnh đính kèm ĐẦU TIÊN là logo của khách. 2 ảnh tiếp theo là các MẪU SẢN PHẨM khách thích");
+    expect(user).toContain("- Khách muốn làm: Móc khóa.");
+    expect(user).toContain("Ưu tiên chất liệu có màu, bề mặt và cảm giác gần với (các) mẫu sản phẩm khách thích");
+    expect(user).toContain("Mẫu khách thích thuộc nhóm công nghệ: Khắc laser.");
+    expect(user).not.toContain("Giữ cả hai công nghệ");
+    expect(user).toContain("Chọn đúng 3 chất liệu");
+  });
+
+  it("D125, một ảnh mẫu thì gọi là ảnh thứ hai; không gửi được ảnh mẫu thì chỉ còn phần chữ; board chưa gắn công nghệ thì giữ câu dặn cũ", () => {
+    const one = buildPickMessages({ count: 2, materials: catalog, sample: { images: 1, productType: "Ví da", techniques: [] } }).user;
+    expect(one).toContain("Ảnh thứ hai là MẪU SẢN PHẨM khách thích");
+    expect(one).toContain("Giữ cả hai công nghệ");
+    const none = buildPickMessages({ count: 2, materials: catalog, sample: { images: 0, productType: "Ví da", techniques: [] } }).user;
+    expect(none.startsWith("Ảnh đính kèm là logo của khách.")).toBe(true);
+    expect(none).toContain("- Khách muốn làm: Ví da.");
+    expect(none).not.toContain("mẫu sản phẩm khách thích, nhưng");
+  });
+
+  it("không có mẫu thì câu hỏi giữ nguyên như trước (không nhắc loại sản phẩm)", () => {
+    const { user } = buildPickMessages({ count: 3, materials: catalog });
+    expect(user.startsWith("Ảnh đính kèm là logo của khách.")).toBe(true);
+    expect(user).not.toContain("Khách muốn làm");
+    expect(user).toContain("Giữ cả hai công nghệ");
+  });
+
   it("câu system có dấu nhận diện, câu hỏi nêu đúng số cần chọn và liệt kê đủ danh mục theo số thứ tự", () => {
     const { system, user } = buildPickMessages({ count: 3, materials: catalog });
     expect(system.startsWith(MATERIAL_PICK_MARKER)).toBe(true);
@@ -78,5 +105,55 @@ describe("parsePickResponse", () => {
     expect(parsePickResponse('{"summary":"x","picks":[]}', catalog, 24)).toBeNull();
     expect(parsePickResponse('{"summary":"x","picks":[{"id":99}]}', catalog, 24)).toBeNull();
     expect(parsePickResponse('{"summary":"x"}', catalog, 24)).toBeNull();
+  });
+});
+
+describe("parsePickResponse với câu trả lời không phải JSON chuẩn", () => {
+  it("đọc được dạng gpt-5-2 trả về thật: đối tượng JavaScript bọc trong <text> và JSON.stringify, tên khóa không có nháy", () => {
+    const text = `<text preserveWhitespace>{JSON.stringify({
+  summary: "Logo phong cách tối giản, hiện đại; tông đỏ, đen và trắng.",
+  isBadge: false,
+  picks: [
+    {id: 4, reason: "Xanh navy mờ tạo vẻ chuyên nghiệp."},
+    {id: 2, reason: "Đen xanh than, khắc lộ nền trắng tạo tương phản rõ với logo."},
+    {id: 5, reason: "Đỏ đô hợp tông chính của logo."}
+  ]
+})}</text>`;
+    const a = parsePickResponse(text, catalog, 24);
+    expect(a?.summary).toBe("Logo phong cách tối giản, hiện đại; tông đỏ, đen và trắng.");
+    expect(a?.isBadge).toBe(false);
+    expect(a?.picks.map((p) => p.code)).toEqual(["M4", "M2", "M5"]);
+    expect(a?.picks[1].reason).toBe("Đen xanh than, khắc lộ nền trắng tạo tương phản rõ với logo.");
+  });
+
+  it("câu trả lời bị cắt giữa chừng: lấy các lựa chọn đã viết xong", () => {
+    const text = '{"summary":"Logo đậm.","isBadge":true,"picks":[{"id":1,"reason":"hợp"},{"id":3,"reason":"tương phản"},{"id":5,"reas';
+    const a = parsePickResponse(text, catalog, 24);
+    expect(a?.isBadge).toBe(true);
+    expect(a?.picks.map((p) => p.code)).toEqual(["M1", "M3", "M5"]);
+    expect(a?.picks[2].reason).toBe("");
+  });
+
+  it("nháy đơn, dấu nháy thoát trong lý do, và thứ tự reason trước id", () => {
+    // String.raw để dấu gạch chéo ngược tới đúng bộ đọc như trong câu trả lời thật của AI
+    const text = String.raw`Kết quả: { summary: 'Logo \'cổ điển\'', picks: [ { reason: "Màu \"vàng\" sang", id: 2 }, { id: '3', reason: 'trơn, dễ đọc' } ] }`;
+    const a = parsePickResponse(text, catalog, 24);
+    expect(a?.summary).toBe("Logo 'cổ điển'");
+    expect(a?.picks).toEqual([
+      { materialId: "id2", code: "M2", name: "Chất liệu 2", reason: 'Màu "vàng" sang' },
+      { materialId: "id3", code: "M3", name: "Chất liệu 3", reason: "trơn, dễ đọc" },
+    ]);
+  });
+
+  it("chữ trong lý do giống tên khóa không làm hỏng việc đọc", () => {
+    const text = '{summary: "Logo có id: 7 trong tên", picks: [{id: 1, reason: "hợp, reason: rõ, id: 9"}]}';
+    const a = parsePickResponse(text, catalog, 24);
+    expect(a?.picks.map((p) => p.code)).toEqual(["M1"]);
+    expect(a?.picks[0].reason).toBe("hợp, reason: rõ, id: 9");
+  });
+
+  it("vẫn trả null khi không có lựa chọn nào đọc được", () => {
+    expect(parsePickResponse("{JSON.stringify({ summary: 'x', picks: [] })}", catalog, 24)).toBeNull();
+    expect(parsePickResponse("<text>Tôi không xem được ảnh</text>", catalog, 24)).toBeNull();
   });
 });

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { requireFbManager } from "@/lib/fb/access";
 import { canonicalProfileUrl } from "@/lib/fb/urls";
@@ -37,7 +38,8 @@ export async function createAccountAction(_prev: FbFormState, formData: FormData
     return { error: "Nick này đã có trong danh sách." };
   }
   await db.fbAccount.create({ data: { userId: ownerId, displayName: parsed.data.displayName, profileUrl } });
-  revalidatePath("/fb/connect");
+  await logActivity({ actor: user, action: "EXT_ACCOUNT_CREATE", target: parsed.data.displayName, detail: profileUrl });
+  revalidatePath("/admin/connections", "layout");
   return { ok: `Đã thêm nick ${parsed.data.displayName}.` };
 }
 
@@ -53,7 +55,8 @@ export async function setAccountStatusAction(accountId: string, status: "ACTIVE"
   if (account.status === "RESTRICTED" && user.role !== "ADMIN") return { error: "Nick đang bị hạn chế, chỉ quản trị viên bật lại được." };
 
   await db.fbAccount.update({ where: { id: accountId }, data: { status } });
-  revalidatePath("/fb/connect");
+  await logActivity({ actor: user, action: "EXT_ACCOUNT_STATUS", target: account.displayName, detail: status === "ACTIVE" ? "Bật lại" : "Tạm dừng" });
+  revalidatePath("/admin/connections", "layout");
   return { ok: status === "ACTIVE" ? "Đã bật lại nick." : "Đã tạm dừng nick." };
 }
 
@@ -76,20 +79,22 @@ export async function createTokenAction(_prev: FbFormState, formData: FormData):
   await db.extToken.create({
     data: { userId: account.userId, accountId: account.id, tokenHash: t.hash, tokenPrefix: t.prefix, label: parsed.data.label },
   });
-  revalidatePath("/fb/connect");
+  await logActivity({ actor: user, action: "EXT_TOKEN_CREATE", target: `${account.displayName} · ${parsed.data.label}`, detail: `Mã ${t.prefix}…` });
+  revalidatePath("/admin/connections", "layout");
   return { ok: "Đã tạo mã kết nối. Hãy sao chép ngay, mã này sẽ không hiện lại.", token: t.token };
 }
 
 /** Thu hồi mã: extension dùng mã này sẽ nhận lỗi 401 ở lần gọi kế tiếp. */
 export async function revokeTokenAction(tokenId: string): Promise<FbFormState> {
   const user = await requireFbManager();
-  const token = await db.extToken.findUnique({ where: { id: tokenId } });
+  const token = await db.extToken.findUnique({ where: { id: tokenId }, include: { account: { select: { displayName: true } } } });
   if (!token) return { error: "Không tìm thấy mã." };
   if (user.role !== "ADMIN" && token.userId !== user.id) return { error: "Đây không phải mã của bạn." };
   if (token.revokedAt) return { ok: "Mã này đã được thu hồi trước đó." };
 
   await db.extToken.update({ where: { id: tokenId }, data: { revokedAt: new Date() } });
-  revalidatePath("/fb/connect");
+  await logActivity({ actor: user, action: "EXT_TOKEN_REVOKE", target: `${token.account.displayName} · ${token.label}`, detail: `Mã ${token.tokenPrefix}…` });
+  revalidatePath("/admin/connections", "layout");
   return { ok: "Đã thu hồi mã. Extension dùng mã này sẽ ngừng hoạt động." };
 }
 
@@ -100,6 +105,6 @@ export async function saveFbConfigAction(_prev: FbFormState, formData: FormData)
   const parsed = fbConfigSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   await saveFbConfig(parsed.data);
-  revalidatePath("/fb/connect");
+  revalidatePath("/admin/connections", "layout");
   return { ok: "Đã lưu cấu hình." };
 }

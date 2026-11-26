@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { CheckIcon, ChevronRightIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { CheckIcon } from "lucide-react";
 import { Explorer } from "@/components/customers/explorer";
-import { QuickCreate, type QuickCreateData } from "@/components/customers/quick-create";
+import { LogoPanel } from "@/components/customers/logo-panel";
+import type { QuickCreateData } from "@/components/customers/quick-create";
 import { useFolderNav } from "@/components/customers/use-folder-nav";
-import { pickDefaultSheets } from "@/lib/default-sheets";
+import { pickDefaultSheets, preselectedSheets } from "@/lib/default-sheets";
 import { cn } from "@/lib/utils";
 import { ConfirmStep, SheetsStep, type QuotaInfo, type SheetOption } from "./sheets-steps";
 import type { BrandOption, CustomerOption, LogoOption } from "./actions";
@@ -29,7 +29,11 @@ export function NewSessionWizard({
   showCost,
   imageModel,
   auto,
+  allMaterials,
   isAdmin,
+  qualityDefault,
+  design,
+  startAtBrowse = false,
 }: {
   customers: CustomerOption[];
   initial: WizardInitial | null;
@@ -38,17 +42,34 @@ export function NewSessionWizard({
   showCost: boolean;
   imageModel: string;
   auto: QuickCreateData["auto"];
+  allMaterials: QuickCreateData["allMaterials"];
   isAdmin: boolean;
+  qualityDefault: boolean;
+  design: QuickCreateData["design"];
+  /** có `initial` nhưng vẫn đứng ở bước chọn logo (khi Quay lại từ một phiên), thay vì nhảy thẳng sang chọn trang mẫu */
+  startAtBrowse?: boolean;
 }) {
   const nav = useFolderNav(customers, initial);
-  const [step, setStep] = useState<Step>(initial ? "sheets" : "browse");
-  // mặc định chọn tất cả trang mẫu dùng được
-  const [selectedSheets, setSelectedSheets] = useState<Set<string>>(
-    () => new Set(sheets.filter((x) => x.usable > 0).map((x) => x.id)),
-  );
+  const [step, setStep] = useState<Step>(initial && !startAtBrowse ? "sheets" : "browse");
+  // tick sẵn các trang mẫu mặc định (chưa đặt trang mặc định nào thì tick tất cả trang dùng được)
+  const [selectedSheets, setSelectedSheets] = useState<Set<string>>(() => preselectedSheets(sheets));
 
   const stepIndex = STEP_LABELS.findIndex((s) => s.key === step);
   const { customer, brand, logo } = nav;
+
+  // Mở thẳng tới một logo ở bước chọn logo: nạp danh sách logo của thương hiệu đó
+  useEffect(() => {
+    if (initial && startAtBrowse) nav.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy một lần lúc mở trang
+  }, []);
+
+  // Ghi logo đang chọn lên địa chỉ trang (giống mục Khách hàng): bấm vào một phiên rồi Quay lại là về đúng logo này.
+  const logoId = logo?.id ?? null;
+  useEffect(() => {
+    if (step !== "browse") return;
+    const url = logoId ? `/?logoId=${encodeURIComponent(logoId)}&browse=1` : "/";
+    if (window.location.pathname + window.location.search !== url) window.history.replaceState(null, "", url);
+  }, [logoId, step]);
 
   function backToBrowse() {
     setStep("browse");
@@ -89,23 +110,14 @@ export function NewSessionWizard({
           autoCreate
           logoFooter={
             logo ? (
-              <div className="flex flex-col gap-3 border-t pt-4">
-                <p className="text-sm text-muted-foreground">
-                  Đã chọn logo {logo.width}x{logo.height}px. Bấm <b>AI chọn chất liệu</b> để AI tự chọn các chất liệu hợp với logo
-                  và tạo ảnh mẫu, <b>Tạo nhanh</b> để dùng trang mẫu mặc định, hoặc tự chọn trang mẫu khác.
-                </p>
-                <QuickCreate
-                  logoId={logo.id}
-                  data={{ defaultSheets: pickDefaultSheets(sheets), quota, showCost, imageModel, auto, isAdmin }}
-                >
-                  <Button type="button" variant="outline" className="h-12 px-5" onClick={() => setStep("sheets")}>
-                    Chọn trang mẫu khác
-                    <ChevronRightIcon />
-                  </Button>
-                </QuickCreate>
-              </div>
+              <LogoPanel
+                key={logo.id}
+                logoId={logo.id}
+                quick={{ defaultSheets: pickDefaultSheets(sheets), quota, showCost, imageModel, auto, allMaterials, isAdmin, qualityDefault, design }}
+                onPickSheets={() => setStep("sheets")}
+              />
             ) : (
-              <p className="border-t pt-4 text-sm text-muted-foreground">Chưa chọn logo nào. Bấm vào một logo để chọn.</p>
+              <p className="border-t pt-4 text-sm text-muted-foreground">Bấm vào một logo để tạo ảnh mẫu hoặc xem các phiên đã làm.</p>
             )
           }
         />
@@ -129,6 +141,7 @@ export function NewSessionWizard({
           quota={quota}
           showCost={showCost}
           imageModel={imageModel}
+          qualityDefault={qualityDefault}
           onBack={() => setStep("sheets")}
         />
       )}

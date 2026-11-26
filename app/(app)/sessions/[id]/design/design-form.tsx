@@ -97,7 +97,7 @@ export function DesignForm({
         router.push(`/sessions/${r.sessionId}`);
       } catch (e) {
         console.error("Bắt đầu thiết kế thất bại:", e);
-        setError("Không gửi được yêu cầu tới máy chủ. Vui lòng bấm lại.");
+        setError("Không gọi được máy chủ: có thể mất mạng, máy chủ đang khởi động lại, hoặc trang này mở từ trước một bản cập nhật. Hãy tải lại trang (F5) rồi bấm lại.");
       }
     });
   }

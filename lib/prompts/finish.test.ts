@@ -61,12 +61,23 @@ describe("finishRule", () => {
     expect(r).not.toMatch(/badge/);
   });
 
-  it("hàng khắc, logo dạng huy hiệu (D113): giữ hình bảng; khung viền + chữ + biểu tượng là lớp trên, nền khắc chìm lộ lớp dưới", () => {
+  it("hàng khắc, logo dạng huy hiệu (D122): giữ hình bảng; MẶT BẢNG là mặt decal gốc, chỉ khung viền + chữ + biểu tượng được khắc chìm lộ lớp dưới", () => {
     const r = finishRule("ENGRAVE", true);
     expect(r).toMatch(/keeps the logo's badge shape: ONE solid plate with the badge's outer shape/);
     expect(r).toMatch(/never the bare letters alone/);
-    expect(r).toMatch(/border line, symbol, wordmark and tagline are the untouched FRONT material \(LEFT panel\)/);
-    expect(r).toMatch(/background \(.*\) is engraved down into the plate, a hair below the top, and shows the BACK material \(RIGHT panel\)/);
+    expect(r).toMatch(/badge's background, is the untouched FRONT material \(LEFT panel\)/);
+    expect(r).toMatch(/border line, symbol, wordmark and tagline are engraved a hair below the surface and show the BACK material \(RIGHT panel\)/);
+    // không còn câu dặn khắc bỏ cả mảng nền của bản trước D122
+    expect(r).not.toMatch(/background \(.*\) is engraved down/);
+    expect(r).not.toMatch(/are the untouched FRONT material/);
+  });
+
+  it("hàng khắc (D122): phần bị khắc luôn nhỏ hơn phần mặt gốc còn giữ lại, không khắc bỏ cả mảng nền", () => {
+    for (const r of [finishRule("ENGRAVE"), finishRule("ENGRAVE", true)]) {
+      expect(r).toMatch(/engraved area \(the part showing the BACK material\) is always clearly SMALLER than the untouched FRONT surface/);
+      expect(r).toMatch(/Never engrave away a whole background or any large fill/);
+    }
+    expect(finishRule("CUT")).not.toMatch(/Engraving is used sparingly/);
   });
 
   it("hàng khắc (D114): giữ đúng cách tả vẻ khắc laser của phiên 13:27, nét mảnh sắc phẳng, khắc chìm chứ không nổi khối", () => {

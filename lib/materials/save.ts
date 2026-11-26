@@ -1,4 +1,6 @@
 import "server-only";
+import { REFERENCE_TAG_VERSION } from "@/lib/imaging/reference-tag";
+import { refTagKeys } from "@/lib/storage/keys";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { composeReference, processMaterialImage, type ProcessedImage } from "@/lib/imaging/material-images";
@@ -156,7 +158,7 @@ export async function saveMaterial(id: string | null, form: FormData): Promise<S
         update.referenceUpdatedAt = new Date();
         update.kieRefUrl = null; // ảnh đổi thì URL đã upload lên nhà cung cấp không còn đúng
         update.kieRefExpiresAt = null;
-        if (existing?.referencePath) toDelete.push(existing.referencePath);
+        if (existing?.referencePath) toDelete.push(existing.referencePath, ...refTagKeys(existing.referencePath, REFERENCE_TAG_VERSION));
       }
     }
 

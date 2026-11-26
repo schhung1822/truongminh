@@ -47,12 +47,22 @@ export function catalogLine(m: CatalogMaterial, n: number): string {
   return parts.filter(Boolean).join(" | ");
 }
 
-/** Câu system và câu hỏi (phần chữ) gửi AI; ảnh logo được nơi gọi đính kèm vào câu hỏi. */
-export function buildPickMessages(input: { count: number; materials: CatalogMaterial[] }): { system: string; user: string } {
+/**
+ * Ngữ cảnh "thiết kế theo mẫu Pinterest" (D125): khách đã ưng vài ảnh mẫu, AI chọn chất liệu hợp cả logo lẫn các mẫu đó.
+ * `images` = số ảnh mẫu nơi gọi đính kèm SAU ảnh logo (0 nếu không gửi được ảnh, khi đó chỉ dùng phần chữ).
+ */
+export type PickSample = { images: number; productType: string; techniques: string[] };
+
+/** Câu system và câu hỏi (phần chữ) gửi AI; ảnh logo (và ảnh mẫu, nếu có) được nơi gọi đính kèm vào câu hỏi. */
+export function buildPickMessages(input: { count: number; materials: CatalogMaterial[]; sample?: PickSample }): { system: string; user: string } {
   const count = Math.min(input.count, input.materials.length);
+  const sample = input.sample;
+  const techniques = sample?.techniques.map(clean).filter(Boolean) ?? [];
   const system = `${MATERIAL_PICK_MARKER} Bạn là chuyên viên tư vấn của một xưởng làm logo decal bằng khắc laser và cắt laser. Nhiệm vụ: xem ảnh logo của khách rồi chọn những chất liệu của xưởng hợp với logo đó nhất để làm mẫu cho khách xem. Chỉ trả về JSON hợp lệ, không thêm chữ nào khác.`;
   const user = [
-    "Ảnh đính kèm là logo của khách.",
+    !sample || sample.images === 0
+      ? "Ảnh đính kèm là logo của khách."
+      : `Ảnh đính kèm ĐẦU TIÊN là logo của khách. ${sample.images === 1 ? "Ảnh thứ hai là MẪU SẢN PHẨM" : `${sample.images} ảnh tiếp theo là các MẪU SẢN PHẨM`} khách thích (ảnh tham khảo, không phải sản phẩm của xưởng).`,
     "",
     "Việc 1. Nhận xét logo: phong cách, tông màu chính, nét mảnh hay đậm, có chữ nhỏ không.",
     "Việc 2. Logo có phải DẠNG HUY HIỆU/BẢNG không: tức là logo có sẵn một mảng nền riêng (chữ nhật, bo góc, tròn, khiên...) kèm đường khung viền bao quanh biểu tượng và chữ. Logo chỉ gồm biểu tượng và chữ đặt trên nền trống thì KHÔNG phải.",
@@ -60,10 +70,18 @@ export function buildPickMessages(input: { count: number; materials: CatalogMate
     "- Ưu tiên chất liệu có phong cách, màu và bề mặt hợp với nhận diện của logo và ngành hàng mà logo gợi ra.",
     "- Logo có nét rất mảnh hoặc chữ rất nhỏ: tránh họa tiết rối (caro, hoa văn, lấp lánh) làm khó đọc, ưu tiên bề mặt trơn và tương phản rõ.",
     "- Danh sách chọn ra phải đa dạng: không chọn toàn một màu hay một nhóm, để khách có nhiều hướng so sánh, nhưng cái nào cũng phải hợp logo.",
-    "- Giữ cả hai công nghệ nếu đều có chất liệu hợp: khắc laser (hai lớp, hai màu) và cắt laser (một lớp).",
+    ...(sample
+      ? [
+          `- Khách muốn làm: ${cut(clean(sample.productType), 120) || "sản phẩm gắn logo"}. Chất liệu phải hợp để làm loại sản phẩm này.`,
+          ...(sample.images > 0 ? ["- Ưu tiên chất liệu có màu, bề mặt và cảm giác gần với (các) mẫu sản phẩm khách thích, nhưng vẫn phải hợp logo."] : []),
+        ]
+      : []),
+    techniques.length > 0
+      ? `- Mẫu khách thích thuộc nhóm công nghệ: ${techniques.join(", ")}. Ưu tiên chất liệu dùng công nghệ này; chỉ chọn công nghệ khác khi không đủ chất liệu hợp.`
+      : "- Giữ cả hai công nghệ nếu đều có chất liệu hợp: khắc laser (hai lớp, hai màu) và cắt laser (một lớp).",
     "- Chỉ chọn trong danh sách, dùng đúng số thứ tự ở đầu dòng, không chọn trùng.",
     "",
-    "Trả về JSON đúng dạng:",
+    "Chỉ trả về MỘT đối tượng JSON hợp lệ đúng dạng dưới đây: tên khóa đặt trong dấu nháy kép, không bọc trong thẻ, hàm (ví dụ JSON.stringify) hay khối mã, không thêm chữ nào trước và sau.",
     '{"summary":"1-2 câu nhận xét logo bằng tiếng Việt","isBadge":true hoặc false,"picks":[{"id":<số thứ tự>,"reason":"lý do ngắn bằng tiếng Việt, tối đa 15 từ"}]}',
     "",
     `DANH SÁCH CHẤT LIỆU (${input.materials.length} dòng):`,
@@ -84,12 +102,53 @@ function extractJson(text: string): unknown {
   }
 }
 
+/** Một chuỗi trong nháy kép hoặc nháy đơn (có thể chứa dấu nháy đã thoát). Hai nhóm bắt: nội dung nháy kép, nội dung nháy đơn. */
+const STR = String.raw`"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'`;
+const KEY = (name: string) => String.raw`["']?${name}["']?\s*:\s*`;
+
+/** Bỏ dấu thoát của một chuỗi vừa bắt được bằng STR (nháy kép dùng JSON.parse; hỏng thì gỡ tay các dấu thoát thường gặp). */
+function unescapeCaptured(double: string | undefined, single: string | undefined): string {
+  if (double !== undefined) {
+    try {
+      return JSON.parse(`"${double}"`) as string;
+    } catch {
+      /* rơi xuống gỡ tay */
+    }
+  }
+  return (double ?? single ?? "").replace(/\\n/g, " ").replace(/\\(["'\\])/g, "$1");
+}
+
+/**
+ * Vớt nội dung khi AI trả lời KHÔNG phải JSON chuẩn nhưng vẫn đủ ý. Gặp thật với gpt-5-2 (11/2026): câu trả lời là
+ * `<text preserveWhitespace>{JSON.stringify({ summary: "...", isBadge: false, picks: [{id: 4, reason: "..."}, ...] })}`,
+ * tức đối tượng kiểu JavaScript (tên khóa không có nháy) bọc trong hàm và thẻ, JSON.parse từ chối toàn bộ. Cũng vớt được
+ * câu trả lời bị cắt giữa chừng: lấy các lựa chọn đã viết xong. Chỉ nhận đúng các mẩu có dạng {id: số, reason: "chuỗi"}.
+ */
+function salvage(text: string): { summary?: string; isBadge?: boolean; picks: { id: number; reason: string }[] } | null {
+  const picks: { id: number; reason: string; at: number }[] = [];
+  const idFirst = new RegExp(String.raw`\{\s*${KEY("id")}["']?(\d+)["']?\s*(?:,\s*${KEY("reason")}(?:${STR}))?`, "g");
+  for (const m of text.matchAll(idFirst)) picks.push({ id: Number(m[1]), reason: unescapeCaptured(m[2], m[3]), at: m.index });
+  const reasonFirst = new RegExp(String.raw`\{\s*${KEY("reason")}(?:${STR})\s*,\s*${KEY("id")}["']?(\d+)`, "g");
+  for (const m of text.matchAll(reasonFirst)) picks.push({ id: Number(m[3]), reason: unescapeCaptured(m[1], m[2]), at: m.index });
+  if (picks.length === 0) return null;
+  picks.sort((a, b) => a.at - b.at); // giữ thứ tự AI xếp
+
+  const summary = new RegExp(String.raw`${KEY("summary")}(?:${STR})`).exec(text);
+  const badge = new RegExp(String.raw`${KEY("isBadge")}["']?(true|false)`, "i").exec(text);
+  return {
+    summary: summary ? unescapeCaptured(summary[1], summary[2]) : undefined,
+    isBadge: badge ? badge[1].toLowerCase() === "true" : undefined,
+    picks: picks.map(({ id, reason }) => ({ id, reason })),
+  };
+}
+
 /**
  * Đọc câu trả lời của AI. Bỏ số thứ tự lạ hoặc trùng, giữ đúng thứ tự AI xếp, cắt còn `count`. Không có lựa chọn hợp lệ nào
- * thì trả null (nơi gọi báo lỗi, không tự tạo ảnh).
+ * thì trả null (nơi gọi báo lỗi, không tự tạo ảnh). Thử JSON chuẩn trước; không được thì vớt theo mẫu (xem salvage).
  */
 export function parsePickResponse(text: string, materials: CatalogMaterial[], count: number): LogoAnalysis | null {
-  const data = extractJson(text);
+  const strict = extractJson(text);
+  const data = strict && typeof strict === "object" && Array.isArray((strict as { picks?: unknown }).picks) ? strict : salvage(text);
   if (!data || typeof data !== "object") return null;
   const obj = data as { summary?: unknown; isBadge?: unknown; picks?: unknown };
   if (!Array.isArray(obj.picks)) return null;

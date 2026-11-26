@@ -7,8 +7,11 @@ export const ROLE_LABELS: Record<Role, string> = {
   SALE: "Sale",
 };
 
-/** Vai trò tạo được ở trang Người dùng (quản trị viên chỉ có ở lần cài đặt đầu, không tạo thêm qua web). */
-export const ASSIGNABLE_ROLES = ["SALE", "MKT"] as const satisfies readonly Role[];
+/**
+ * Vai trò gán được ở trang Người dùng. Từ D118 gồm cả quản trị viên, để xưởng có hơn một quản trị viên
+ * (trước đó quản trị viên chỉ tạo được lúc cài đặt, mất mật khẩu là phải sửa thẳng CSDL).
+ */
+export const ASSIGNABLE_ROLES = ["SALE", "MKT", "ADMIN"] as const satisfies readonly Role[];
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 export function roleLabel(role: Role): string {

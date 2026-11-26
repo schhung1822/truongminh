@@ -10,7 +10,7 @@ import { getStorage } from "@/lib/storage";
 import { zonedStartOfDay } from "@/lib/time";
 import { buildPlanPrompt, parsePlan, summarizeWeather, upcomingHolidays, type MediaChoice, type WeatherDay } from "./care-plan";
 import { ZaloError } from "./client";
-import { getZaloClient } from "./index";
+import { getBotClient, NO_BOT_MESSAGE } from "./index";
 import { getZaloSettings } from "./settings";
 import { splitMessage, stripMarkdown } from "./text";
 import { toJpeg } from "@/lib/imaging/webp";
@@ -172,9 +172,8 @@ export type PublishResult = { ok: true } | { ok: false; error: string };
 
 /** Đăng một bài vào nhóm ngay. Bài đã đăng hoặc đang đăng thì từ chối (không đăng trùng). */
 export async function publishPost(postId: string): Promise<PublishResult> {
-  const client = getZaloClient();
   const s = await getZaloSettings();
-  if (!client || !s.enabled || !s.care) return { ok: false, error: "Zalo hoặc kịch bản chăm sóc đang tắt." };
+  if (!s.enabled || !s.care) return { ok: false, error: "Zalo hoặc kịch bản chăm sóc đang tắt." };
 
   const claimed = await db.zaloPost.updateMany({ where: { id: postId, status: { in: ["PLANNED", "FAILED"] } }, data: { status: "SENDING", error: null } });
   if (claimed.count === 0) return { ok: false, error: "Bài này đã đăng, đang đăng hoặc đã bị bỏ qua." };
@@ -187,6 +186,8 @@ export async function publishPost(postId: string): Promise<PublishResult> {
     return { ok: false, error };
   };
   if (!post.group.isActive) return fail("Nhóm đang tắt.");
+  const client = await getBotClient(post.group.botId); // đăng bằng đúng bot đang ở trong nhóm
+  if (!client) return fail(NO_BOT_MESSAGE);
 
   try {
     await shared().zaloSend(async () => {

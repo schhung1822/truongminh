@@ -46,7 +46,7 @@ Kết quả ở thư mục `extension/dist/`. Gửi thư mục này cho nhân s�
 
 1. Mở `chrome://extensions`, bật **Chế độ nhà phát triển** (góc phải trên).
 2. Bấm **Tải tiện ích đã giải nén** và chọn thư mục `dist`. Ghim biểu tượng extension lên thanh công cụ (nút mảnh ghép).
-3. Trên webapp: **Lead Facebook > Kết nối extension**: thêm nick Facebook của mình, bấm **Tạo mã kết nối** (mã chỉ hiện một lần, sao chép ngay).
+3. Trên webapp: **Hệ thống > Kết nối > Extension Facebook**: thêm nick Facebook của mình, đặt tên máy trong thẻ của nick rồi bấm **Tạo mã kết nối** (mã chỉ hiện một lần, sao chép ngay).
 4. Bấm biểu tượng extension > **Cài đặt & hướng dẫn**, dán mã, bấm **Kết nối**. Extension sẽ tự chạy lần quét đầu ngay sau đó.
 5. Đăng nhập Facebook trên chính Chrome này bằng nick đã thêm.
 

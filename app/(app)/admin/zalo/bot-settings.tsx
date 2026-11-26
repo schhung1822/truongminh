@@ -73,7 +73,7 @@ export function BotSettings({ initial, tokenSet }: { initial: ZaloSettings; toke
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <SwitchRow checked={v.inbox} onChange={(c) => toggle("inbox", c)} disabled={off} title="Bật Hộp thư Zalo" desc="Tắt thì menu Hộp thư vẫn còn nhưng báo đang tắt; tin khách nhắn bot không còn được lưu." />
+          <SwitchRow checked={v.inbox} onChange={(c) => toggle("inbox", c)} disabled={off} title="Bật Hộp thư Zalo" desc="Tắt thì mục Hộp thư Zalo ẩn khỏi menu của mọi người và tin khách nhắn bot không còn được lưu. Công tắc này cũng có ở Hệ thống > Cấu hình." />
           <SwitchRow checked={v.aiDraft} onChange={(c) => toggle("aiDraft", c)} disabled={off || !v.inbox} title="Nút “AI soạn” cho nhân viên" desc="AI soạn sẵn câu trả lời (chỉ dùng kiến thức công khai) để nhân viên xem và sửa rồi mới gửi, không tự gửi. Tốn một ít token mỗi lần bấm." />
         </CardContent>
       </Card>

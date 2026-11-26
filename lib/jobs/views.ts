@@ -49,6 +49,7 @@ export async function loadSessionViews(sessionId: string, user: SessionUser): Pr
               cells: snapshot.cells.map((c, i) => ({ number: i + 1, materialId: c.materialId, code: c.code, name: c.name })),
             }
           : null,
+      quality: snapshot.quality === true,
     };
   });
 }

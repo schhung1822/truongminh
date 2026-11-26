@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { ASPECT_RATIOS, AUTO_MATERIAL_COUNTS, AUTO_SHEET_LAYOUT, RESOLUTIONS, type Resolution } from "@/lib/image-options";
+import { ASPECT_RATIOS, AUTO_MATERIAL_COUNTS, AUTO_SHEET_LAYOUT, QUALITY_TILE_CELLS, RESOLUTIONS, type Resolution } from "@/lib/image-options";
 import { LABEL_POSITIONS, LABEL_POS_TEXT } from "@/lib/imaging/label-pos";
 import { formatCostLabel } from "@/lib/pricing";
 import { SELECTABLE_KIE_MODELS, kieModel } from "@/lib/providers/kie-models";
@@ -103,7 +103,19 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             required
             className="h-10"
           />
-          <p className="text-xs text-muted-foreground">Mỗi ảnh tạo hoặc tạo lại tính một lượt. Đặt 0 để tạm khóa. Admin không bị giới hạn.</p>
+          <p className="text-xs text-muted-foreground">Mỗi ảnh tạo hoặc tạo lại tính một lượt; ảnh tạo lỗi thì không tính, lượt được trả lại. Đặt 0 để tạm khóa. Admin không bị giới hạn.</p>
+        </div>
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <label className="flex items-start gap-2.5 rounded-lg border p-3 text-sm">
+            <input type="checkbox" name="qualityDefault" defaultChecked={settings.qualityDefault} className="mt-0.5 size-4 accent-primary" />
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium">Mặc định bật &quot;Chất lượng cao&quot; khi tạo ảnh mẫu</span>
+              <span className="text-xs text-muted-foreground">
+                Ở chế độ này AI chỉ vẽ {QUALITY_TILE_CELLS} chất liệu mỗi lần rồi hệ thống ghép lại thành một ảnh 2 cột: logo to và nét hơn, kiểu khắc sát thực tế hơn, nhưng tốn gấp đôi token và gấp đôi lượt (ảnh 8 chất liệu
+                tính 2 lượt). Nhân viên vẫn bật/tắt được cho từng lần tạo; mặc định này cũng áp dụng cho ảnh tạo tự động khi tải logo mới lên và khi nhân viên giao việc cho bot Zalo.
+              </span>
+            </span>
+          </label>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="labelMode">Cách ghi nhãn chất liệu trên ảnh</Label>

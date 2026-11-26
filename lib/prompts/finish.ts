@@ -9,9 +9,11 @@
  *
  * Hình dạng tấm khắc phụ thuộc logo, và việc này do NGƯỜI DÙNG chốt trên từng logo (Logo.isBadge, D113), không để AI đoán:
  * - logo thường: tấm ôm sát hình logo, mặt trước = lớp 1, viền mảnh quanh mép = lớp 2;
- * - logo dạng huy hiệu/bảng (có nền + khung viền riêng): giữ nguyên hình bảng. Khung viền + biểu tượng + chữ là lớp trên
- *   được giữ lại (nổi, lớp 1); phần nền quanh chúng bị khắc đi (chìm, lộ lớp 2). Đúng như mẫu thật "adidas EQUIPMENT":
- *   nền vàng là lớp dưới, chữ và đường khung đen là lớp trên.
+ * - logo dạng huy hiệu/bảng (có nền + khung viền riêng): giữ nguyên hình bảng. MẶT BẢNG (nền) là mặt decal gốc được giữ lại
+ *   (lớp 1, phần lớn diện tích); laser chỉ khắc các NÉT của logo vào đó: đường khung, biểu tượng, chữ chìm xuống, lộ lớp 2.
+ *   Như mẫu thật "adidas EQUIPMENT": nền vàng là mặt decal gốc, chữ và đường khung đen là nét khắc.
+ *   (Trước D122 hệ thống hiểu NGƯỢC lại: khắc bỏ cả mảng nền, giữ chữ. Chủ xưởng xác nhận như vậy là sai thực tế.)
+ * Nguyên tắc chung của hàng khắc (D122): phần bị khắc luôn NHỎ hơn phần mặt gốc còn giữ lại. Khắc mảng lớn sẽ cháy, sinh muội đen.
  * Hàng cắt thì luôn chỉ cắt biểu tượng + chữ, kể cả với logo dạng huy hiệu.
  *
  * Không có kiểu riêng cho "In UV" (D101). Nhãn công nghệ tự thêm (ngoài hai mã mặc định) được đoán theo chữ, không rõ thì coi là khắc.
@@ -58,9 +60,17 @@ export const FINISH_LABEL: Record<FinishKind, string> = { ENGRAVE: "ENGRAVED", C
 const ENGRAVE_LOOK =
   "The surface has the fine, crisp, perfectly flat laser-engraved look of the sample: engraved INTO the surface, with no bevel, no 3D relief, no shiny chrome emboss and no separate emblem glued on top.";
 
-const ENGRAVE_SILHOUETTE = `two-layer laser-engraved piece, die-cut to the logo's own silhouette (symbol and letters, same spacing). The flat front face is the FRONT material (LEFT panel). A thin, even border of the BACK material (RIGHT panel), about 2-3% of the logo width, runs around the outline of every part, like a flat offset sticker border, never a thick wall. ${ENGRAVE_LOOK} The two materials must be clearly distinguishable, like the two panels.`;
+/**
+ * Nguyên tắc sản xuất do chủ xưởng nêu (D122): phần bị laser khắc đi luôn là phần NHỎ, không bao giờ lớn hơn phần mặt decal
+ * gốc còn giữ lại, vì khắc nhiều thì vật liệu cháy sinh muội đen. Tức là chỉ khắc nét (chữ, biểu tượng, đường khung),
+ * không bao giờ khắc bỏ cả một mảng nền.
+ */
+const ENGRAVE_AREA =
+  "Engraving is used sparingly: the engraved area (the part showing the BACK material) is always clearly SMALLER than the untouched FRONT surface, never the other way round, because engraving a large area scorches the material. Never engrave away a whole background or any large fill.";
 
-const ENGRAVE_BADGE = `two-layer laser-engraved plate that keeps the logo's badge shape: ONE solid plate with the badge's outer shape (same proportions and corner rounding), never the bare letters alone. The badge's border line, symbol, wordmark and tagline are the untouched FRONT material (LEFT panel), left standing at the plate's original flat top level. The badge's background (all the plate area around and between them, out to the plate's edge) is engraved down into the plate, a hair below the top, and shows the BACK material (RIGHT panel), like a real engraved tag where the laser burns away the background around the letters, never the letters themselves. ${ENGRAVE_LOOK} The two materials must be clearly distinguishable, like the two panels.`;
+const ENGRAVE_SILHOUETTE = `two-layer laser-engraved piece, die-cut to the logo's own silhouette (symbol and letters, same spacing). The flat front face is the FRONT material (LEFT panel). A thin, even border of the BACK material (RIGHT panel), about 2-3% of the logo width, runs around the outline of every part, like a flat offset sticker border, never a thick wall. ${ENGRAVE_AREA} ${ENGRAVE_LOOK} The two materials must be clearly distinguishable, like the two panels.`;
+
+const ENGRAVE_BADGE = `two-layer laser-engraved plate that keeps the logo's badge shape: ONE solid plate with the badge's outer shape (same proportions and corner rounding), never the bare letters alone. The plate's face, i.e. the badge's background, is the untouched FRONT material (LEFT panel): it stays at the plate's original flat top level and is the dominant area of the plate. The laser engraves only the logo's artwork into that face: the badge's border line, symbol, wordmark and tagline are engraved a hair below the surface and show the BACK material (RIGHT panel), like the fine marks burnt into a real engraved tag, never the background around them. ${ENGRAVE_AREA} If the artwork is so bold that engraving all of it would cover more than half of the plate, engrave only the outlines of its shapes. ${ENGRAVE_LOOK} The two materials must be clearly distinguishable, like the two panels.`;
 
 const CUT_SILHOUETTE =
   "single-layer cut decal: ONE thin flat layer of the FRONT material (LEFT panel only), cut out along the logo's own silhouette (symbol and letters, same spacing), like a die-cut sticker, in one continuous flat colour and pattern. No border or rim of a second material, no engraving, no recessed areas. The RIGHT (back) panel is not used.";

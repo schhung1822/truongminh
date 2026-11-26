@@ -1,26 +1,6 @@
-import type { Metadata } from "next";
-import { requireAdmin } from "@/lib/auth/dal";
-import { db } from "@/lib/db";
-import { AccountsBoard, type AccountRow } from "./accounts-board";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Zalo: tài khoản cá nhân" };
-
-export default async function ZaloAccountsPage() {
-  await requireAdmin();
-  const rows = await db.zaloAccount.findMany({
-    orderBy: { createdAt: "asc" },
-    include: { _count: { select: { contacts: true } } },
-  });
-  const accounts: AccountRow[] = rows.map((a) => ({
-    id: a.id,
-    name: a.name,
-    phone: a.phone,
-    avatarUrl: a.avatarUrl,
-    status: a.status,
-    lastError: a.lastError,
-    lastConnectedAt: a.lastConnectedAt ? a.lastConnectedAt.toISOString() : null,
-    autoConnect: a.autoConnect,
-    contacts: a._count.contacts,
-  }));
-  return <AccountsBoard accounts={accounts} />;
+/** Trang cũ: tài khoản Zalo cá nhân đã chuyển về Hệ thống > Kết nối > Zalo. */
+export default function ZaloAccountsRedirect() {
+  redirect("/admin/connections/zalo#tai-khoan-ca-nhan");
 }

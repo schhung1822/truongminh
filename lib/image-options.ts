@@ -41,3 +41,23 @@ export const AUTO_MATERIAL_COUNTS = [16, 24, 32, 48] as const;
 /** Bố cục ảnh của phiên AI chọn: 8 chất liệu mỗi ảnh, giống các trang mẫu đang dùng. */
 export const AUTO_SHEET_LAYOUT = { cols: 2, rows: 4, aspectRatio: "16:9" } as const;
 export const AUTO_SHEET_NAME = "Chất liệu phù hợp";
+/** Tên "trang mẫu" của phiên tạo ảnh với tất cả chất liệu đang bật (D126), hiện ở tiêu đề ảnh. */
+export const ALL_MATERIALS_SHEET_NAME = "Tất cả chất liệu";
+
+/**
+ * Bố cục 8 ô của phiên AI chọn, theo HÌNH DẠNG logo (D120). Ảnh AI là 16:9: chia 2 cột x 4 hàng thì mỗi ô là một dải dẹt
+ * (rộng gấp ~3,6 lần cao), hợp logo chữ ngang; nhưng logo gần vuông đặt vào đó chỉ cao bằng 1/4 ảnh, hai bên bỏ trống.
+ * Chia 4 cột x 2 hàng thì ô gần vuông, logo gần vuông to gấp rưỡi tới gấp đôi mà không tốn thêm gì.
+ * Ngưỡng 1,8 là điểm hai cách chia cho logo to bằng nhau.
+ */
+export const AUTO_WIDE_LOGO_RATIO = 1.8;
+export function autoSheetLayout(logoWidth: number, logoHeight: number): { cols: number; rows: number; aspectRatio: string } {
+  const tallCells = logoWidth > 0 && logoHeight > 0 && logoWidth / logoHeight < AUTO_WIDE_LOGO_RATIO;
+  return tallCells ? { cols: 4, rows: 2, aspectRatio: "16:9" } : AUTO_SHEET_LAYOUT;
+}
+
+/**
+ * Chế độ chất lượng cao (D120): AI chỉ vẽ ngần này chất liệu mỗi lần (một "mảnh" 2 x 2), các mảnh được ghép lại thành
+ * một ảnh. Mỗi mảnh là một tác vụ AI và tính một lượt. Xem lib/jobs/tiles.ts.
+ */
+export const QUALITY_TILE_CELLS = 4;

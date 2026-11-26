@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { estimateCost, formatCostLabel } from "@/lib/pricing";
+import { countSheetTasks } from "@/lib/sheets/split";
+import { QualityToggle } from "@/components/customers/quality-toggle";
 import { createCatalogSessionAction } from "../actions";
 import type { BrandOption, CustomerOption, LogoOption } from "./actions";
 
@@ -25,7 +27,7 @@ export type SheetOption = {
   usable: number;
   /** số ảnh sẽ tạo từ trang này (trang nhiều chất liệu hơn số ô được chia thành nhiều ảnh) */
   images: number;
-  /** trang mẫu mặc định cho nút Tạo nhanh */
+  /** trang mẫu mặc định: được tick sẵn ở bước chọn trang mẫu */
   isDefault: boolean;
   total: number;
 };
@@ -73,7 +75,7 @@ export function SheetsStep({
       <CardHeader>
         <CardTitle>Bước 2: Chọn trang mẫu</CardTitle>
         <CardDescription>
-          Mỗi ảnh gồm nhiều chất liệu. Trang mẫu có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh. Mặc định chọn tất cả, bạn có thể lọc theo nhóm.
+          Mỗi ảnh gồm nhiều chất liệu. Trang mẫu có nhiều chất liệu hơn số ô sẽ tự chia thành nhiều ảnh. Các trang mẫu mặc định đã được tick sẵn, bạn có thể tick thêm, bỏ bớt hoặc lọc theo nhóm.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -161,6 +163,7 @@ export function ConfirmStep({
   quota,
   showCost,
   imageModel,
+  qualityDefault,
   onBack,
 }: {
   customer: CustomerOption;
@@ -172,15 +175,21 @@ export function ConfirmStep({
   showCost: boolean;
   /** model tạo ảnh đang cấu hình, dùng để tra đúng bảng giá (lib/providers/kie-models.ts) */
   imageModel: string;
+  /** ô "Chất lượng cao" (D120) mặc định bật hay tắt (Quản trị > Cấu hình) */
+  qualityDefault: boolean;
   onBack: () => void;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  // số ảnh = tổng số ảnh của các trang (trang dài chia nhiều ảnh), mỗi ảnh tính một lượt
-  const needed = sheets.reduce((n, s) => n + s.images, 0);
+  const [quality, setQuality] = useState(qualityDefault);
+  // số ảnh = tổng số ảnh của các trang (trang dài chia nhiều ảnh)
+  const imageCount = sheets.reduce((n, s) => n + s.images, 0);
+  // số lượt = số tác vụ AI: thường mỗi ảnh một lượt, chất lượng cao thì mỗi mảnh 4 chất liệu một lượt (D120)
+  const sheetTasks = (s: SheetOption) => (quality ? countSheetTasks(s.usable, s.cols, s.rows, true) : s.images);
+  const needed = sheets.reduce((n, s) => n + sheetTasks(s), 0);
   const overQuota = quota !== null && needed > quota.left;
-  const cost = estimateCost(imageModel, sheets.flatMap((x) => Array<string>(x.images).fill(x.resolution)));
+  const cost = estimateCost(imageModel, sheets.flatMap((x) => Array<string>(sheetTasks(x)).fill(x.resolution)));
 
   function start() {
     setError(null);
@@ -189,6 +198,7 @@ export function ConfirmStep({
         const r = await createCatalogSessionAction(
           logo.id,
           sheets.map((s) => s.id),
+          quality,
         );
         if (r.error || !r.sessionId) return setError(r.error ?? "Không tạo được phiên.");
         toast.success("Đã bắt đầu tạo ảnh. Đang chuyển sang màn hình theo dõi tiến độ...");
@@ -196,7 +206,7 @@ export function ConfirmStep({
       } catch (e) {
         // lỗi bất ngờ (mất kết nối, máy chủ khởi động lại...): luôn báo cho người dùng thay vì im lặng
         console.error("Bắt đầu tạo ảnh thất bại:", e);
-        setError("Không gửi được yêu cầu tới máy chủ (có thể máy chủ vừa khởi động lại hoặc mất kết nối). Vui lòng bấm lại.");
+        setError("Không gọi được máy chủ: có thể mất mạng, máy chủ đang khởi động lại, hoặc trang này mở từ trước một bản cập nhật. Hãy tải lại trang (F5) rồi bấm lại.");
       }
     });
   }
@@ -205,7 +215,7 @@ export function ConfirmStep({
     <Card>
       <CardHeader>
         <CardTitle>Bước 3: Xác nhận</CardTitle>
-        <CardDescription>Kiểm tra lại rồi bấm bắt đầu. Mỗi ảnh tính một lượt; trang mẫu nhiều chất liệu sẽ tạo nhiều ảnh.</CardDescription>
+        <CardDescription>Kiểm tra lại rồi bấm bắt đầu. Mỗi ảnh tính một lượt (chất lượng cao: mỗi 4 chất liệu một lượt); trang mẫu nhiều chất liệu sẽ tạo nhiều ảnh.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error && (
@@ -238,7 +248,7 @@ export function ConfirmStep({
             </dd>
             <dt className="text-muted-foreground">Số trang mẫu</dt>
             <dd className="font-medium">
-              {sheets.length} (tạo {needed} ảnh)
+              {sheets.length} (tạo {imageCount} ảnh{quality ? `, tính ${needed} lượt` : ""})
             </dd>
             {showCost && (
               <>
@@ -270,10 +280,12 @@ export function ConfirmStep({
           ))}
         </ul>
 
+        <QualityToggle checked={quality} onChange={setQuality} disabled={pending} />
+
         {overQuota && (
           <Alert variant="destructive">
             <AlertDescription>
-              Bạn còn {quota!.left} lượt nhưng cần {needed} lượt. Hãy quay lại chọn ít trang hơn.
+              Bạn còn {quota!.left} lượt nhưng cần {needed} lượt. Hãy quay lại chọn ít trang hơn{quality ? ", hoặc tắt Chất lượng cao" : ""}.
             </AlertDescription>
           </Alert>
         )}

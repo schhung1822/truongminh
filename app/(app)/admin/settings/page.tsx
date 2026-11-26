@@ -1,19 +1,17 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth/dal";
-import { getEnv } from "@/lib/env";
-import { USD_PER_CREDIT } from "@/lib/pricing";
-import { getKieCredits } from "@/lib/providers";
 import { getSettings } from "@/lib/settings";
+import { getZaloSettings } from "@/lib/zalo/settings";
+import { FeatureToggles } from "./feature-toggles";
 import { SettingsForm } from "./settings-form";
 
 export const metadata: Metadata = { title: "Cấu hình" };
 
 export default async function SettingsPage() {
   await requireAdmin();
-  const settings = await getSettings();
-  const env = getEnv();
-  const credits = env.IMAGE_PROVIDER === "kie" ? await getKieCredits() : null;
+  const [settings, zalo] = await Promise.all([getSettings(), getZaloSettings()]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -31,24 +29,20 @@ export default async function SettingsPage() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Môi trường đang chạy</CardTitle>
-          <CardDescription>Chỉ để xem. Đổi trong file .env trên máy chủ rồi khởi động lại.</CardDescription>
+          <CardTitle>Bật / tắt chức năng</CardTitle>
+          <CardDescription>Chức năng đang tắt thì ẩn khỏi menu của mọi người. Gạt là lưu ngay.</CardDescription>
         </CardHeader>
-        <CardContent className="text-sm">
-          Nhà cung cấp ảnh AI:{" "}
-          <b>{env.IMAGE_PROVIDER === "mock" ? "Ảnh giả (mock), không tốn tiền" : "kie.ai (tính tiền thật)"}</b>
-          {env.IMAGE_PROVIDER === "kie" && (
-            <p className="mt-2">
-              Số dư kie.ai:{" "}
-              <b>
-                {credits === null
-                  ? "không hỏi được (kiểm tra khóa API)"
-                  : `${credits.toLocaleString("vi-VN")} token (khoảng $${(credits * USD_PER_CREDIT).toFixed(2)})`}
-              </b>
-            </p>
-          )}
+        <CardContent>
+          <FeatureToggles zaloInbox={zalo.inbox} />
         </CardContent>
       </Card>
+      <p className="text-sm text-muted-foreground">
+        Kết nối kie.ai (chế độ ảnh thật hay ảnh giả, khóa API, số dư) xem ở{" "}
+        <Link href="/admin/connections/kie" className="underline underline-offset-4">
+          Hệ thống &gt; Kết nối &gt; Kie.ai
+        </Link>
+        .
+      </p>
     </div>
   );
 }

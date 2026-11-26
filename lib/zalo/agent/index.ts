@@ -86,7 +86,7 @@ export async function handleAgentMessage(input: AgentInput): Promise<boolean> {
     );
     return true;
   }
-  const sessionUser: SessionUser = { id: user.id, email: user.email, name: user.name, role: user.role };
+  const sessionUser: SessionUser = { id: user.id, email: user.email, name: user.name, role: user.role, mustChangePassword: false };
 
   try {
     await run({ ...input, text: tag.text }, staff, sessionUser, say);

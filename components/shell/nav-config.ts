@@ -6,6 +6,7 @@ import {
   BrainIcon,
   BuildingIcon,
   CalculatorIcon,
+  ClipboardListIcon,
   FolderTreeIcon,
   HistoryIcon,
   HomeIcon,
@@ -77,7 +78,6 @@ export const navGroups: NavGroup[] = [
       { href: "/fb/leads/stats", label: "Thống kê Lead", icon: TrendingUpIcon, ready: true, roles: ["MKT"] },
       { href: "/fb/posts", label: "Bài đăng", icon: NewspaperIcon, ready: true, roles: ["MKT"] },
       { href: "/fb/groups", label: "Nhóm", icon: UsersRoundIcon, ready: true, roles: ["MKT"] },
-      { href: "/fb/connect", label: "Kết nối extension", icon: PlugZapIcon, ready: true, roles: ["MKT"] },
     ],
   },
   {
@@ -105,7 +105,6 @@ export const navGroups: NavGroup[] = [
       { href: "/admin/sheets", label: "Trang mẫu", icon: LayoutGridIcon, ready: true, adminOnly: true },
       { href: "/admin/design-styles", label: "Kiểu thiết kế", icon: PaletteIcon, ready: true, adminOnly: true },
       { href: "/admin/prompts", label: "Prompt", icon: ScrollTextIcon, ready: true, adminOnly: true },
-      { href: "/admin/pinterest", label: "Kết nối Pinterest", icon: PlugZapIcon, ready: true, adminOnly: true },
     ],
   },
   {
@@ -114,14 +113,24 @@ export const navGroups: NavGroup[] = [
     items: [
       { href: "/admin/users", label: "Người dùng", icon: UsersIcon, ready: true, adminOnly: true },
       { href: "/admin/settings", label: "Cấu hình", icon: SettingsIcon, ready: true, adminOnly: true },
+      // Mọi kết nối với dịch vụ ngoài (extension Facebook, Pinterest, kie.ai, Zalo) gom về đây. Marketing cũng thấy mục này
+      // nhưng bên trong chỉ có phần extension của mình (app/(app)/admin/connections/layout.tsx).
+      { href: "/admin/connections", label: "Kết nối", icon: PlugZapIcon, ready: true, roles: ["MKT"] },
       { href: "/admin/usage", label: "Thống kê", icon: BarChart3Icon, ready: true, adminOnly: true },
+      { href: "/admin/activity", label: "Nhật ký hoạt động", icon: ClipboardListIcon, ready: true, adminOnly: true },
     ],
   },
 ];
 
-/** Các nhóm (và mục) mà người xem được thấy; nhóm rỗng bị bỏ. */
-export function visibleNav(role: Role): NavGroup[] {
-  const canSee = (i: NavItem) => (i.roles ? role === "ADMIN" || i.roles.includes(role) : role === "ADMIN" || !i.adminOnly);
+/** Mục Hộp thư Zalo: ẩn khỏi menu khi công tắc "Hộp thư Zalo" ở Hệ thống > Cấu hình đang tắt (xem app/(app)/layout.tsx). */
+export const ZALO_INBOX_HREF = "/zalo";
+
+/**
+ * Các nhóm (và mục) mà người xem được thấy; nhóm rỗng bị bỏ. `hidden` = đường dẫn của các mục đang bị tắt trong cấu hình,
+ * ẩn với mọi vai trò kể cả quản trị viên.
+ */
+export function visibleNav(role: Role, hidden: readonly string[] = []): NavGroup[] {
+  const canSee = (i: NavItem) => !hidden.includes(i.href) && (i.roles ? role === "ADMIN" || i.roles.includes(role) : role === "ADMIN" || !i.adminOnly);
   return navGroups.map((g) => ({ ...g, items: g.items.filter(canSee) })).filter((g) => g.items.length > 0);
 }
 

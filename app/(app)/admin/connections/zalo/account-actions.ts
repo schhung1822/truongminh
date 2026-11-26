@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/activity";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { connectAccount, disconnectAccount } from "@/lib/zalo/personal/manager";
@@ -8,7 +9,7 @@ import { connectAccount, disconnectAccount } from "@/lib/zalo/personal/manager";
 type Result = { error?: string; ok?: string };
 
 function refresh() {
-  revalidatePath("/admin/zalo/accounts");
+  revalidatePath("/admin/connections", "layout");
   revalidatePath("/zalo");
 }
 
@@ -31,9 +32,10 @@ export async function disconnectAccountAction(id: string): Promise<Result> {
 
 /** Xóa tài khoản và toàn bộ hội thoại, tin nhắn của nó trong Hộp thư (không thể khôi phục). */
 export async function removeAccountAction(id: string): Promise<Result> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   await disconnectAccount(id);
-  await db.zaloAccount.delete({ where: { id } }).catch(() => {});
+  const removed = await db.zaloAccount.delete({ where: { id }, select: { name: true, phone: true } }).catch(() => null);
+  if (removed) await logActivity({ actor: admin, action: "ZALO_ACCOUNT_REMOVE", target: removed.phone ? `${removed.name} (${removed.phone})` : removed.name });
   refresh();
   return { ok: "Đã xóa tài khoản và các hội thoại của nó." };
 }

@@ -8,7 +8,7 @@ import { shared } from "@/lib/jobs/throttle";
 import { getStorage } from "@/lib/storage";
 import { buildCaption, publicSessionUrl } from "../caption";
 import { ZaloError } from "../client";
-import { getZaloClient } from "../index";
+import { getChatClient } from "../index";
 import { deliverImage } from "../send";
 import { getZaloSettings, groupSendEnabled } from "../settings";
 import { splitMessage, stripMarkdown } from "../text";
@@ -32,7 +32,7 @@ const g = globalThis as unknown as { __zaloTaskWatching?: Set<string> };
 
 /** Gửi tin chữ vào một cuộc chat và lưu vào hội thoại (nếu cuộc chat đã có trong Hộp thư). Không bao giờ ném lỗi. */
 export async function sayToChat(chatId: string, text: string): Promise<boolean> {
-  const client = getZaloClient();
+  const client = await getChatClient(chatId);
   if (!client) return false;
   const chunks = splitMessage(stripMarkdown(text));
   const contact = await db.zaloContact.findUnique({ where: { chatId }, select: { id: true } }).catch(() => null);
@@ -140,9 +140,9 @@ async function deliver(taskId: string, stillOpen: number): Promise<void> {
   );
 
   const settings = await getZaloSettings();
-  const group = task.chatType === "GROUP" ? await db.zaloGroup.findUnique({ where: { chatId: task.chatId }, select: { id: true, chatId: true } }) : null;
+  const group = task.chatType === "GROUP" ? await db.zaloGroup.findUnique({ where: { chatId: task.chatId }, select: { id: true, chatId: true, botId: true } }) : null;
   const viaGroup = !!group && (await groupSendEnabled());
-  const client = getZaloClient();
+  const client = await getChatClient(task.chatId);
 
   let sent = 0;
   let lastError: string | null = null;
@@ -157,7 +157,7 @@ async function deliver(taskId: string, stillOpen: number): Promise<void> {
       continue;
     }
     if (!client) {
-      lastError = "Chưa cấu hình bot Zalo.";
+      lastError = "Chưa kết nối bot Zalo hoặc bot của cuộc chat này đang tắt.";
       break;
     }
     const snap = img.layoutSnapshot as unknown as LayoutSnapshot;

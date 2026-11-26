@@ -3,21 +3,49 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth/dal";
-import { createAutoCatalogSession } from "@/lib/jobs/auto";
-import { createCatalogSession, retryImage } from "@/lib/jobs/create";
+import { retryAutoCatalogSession, runAutoCatalogAnalysis, startAutoCatalogSession } from "@/lib/jobs/auto";
+import { createAllMaterialsSession, createCatalogSession, retryImage } from "@/lib/jobs/create";
 import { createDesignSession } from "@/lib/jobs/design";
+import { retryPinDesignSession, runPinDesignAnalysis, startPinDesignSession } from "@/lib/jobs/pin-design";
 import { kickSession } from "@/lib/jobs/process";
 import { isLabelPos, isLabelStyle, type LabelPos, type LabelStyle } from "@/lib/imaging/label-pos";
 import { refinishSession } from "@/lib/jobs/refinish";
 import { db } from "@/lib/db";
 import { canEditOwned } from "@/lib/permissions";
 
+/**
+ * Lỗi BẤT NGỜ khi tạo phiên (CSDL, lỗi lập trình...): ghi log đầy đủ ở máy chủ và trả về một câu báo rõ là lỗi máy chủ.
+ * Nếu để lỗi ném ra, trình duyệt chỉ biết "không gửi được yêu cầu" và người dùng tưởng là mất mạng hay do kie.ai.
+ * Các lỗi nghiệp vụ (hết lượt, thiếu trang mẫu...) vẫn do từng hàm trả về trong `error` như cũ.
+ */
+async function guarded(what: string, run: () => Promise<{ error?: string; sessionId?: string }>): Promise<{ error?: string; sessionId?: string }> {
+  try {
+    return await run();
+  } catch (e) {
+    console.error(`${what} lỗi bất ngờ:`, e);
+    return { error: `Máy chủ gặp lỗi khi ${what} (không phải do mạng hay kie.ai). Hãy bấm lại; nếu vẫn lỗi, báo quản trị viên kèm giờ bạn bấm để tra log.` };
+  }
+}
+
+/** `quality`: ô "Chất lượng cao" (D120) người dùng chọn; bỏ trống = theo mặc định ở Quản trị > Cấu hình. */
 export async function createCatalogSessionAction(
   logoId: string,
   sheetIds: string[],
+  quality?: boolean,
 ): Promise<{ error?: string; sessionId?: string }> {
   const user = await requireUser();
-  const r = await createCatalogSession(user, { logoId, sheetIds });
+  const r = await guarded("tạo phiên ảnh mẫu", () => createCatalogSession(user, { logoId, sheetIds, quality: typeof quality === "boolean" ? quality : undefined }));
+  if (r.sessionId) {
+    const id = r.sessionId;
+    after(() => kickSession(id)); // gửi sang nhà cung cấp SAU khi đã trả lời trình duyệt
+  }
+  return r;
+}
+
+/** Tạo ảnh mẫu với TẤT CẢ chất liệu đang bật (nút "Tất cả chất liệu", D126). */
+export async function createAllMaterialsSessionAction(logoId: string, quality?: boolean): Promise<{ error?: string; sessionId?: string }> {
+  const user = await requireUser();
+  const r = await guarded("tạo ảnh với tất cả chất liệu", () => createAllMaterialsSession(user, { logoId: String(logoId ?? "").slice(0, 191), quality: typeof quality === "boolean" ? quality : undefined }));
   if (r.sessionId) {
     const id = r.sessionId;
     after(() => kickSession(id)); // gửi sang nhà cung cấp SAU khi đã trả lời trình duyệt
@@ -26,15 +54,58 @@ export async function createCatalogSessionAction(
 }
 
 /**
- * AI xem logo, chọn các chất liệu hợp nhất rồi tạo ảnh mẫu (D115). `fromUpload` = logo vừa được tải lên: khi đó AI quyết định
- * luôn ô "logo dạng huy hiệu" nếu người dùng chưa tick. Mất khoảng nửa phút vì phải chờ AI phân tích.
+ * AI xem logo, chọn các chất liệu hợp nhất rồi tạo ảnh mẫu (D115). AI cũng quyết định luôn logo có phải dạng huy hiệu / bảng
+ * không, trừ khi logo đã được đánh dấu là huy hiệu (D126: công tắc tay ở khung logo đã bỏ). Trả về NGAY mã phiên; việc AI phân tích (30-60 giây) và tạo ảnh chạy
+ * nền qua after(), trang phiên tự hiện "AI đang phân tích" rồi hiện ảnh (D119). Nhờ vậy request không bao giờ bị proxy cắt.
  */
-export async function autoCatalogSessionAction(logoId: string, fromUpload: boolean): Promise<{ error?: string; sessionId?: string }> {
+export async function autoCatalogSessionAction(logoId: string, quality?: boolean): Promise<{ error?: string; sessionId?: string }> {
   const user = await requireUser();
-  const r = await createAutoCatalogSession(user, { logoId, decideBadge: fromUpload === true });
+  const r = await guarded("bắt đầu AI chọn chất liệu", () => startAutoCatalogSession(user, { logoId, decideBadge: true, quality: typeof quality === "boolean" ? quality : undefined }));
   if (r.sessionId) {
     const id = r.sessionId;
-    after(() => kickSession(id));
+    after(() => runAutoCatalogAnalysis(id));
+  }
+  return r;
+}
+
+/** Thử lại việc AI chọn chất liệu cho một phiên đã phân tích hỏng (chưa có ảnh nào). */
+export async function retryAutoAnalysisAction(sessionId: string): Promise<{ error?: string; ok?: boolean }> {
+  const user = await requireUser();
+  // phiên thiết kế theo mẫu Pinterest (D125) cũng dùng nút Thử lại này, nhưng việc nền của nó khác
+  const row = await db.consultSession.findUnique({ where: { id: sessionId }, select: { type: true } });
+  const pinDesign = row?.type === "DESIGN";
+  const r = pinDesign ? await retryPinDesignSession(user, sessionId) : await retryAutoCatalogSession(user, sessionId);
+  if (r.error) return { error: r.error };
+  after(() => (pinDesign ? runPinDesignAnalysis(sessionId) : runAutoCatalogAnalysis(sessionId)));
+  revalidatePath(`/sessions/${sessionId}`);
+  return { ok: true };
+}
+
+/**
+ * Thiết kế theo mẫu Pinterest (D125): sale chọn 1-3 pin cho một logo, AI tự chọn `materialCount` chất liệu hợp logo và mẫu,
+ * rồi tạo ảnh thiết kế dùng các pin làm ảnh phong cách. Trả về NGAY mã phiên; AI phân tích và tạo ảnh chạy nền qua after().
+ */
+export async function createPinDesignSessionAction(input: {
+  logoId: string;
+  pinIds: string[];
+  productType: string;
+  materialCount: number;
+  variants: number;
+  note: string;
+}): Promise<{ error?: string; sessionId?: string }> {
+  const user = await requireUser();
+  const clean = {
+    logoId: String(input?.logoId ?? "").slice(0, 191),
+    pinIds: Array.isArray(input?.pinIds) ? input.pinIds.filter((x): x is string => typeof x === "string").slice(0, 20) : [],
+    productType: String(input?.productType ?? ""),
+    materialCount: Number(input?.materialCount),
+    variants: Number(input?.variants),
+    note: String(input?.note ?? ""),
+  };
+  const r = await guarded("bắt đầu thiết kế theo mẫu Pinterest", () => startPinDesignSession(user, clean));
+  if (r.sessionId) {
+    const id = r.sessionId;
+    after(() => runPinDesignAnalysis(id));
   }
   return r;
 }

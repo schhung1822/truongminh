@@ -74,6 +74,22 @@ export function logoAiKey(normalizedKey: string): string {
   return normalizedKey.replace(/\.[a-z0-9]+$/i, "") + `-ai-${LOGO_AI_VERSION}.png`;
 }
 
+/**
+ * Key bản ảnh tham chiếu chất liệu đã gắn dải nhãn "CELL n / FRONT / BACK" để gửi AI (D123), suy ra từ key ảnh tham chiếu
+ * gốc nên không cần cột CSDL riêng và vẫn nằm dưới "materials/" (công khai). Mỗi chất liệu có tối đa một bản cho mỗi số ô
+ * và mỗi kiểu hàng, tạo khi cần rồi dùng lại. `version` đổi thì tạo bản mới.
+ */
+export function refTagKey(referenceKey: string, cell: number, kind: "ENGRAVE" | "CUT", version: string): string {
+  return referenceKey.replace(/\.[a-z0-9]+$/i, "") + `-tag-${version}-c${cell}-${kind === "CUT" ? "cut" : "eng"}.jpg`;
+}
+
+/** Mọi bản gắn nhãn có thể có của một ảnh tham chiếu (10 ô x 2 kiểu hàng), để xóa theo khi ảnh tham chiếu bị xóa hoặc thay. */
+export function refTagKeys(referenceKey: string, version: string): string[] {
+  const keys: string[] = [];
+  for (let cell = 1; cell <= 10; cell++) for (const kind of ["ENGRAVE", "CUT"] as const) keys.push(refTagKey(referenceKey, cell, kind, version));
+  return keys;
+}
+
 /** Key được phép công khai (đưa thẳng địa chỉ R2 cho trình duyệt và kie.ai). Còn lại đi qua /api/files có kiểm tra đăng nhập. */
 const PUBLIC_PREFIXES = ["materials/", "mockups/", "logos/"];
 export const isPublicKey = (key: string): boolean => PUBLIC_PREFIXES.some((p) => key.startsWith(p));

@@ -14,6 +14,8 @@ export type LayoutSnapshot = {
   labelPos?: LabelPos;
   /** kiểu nhãn do người dùng chọn cho ảnh này (thẻ đầy đủ, thẻ gọn, chú giải, ẩn); chưa chọn thì dùng kiểu trong Cấu hình */
   labelStyle?: LabelStyle;
+  /** true = ảnh tạo ở chế độ chất lượng cao (D120): AI vẽ từng mảnh 4 ô rồi ghép; `cols`/`rows` là lưới SAU khi ghép */
+  quality?: boolean;
   /** các ô theo thứ tự đọc; ảnh thiết kế chỉ có một ô */
   cells: {
     materialId: string;

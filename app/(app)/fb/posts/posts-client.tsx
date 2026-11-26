@@ -23,7 +23,7 @@ export function AddPostForm({ accounts }: { accounts: { id: string; displayName:
   }, [state]);
 
   if (accounts.length === 0) {
-    return <p className="text-sm text-muted-foreground">Chưa có nick Facebook nào. Hãy thêm nick ở trang Kết nối extension trước.</p>;
+    return <p className="text-sm text-muted-foreground">Chưa có nick Facebook nào. Hãy thêm nick ở Hệ thống &gt; Kết nối &gt; Extension Facebook trước.</p>;
   }
 
   return (

@@ -14,6 +14,7 @@ export async function saveSettingsAction(_prev: SettingsResult, formData: FormDa
     defaultResolution: formData.get("defaultResolution"),
     autoMaterialCount: formData.get("autoMaterialCount"),
     dailyLimitPerSale: formData.get("dailyLimitPerSale"),
+    qualityDefault: formData.get("qualityDefault") === "on",
     workshopName: formData.get("workshopName") ?? "",
     footerNote: formData.get("footerNote") ?? "",
     footerDisclaimer: formData.get("footerDisclaimer") ?? "",

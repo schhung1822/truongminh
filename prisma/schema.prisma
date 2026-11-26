@@ -67,10 +67,14 @@ model User {
   passwordHash String
   role         Role     @default(SALE)
   isActive     Boolean  @default(true)
+  // true = mật khẩu đang dùng là mật khẩu tạm do quản trị viên đặt: phải tự đổi rồi mới dùng được web (D118)
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime? // lần đăng nhập thành công gần nhất
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   authSessions      AuthSession[]
+  activityLogs      ActivityLog[]
   ownedCustomers    Customer[]         @relation("CustomerOwner")
   createdCustomers  Customer[]         @relation("CustomerCreator")
   createdBrands     Brand[]
@@ -97,6 +101,7 @@ model AuthSession {
   userId    String
   tokenHash String   @unique @db.VarChar(64)
   expiresAt DateTime
+  userAgent String?  @db.VarChar(300) // trình duyệt lúc đăng nhập, để người dùng nhận ra thiết bị trong trang Tài khoản
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -104,6 +109,25 @@ model AuthSession {
   @@index([userId])
   @@index([expiresAt])
   @@map("auth_sessions")
+}
+
+/// Nhật ký hoạt động (D118): đăng nhập, quản lý tài khoản, kết nối. Chỉ thêm, không sửa. Mã việc và nhãn ở lib/activity-types.ts.
+model ActivityLog {
+  id        String   @id @default(cuid())
+  actorId   String? // người làm; trống = chưa xác định được (đăng nhập sai) hoặc tài khoản đã bị xóa
+  actorName String   @db.VarChar(150) // tên (hoặc email đã gõ) tại thời điểm đó, để vẫn đọc được khi tài khoản đổi tên
+  action    String   @db.VarChar(40)
+  target    String?  @db.VarChar(200) // đối tượng bị tác động, viết cho người đọc
+  detail    String?  @db.VarChar(500)
+  ip        String?  @db.VarChar(64)
+  createdAt DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("activity_logs")
 }
 
 model Material {
@@ -397,6 +421,9 @@ model GeneratedImage {
   resolution       String
   aspectRatio      String
   taskId           String?
+  // Chế độ chất lượng cao (D120): AI vẽ ảnh này thành nhiều MẢNH, mỗi mảnh tối đa 4 chất liệu, rồi hệ thống ghép lại.
+  // Mỗi mảnh là một tác vụ AI riêng (prompt, mã tác vụ, ảnh đã tải về), xem lib/jobs/tiles.ts. Trống = ảnh thường, một tác vụ.
+  tiles            Json?
   status           ImageStatus @default(PENDING)
   attempt          Int         @default(1)
   lastPolledAt     DateTime?
@@ -455,13 +482,40 @@ model ZaloGroup {
   insight     String?   @db.Text // mô tả nhóm (khách là ai, quan tâm gì...) để AI lên kịch bản chăm sóc phù hợp
   careEnabled Boolean   @default(false) // true = AI lên kịch bản chăm sóc cho nhóm này
   postsPerDay Int       @default(2) // số lượt đăng mỗi ngày (2-3)
+  botId       String? // bot Zalo đang ở trong nhóm này (bảng zalo_bots); trống = bot đặt trong .env (hoặc bot mặc định nếu .env không có)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  bot        ZaloBot?       @relation(fields: [botId], references: [id], onDelete: SetNull)
   deliveries ZaloDelivery[]
   posts      ZaloPost[]
 
+  @@index([botId])
   @@map("zalo_groups")
+}
+
+/// Bot Zalo kết nối ở Hệ thống > Kết nối > Zalo (D116): mỗi dòng một token bot, lưu mã hóa. Bot đặt trong .env
+/// (ZALO_BOT_TOKEN) không nằm trong bảng này; nhóm/hội thoại của nó có botId trống.
+model ZaloBot {
+  id               String    @id @default(cuid())
+  name             String    @db.VarChar(100) // tên gợi nhớ do quản trị viên đặt
+  tokenEnc         String    @db.Text // token bot, mã hóa bằng lib/crypto/secret-box.ts
+  tokenHint        String    @db.VarChar(12) // vài ký tự cuối của token để nhận ra key trong danh sách, không đủ để dùng
+  webhookSecretEnc String    @db.Text // chuỗi bí mật webhook tự sinh cho riêng bot này, mã hóa
+  zaloId           String?   @unique @db.VarChar(60) // id bot do Zalo trả về (getMe), để không kết nối trùng một bot hai lần
+  accountName      String?   @db.VarChar(150) // tên bot trên Zalo
+  canJoinGroups    Boolean?
+  isActive         Boolean   @default(true) // tắt = bot không gửi, không nhận
+  lastCheckedAt    DateTime?
+  lastError        String?   @db.Text // lỗi của lần kiểm tra / đăng ký webhook gần nhất
+  webhookSetAt     DateTime? // lần cuối đăng ký webhook thành công
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  groups   ZaloGroup[]
+  contacts ZaloContact[]
+
+  @@map("zalo_bots")
 }
 
 // Mỗi ảnh gửi vào mỗi nhóm đúng một dòng (để tự động gửi không bị gửi trùng, và xem được lý do lỗi).
@@ -555,6 +609,7 @@ model ZaloContact {
   lastMessageText String?         @db.VarChar(200)
   contextResetAt  DateTime? // lệnh /reset: bot không đọc tin cũ hơn mốc này
   accountId       String? // có giá trị = hội thoại của một tài khoản Zalo cá nhân (chatId lúc đó là "p:<accountId>:<threadId>"); trống = của bot
+  botId           String? // hội thoại của bot nào (bảng zalo_bots): bot nhận tin gần nhất từ cuộc chat này; trống = bot trong .env
   threadId        String?         @db.VarChar(100) // mã cuộc chat thật trên Zalo cá nhân (người hoặc nhóm)
   avatarUrl       String?         @db.VarChar(500)
   createdAt       DateTime        @default(now())
@@ -563,10 +618,12 @@ model ZaloContact {
   userId String? // nhân viên (role STAFF) gắn với tài khoản web nào: lệnh trong nhóm chạy dưới tên và hạn mức của người này
 
   account  ZaloAccount?  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  bot      ZaloBot?      @relation(fields: [botId], references: [id], onDelete: SetNull)
   user     User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   messages ZaloMessage[]
 
   @@index([accountId, lastMessageAt])
+  @@index([botId])
   @@index([lastMessageAt])
   @@index([role])
   @@map("zalo_contacts")

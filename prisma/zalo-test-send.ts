@@ -5,15 +5,15 @@ import { db } from "../lib/db";
 import { buildPdf } from "../lib/export/build";
 import { compareSessionImages } from "../lib/jobs/order";
 import { getStorage } from "../lib/storage";
-import { getZaloClient } from "../lib/zalo";
+import { getBotClient } from "../lib/zalo";
 import { deliverImage } from "../lib/zalo/send";
 
 async function main() {
   const customerName = process.argv[2] ?? "Nextgency";
-  const client = getZaloClient();
-  if (!client) throw new Error("Chưa cấu hình ZALO_BOT_TOKEN.");
   const group = await db.zaloGroup.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" } });
   if (!group) throw new Error("Chưa có nhóm Zalo nào đang bật.");
+  const client = await getBotClient(group.botId);
+  if (!client) throw new Error("Chưa kết nối bot Zalo nào (hoặc bot của nhóm này đang tắt).");
   console.log(`Nhóm: ${group.name}`);
 
   const text = await client.sendMessage(group.chatId, `Tin thử từ hệ thống ảnh mẫu in logo Trường Minh: sắp gửi ảnh đã tạo của khách ${customerName} và một file PDF.`);
@@ -28,7 +28,7 @@ async function main() {
 
   let sent = 0;
   for (const img of images) {
-    const r = await deliverImage(img.id, { id: group.id, chatId: group.chatId }, { force: true });
+    const r = await deliverImage(img.id, { id: group.id, chatId: group.chatId, botId: group.botId }, { force: true });
     console.log(`  ảnh ${img.id.slice(0, 8)}: ${r.outcome}${r.outcome === "failed" ? " - " + r.error : ""}`);
     if (r.outcome === "sent") sent++;
     if (r.outcome === "failed" && r.stop) break;
