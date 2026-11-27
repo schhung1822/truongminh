@@ -21,6 +21,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
+import { standaloneDesignLabel } from "@/lib/jobs/ai-state";
 import { fileUrl } from "@/lib/storage";
 import { zonedStartOfDay } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -233,7 +234,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
                                             </span>
                                             <span className="text-xs text-muted-foreground">Sale: {s.createdBy.name}</span>
                                             <span className="flex flex-wrap items-center gap-1.5">
-                                              {s.type === "DESIGN" && <Badge variant="outline">Thiết kế theo mẫu Pinterest{s.productType ? ` · ${s.productType}` : ""}</Badge>}
+                                              {s.type === "DESIGN" && <Badge variant="outline">{standaloneDesignLabel(s.aiAnalysis)}{s.productType ? ` · ${s.productType}` : ""}</Badge>}
                                               <Badge>{done.length}/{s.images.length} ảnh xong</Badge>
                                               {running > 0 && <Badge variant="secondary">{running} đang tạo</Badge>}
                                               {failed > 0 && <Badge variant="destructive">{failed} lỗi</Badge>}

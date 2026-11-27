@@ -116,7 +116,7 @@ export function LogoPanel({
               key={s.id}
               href={`/sessions/${s.id}`}
               name={s.pinDesign ? `Thiết kế ${s.createdAt}` : `Phiên ${s.createdAt}`}
-              subtitle={s.pinDesign ? `Theo mẫu Pinterest · ${s.pinDesign} · ${s.creatorName}` : s.creatorName}
+              subtitle={s.pinDesign ? `${(s.designLabel ?? "Thiết kế theo mẫu Pinterest").replace(/^Thiết kế t/, "T")} · ${s.pinDesign} · ${s.creatorName}` : s.creatorName}
               footer={
                 s.running > 0
                   ? `${s.running} đang tạo · ${s.done}/${s.total} xong`

@@ -152,7 +152,7 @@ tar -xzf ~/ten-file-anh.tar.gz -C .            # tạo thư mục storage/ trong
 npm ci --include=dev && npx prisma migrate deploy && npm run build
 pm2 start deploy/ecosystem.config.cjs && pm2 save
 ```
-Kiểm tra: `pm2 status` (online), `curl -s http://127.0.0.1:3000/api/healthz`, `pm2 logs truongminh`. Cổng 3000 đã có ứng dụng khác dùng thì đặt `APP_PORT=3100` khi `pm2 start` và sửa cổng trong nginx.
+Kiểm tra: `pm2 status` (online), `curl -s http://127.0.0.1:3000/api/healthz`, `pm2 logs truongminh`. Cổng 3000 đã có ứng dụng khác dùng thì thêm dòng `APP_PORT="3100"` vào `.env` (cấu hình PM2 đọc cổng từ đó mỗi lần khởi động hay nạp lại, kể cả khi chạy `update-pm2.sh`) và sửa cổng trong nginx.
 
 **HTTPS bằng nginx** (đã có nginx thì chỉ thêm khối `server` mẫu):
 ```bash
@@ -242,6 +242,19 @@ Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web k
 
 ### Cấu hình Zalo và hướng dẫn sử dụng
 Bot Zalo **không tự nói chuyện với khách**: nhân viên nói với khách, bot chỉ làm việc khi nhân viên đã ghép nối tag bot (làm ảnh, hỏi kỹ thuật) hoặc bấm "AI soạn" trong Hộp thư. Các chức năng (gửi ảnh vào nhóm, trợ lý nhận lệnh, Hộp thư, ghép nối nhân viên, lệnh, chăm sóc nhóm) bật/tắt và chỉnh ở **Quản trị > Cài đặt Zalo**. Thông tin xưởng cho AI (hồ sơ, bài kiến thức, mức hiển thị Công khai/Nội bộ/Chỉ admin, ngân sách từng AI, trang Thử AI) nằm ở **Quản trị > Thông tin doanh nghiệp**. Hướng dẫn từng bước (kết nối bot, mời bot vào nhóm, tag bot ra lệnh, xử lý sự cố) nằm ngay trong web ở menu **Zalo > Hướng dẫn Zalo**. Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web khởi động lại, trên máy cá nhân chạy `npm run db:deploy`.
+
+### Trợ lý Zalo: ra lệnh bằng lời thường
+Khi bật **Trợ lý nhận lệnh** (Cài đặt Zalo > Trợ lý AI), nhân viên đã ghép nối và được gắn tài khoản web tag bot trong nhóm (hoặc nhắn riêng) rồi nói việc cần làm, ví dụ:
+- `tạo ảnh cho khách Lascote theo mẫu khách từng ưng`: bot xem lịch sử (chất liệu đã chốt báo giá, đã chọn làm thiết kế, mẫu Pinterest khách thích), nêu đề xuất kèm số lượt, chờ nhắn `ok` rồi mới tạo và gửi ảnh về cuộc chat.
+- Gửi logo kèm `làm catalog cho logo này, thương hiệu Cà phê Gió`; `ảnh 2 số 3 và 5 làm móc khóa`; `làm bảng tên cho Lascote bằng ZY-12 và SU-BAC`.
+- `khách Lascote từng làm gì?`, `gửi lại mẫu lần trước`, `xong chưa?`, `còn bao nhiêu lượt?`, câu hỏi kỹ thuật.
+
+Điều cần biết:
+1. Bot chạy dưới quyền và hạn mức lượt của tài khoản web gắn với người nhắn. Việc bot tự suy ra từ lịch sử, tạo tất cả chất liệu, hoặc tốn từ 12 lượt trở lên thì bot hỏi xác nhận trước.
+2. Mỗi tin bot hỏi AI (model chat của kie.ai, đặt ở Cài đặt Zalo > Trợ lý AI) 1-3 lượt, mỗi lượt khoảng 5.000 token và 5-15 giây. Cần `IMAGE_PROVIDER="kie"`; ở chế độ `mock` bot chỉ đoán theo từ khóa để thử luồng.
+3. Trong nhóm bot chỉ tra khách khi gõ đúng tên khách hoặc thương hiệu, và không nhắc khách khác. Bot không nêu giá.
+4. AI có thể hiểu chưa đúng: câu đề xuất của bot luôn ghi rõ tên khách, thương hiệu, chất liệu, số ảnh để soát trước khi `ok`. Bot hiểu lẫn chuyện cũ thì nhắn riêng `/reset`.
+5. Thiết kế, lý do không dùng MCP và các chốt chống lỗi của model: D129 trong `docs/DECISIONS.md`. Mã ở `lib/zalo/agent/`.
 
 ### Nhiều tài khoản Zalo cá nhân trong một Hộp thư (thử nghiệm)
 Ở **Hệ thống > Kết nối > Zalo**, phần Tài khoản Zalo cá nhân, bấm **Thêm tài khoản (quét QR)**, quét bằng Zalo trên điện thoại của số cần thêm; làm lại cho từng số. Tin nhắn của mọi tài khoản (cả bot) gom về **Zalo > Hộp thư Zalo**, có bộ lọc theo tài khoản; trả lời và gửi ảnh mẫu đi qua đúng số của hội thoại. Máy chủ giữ kết nối nghe tin và tự nối lại sau khi khởi động (cookie lưu mã hóa; khóa ở `ZALO_ACCOUNT_KEY` hoặc file `storage/.secret-key`, nên giữ thư mục storage).

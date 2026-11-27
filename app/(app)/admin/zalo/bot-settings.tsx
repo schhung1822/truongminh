@@ -46,8 +46,10 @@ export function BotSettings({ initial, tokenSet }: { initial: ZaloSettings; toke
         <CardHeader>
           <CardTitle>Trợ lý nhận lệnh (tag bot trong nhóm)</CardTitle>
           <CardDescription>
-            Nhân viên đã ghép nối và gắn tài khoản web tag bot trong nhóm khách (hoặc nhắn riêng cho bot) để giao việc: làm catalog chất liệu cho logo vừa gửi, chọn vài mẫu để làm ảnh thiết kế,
-            hoặc hỏi kỹ thuật (bot trả lời theo kho kiến thức và danh sách chất liệu). Ảnh tạo xong bot gửi lại đúng nhóm đó. Khách trong nhóm không ra lệnh được. Mỗi lệnh tốn một ít token AI, ảnh tạo thuộc hạn mức của nhân viên.
+            Nhân viên đã ghép nối và gắn tài khoản web tag bot trong nhóm khách (hoặc nhắn riêng cho bot) rồi nói việc cần làm bằng lời thường. Bot tự tra khách, xem lịch sử, tạo ảnh và hỏi lại khi thiếu
+            thông tin: &quot;tạo ảnh cho khách Minh theo mẫu khách từng ưng&quot;, làm catalog cho logo vừa gửi (AI chọn chất liệu hợp logo), chọn ô trên catalog để thiết kế, gửi lại mẫu cũ, hỏi tiến độ, hỏi kỹ thuật.
+            Việc bot tự suy ra từ lịch sử hoặc tốn từ 12 lượt trở lên thì bot hỏi xác nhận trước khi làm. Ảnh tạo xong bot gửi lại đúng cuộc chat đó. Khách trong nhóm không ra lệnh được. Mỗi tin tốn 1-3 lượt hỏi AI
+            (mỗi lượt khoảng 5-10 giây); ảnh tạo thuộc hạn mức của nhân viên. Xem ví dụ ở Hướng dẫn sử dụng.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

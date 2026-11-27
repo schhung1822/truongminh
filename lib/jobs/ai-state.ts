@@ -68,3 +68,16 @@ export function readAiState(raw: unknown, now = Date.now()): AiStateView {
   if (Array.isArray(o.picks)) return { kind: "done", analysis: raw as SessionAiAnalysis };
   return { kind: "none" };
 }
+
+/**
+ * Phiên THIẾT KẾ đi thẳng từ logo với các chất liệu chỉ định sẵn (D129, do trợ lý Zalo tạo): cột aiAnalysis ghi
+ * { direct: true, pinIds }. Khác phiên thiết kế theo mẫu Pinterest (D125) ở chỗ không nhờ AI chọn chất liệu.
+ */
+export function isDirectDesign(raw: unknown): boolean {
+  return !!raw && typeof raw === "object" && !Array.isArray(raw) && (raw as { direct?: unknown }).direct === true;
+}
+
+/** Tên gọi của một phiên thiết kế KHÔNG có phiên cha, để hiện ở trang phiên, Lịch sử và danh sách phiên của logo. */
+export function standaloneDesignLabel(raw: unknown): string {
+  return isDirectDesign(raw) ? "Thiết kế theo chất liệu chỉ định" : "Thiết kế theo mẫu Pinterest";
+}

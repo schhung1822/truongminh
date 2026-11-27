@@ -14,6 +14,7 @@ import { getKieCredits } from "@/lib/providers";
 import { getStorage } from "@/lib/storage";
 import { zonedStartOfDay } from "@/lib/time";
 import { handleAgentMessage } from "./agent";
+import { resetThreads } from "./agent/thread";
 import { buildChatMessages } from "./bot-prompt";
 import { ZaloError, type ZaloClient } from "./client";
 import { helpText, parseCommand, PUBLIC_COMMANDS, type CommandName } from "./commands";
@@ -293,6 +294,7 @@ async function runCommand(client: ZaloClient, s: ZaloSettings, contact: ZaloCont
       return say(helpText(s.enabledCommands));
     case "reset":
       await db.zaloContact.update({ where: { id: contact.id }, data: { contextResetAt: new Date() } });
+      await resetThreads(contact.chatId, contact.id); // quên luôn các mạch trò chuyện với trợ lý của người này (ở đây và trong các nhóm)
       return say("Đã xóa ngữ cảnh, mình bắt đầu lại nhé.");
     case "status":
       return say(await statusText());

@@ -78,7 +78,7 @@ export default async function ZaloGuidePage() {
         <ul>
           <li><b>Gửi ảnh mẫu vào nhóm Zalo</b>: ảnh được gửi vào nhóm khi nhân viên tag bot giao việc (hoặc gửi tay từ Hộp thư), kèm chữ ghi thương hiệu, sale. Ảnh tạo trên web không tự gửi vào nhóm.</li>
           <li><b>Mẫu Pinterest mới vào nhóm</b>: lưu thêm ảnh vào board Pinterest đang theo dõi là bot gửi ngay ảnh đó vào các nhóm bật &quot;Nhận mẫu Pinterest&quot;. Chọn board ở Hệ thống &gt; Kết nối &gt; Pinterest, chọn nhóm và chữ đi kèm ở Cài đặt Zalo &gt; Nhóm và gửi ảnh.</li>
-          <li><b>Tag bot ra lệnh</b>: nhân viên đã ghép nối tag bot trong nhóm khách để làm catalog, làm ảnh thiết kế hoặc hỏi kỹ thuật; bot làm rồi gửi kết quả lại đúng nhóm đó.</li>
+          <li><b>Tag bot ra lệnh</b>: nhân viên đã ghép nối tag bot trong nhóm khách và nói việc cần làm bằng lời thường: tạo ảnh cho một khách theo mẫu khách từng ưng, làm catalog, làm ảnh thiết kế, gửi lại mẫu cũ, hỏi kỹ thuật; bot hỏi lại khi cần rồi gửi kết quả về đúng nhóm đó.</li>
           <li><b>Kho kiến thức</b>: thông tin xưởng (hồ sơ, bài kiến thức) mà các AI dùng chung. Mỗi AI chỉ nhận phần dành cho nó; thông tin chỉ admin thấy không AI nào đọc.</li>
           <li><b>Ghép nối nhân viên</b>: nhân viên nhắn bot lệnh như /status, /today.</li>
           <li><b>Kịch bản chăm sóc nhóm</b>: AI lên sẵn 2-3 bài đăng mỗi ngày cho từng nhóm; bạn chỉnh rồi đăng.</li>
@@ -197,28 +197,40 @@ export default async function ZaloGuidePage() {
       </Section>
 
       <Section id="tro-ly" title="Tag bot ra lệnh trong nhóm" desc={admin ? "Bật ở Cài đặt Zalo > Trợ lý AI > Trợ lý nhận lệnh; gắn tài khoản web cho nhân viên ở Nhân viên và lệnh." : "Quản trị viên bật và gắn tài khoản web cho bạn trước khi dùng."}>
-        <p>Sale đã ghép nối và được gắn tài khoản web tag bot trong nhóm khách để giao việc. Bot làm rồi gửi kết quả lại đúng nhóm đó. Khách trong nhóm tag bot không ra lệnh được.</p>
+        <p>Sale đã ghép nối và được gắn tài khoản web tag bot trong nhóm khách (hoặc nhắn riêng cho bot) rồi nói việc cần làm bằng lời thường, không cần nhớ cú pháp. Bot tự tra khách, xem lịch sử, tạo ảnh, hỏi lại khi thiếu thông tin, rồi gửi kết quả về đúng cuộc chat đó. Khách trong nhóm tag bot không ra lệnh được.</p>
+        <h3>Tạo ảnh cho một khách theo mẫu khách từng ưng</h3>
+        <Steps>
+          <li>Nhắn, ví dụ: <Code>@Bot tạo ảnh cho khách Lascote theo mẫu khách từng ưng</Code> (gõ tên khách hoặc tên thương hiệu, không cần dấu).</li>
+          <li>Bot xem lịch sử của khách: chất liệu đã chốt báo giá, đã nhận báo giá, đã chọn làm thiết kế, và các mẫu Pinterest khách đã thích. Bot nêu đề xuất kèm số ảnh, số lượt sẽ tốn và hỏi lại.</li>
+          <li>Nhắn <Code>ok</Code> để bot làm; muốn đổi thì nói luôn, ví dụ <Code>làm tem nhãn, 2 phương án</Code>; không làm nữa thì nhắn <Code>thôi</Code>. Đề xuất để quá 30 phút không trả lời thì tự hết hiệu lực.</li>
+          <li>Trùng tên nhiều khách thì bot hỏi bạn chọn ai. Khách chưa có lịch sử thì bot đề nghị để AI chọn chất liệu hợp logo.</li>
+        </Steps>
         <h3>Làm catalog chất liệu cho logo của khách</h3>
         <Steps>
-          <li>Lưu ảnh logo khách gửi, rồi gửi lại vào nhóm kèm tag bot và lời dặn, ví dụ: <Code>@Bot làm mẫu chất liệu cho logo này</Code>. Bot nhớ logo gửi trong 24 giờ gần nhất, nên các lệnh sau không cần gửi lại.</li>
-          <li>Bot lấy tên nhóm làm tên khách hàng (admin đặt tên nhóm ở Cài đặt Zalo &gt; Nhóm). Nhóm chưa có tên thì dặn kèm, ví dụ <Code>khách Anh Nam, thương hiệu Cà phê Gió</Code>. Khách và thương hiệu chưa có thì bot tự tạo dưới tên bạn.</li>
-          <li>Bot dùng các trang mẫu mặc định (hoặc trang bạn gọi tên) để tạo ảnh, báo đã nhận, và khi xong gửi toàn bộ ảnh vào nhóm. Phiên cũng hiện trên web như bình thường.</li>
+          <li>Logo mới: lưu ảnh logo khách gửi, rồi gửi lại vào nhóm kèm tag bot và lời dặn, ví dụ <Code>@Bot làm catalog cho logo này</Code>. Bot nhớ ảnh gửi trong 24 giờ gần nhất. Logo đã có trong hệ thống thì chỉ cần gọi tên: <Code>@Bot làm catalog cho Lascote</Code>.</li>
+          <li>Với logo mới, bot lấy tên nhóm làm tên khách hàng (admin đặt tên nhóm ở Cài đặt Zalo &gt; Nhóm). Nhóm chưa có tên thì dặn kèm, ví dụ <Code>khách Anh Nam, thương hiệu Cà phê Gió</Code>. Khách và thương hiệu chưa có thì bot tự tạo dưới tên bạn.</li>
+          <li>Mặc định AI chọn các chất liệu hợp logo nhất. Muốn kiểu khác thì nói: <Code>bằng bộ mặc định</Code>, <Code>bằng trang mẫu Decal</Code>, hoặc <Code>tất cả chất liệu</Code> (tốn nhiều lượt, bot hỏi xác nhận trước).</li>
         </Steps>
-        <h3>Chọn vài mẫu để xem thiết kế</h3>
+        <h3>Thiết kế từ chất liệu đã chọn</h3>
         <ul>
-          <li>Tag bot và nói theo số in trên ảnh catalog: <Code>@Bot ảnh 2 số 3 và 5 làm móc khóa</Code>. Thêm <Code>3 phương án</Code> nếu muốn nhiều hơn (mặc định 2, tối đa 4). Cũng gọi được theo mã chất liệu.</li>
-          <li>Bot thiết kế từ catalog gần nhất trong nhóm, tối đa 10 chất liệu mỗi lần, rồi gửi ảnh vào nhóm.</li>
+          <li>Theo số in trên ảnh catalog bot vừa gửi: <Code>@Bot ảnh 2 số 3 và 5 làm móc khóa</Code>. Thêm <Code>3 phương án</Code> nếu muốn nhiều hơn (mặc định 2, tối đa 4).</li>
+          <li>Theo mã chất liệu, không cần catalog trước: <Code>@Bot làm bảng tên cho Lascote bằng ZY-12 và SU-BAC</Code>.</li>
+          <li>Mỗi lần tối đa 10 chất liệu. Lần nào tốn từ 12 lượt trở lên bot hỏi xác nhận trước.</li>
         </ul>
-        <h3>Hỏi kỹ thuật và hỏi tiến độ</h3>
+        <h3>Hỏi và xem lại</h3>
         <ul>
-          <li><Code>@Bot mẫu dày 0.3 mm khắc được không?</Code>: bot trả lời dựa trên kho kiến thức (phần công khai và nội bộ) và danh sách chất liệu (gồm độ dày). Không có trong tài liệu thì bot nói thẳng là chưa có và ghi câu hỏi lại cho quản trị viên.</li>
-          <li><Code>@Bot xong chưa?</Code>: bot báo ảnh nào đã xong.</li>
+          <li><Code>@Bot khách Lascote từng làm gì?</Code>: bot tóm tắt các phiên gần đây, chất liệu từng ưng, mẫu Pinterest đã thích (không nêu giá).</li>
+          <li><Code>@Bot gửi lại mẫu thiết kế lần trước của Lascote</Code>: bot gửi lại ảnh cũ, không tạo mới, không tốn lượt. <Code>gửi mẫu Pinterest khách thích</Code> cũng được.</li>
+          <li><Code>@Bot xong chưa?</Code> (tiến độ), <Code>@Bot còn bao nhiêu lượt?</Code> (hạn mức hôm nay của bạn).</li>
+          <li><Code>@Bot mẫu dày 0.3 mm khắc được không?</Code>: bot trả lời dựa trên kho kiến thức (phần công khai và nội bộ) và danh sách chất liệu. Không có trong tài liệu thì bot nói thẳng là chưa có và ghi câu hỏi lại cho quản trị viên.</li>
         </ul>
         <h3>Lưu ý</h3>
         <ul>
-          <li>Mỗi lệnh tốn một ít token AI để hiểu lời dặn; ảnh tạo tính vào hạn mức ngày của bạn như khi bấm trên web.</li>
+          <li>Bot trả lời sau khoảng 5-20 giây (mỗi tin bot hỏi AI 1-3 lượt). Ảnh tạo tính vào hạn mức ngày của bạn như khi bấm trên web; bot chạy dưới quyền tài khoản web của bạn nên không thêm được logo cho khách do người khác phụ trách.</li>
+          <li>Trong nhóm (có thể có khách đọc) bot chỉ tra khi bạn gõ đúng tên khách hoặc thương hiệu, và không nhắc tới khách khác. Tra theo tên gần đúng thì nhắn riêng cho bot.</li>
           <li>Bot chỉ thấy tin có tag bot (Zalo chỉ gửi những tin đó). Logo phải được gửi kèm tag, hoặc gửi lại vào nhóm sau khi lưu.</li>
-          <li>Nhắn riêng cho bot cũng dùng được các lệnh trên (không cần tag), kết quả gửi lại chat riêng.</li>
+          <li>Bot nhớ mạch trò chuyện với từng người trong từng cuộc chat khoảng 2 giờ. Thấy bot hiểu lẫn sang chuyện cũ thì nhắn riêng cho bot lệnh <Code>/reset</Code>.</li>
+          <li>AI đôi khi hiểu chưa đúng: đọc kỹ câu đề xuất của bot (tên khách, thương hiệu, chất liệu, số ảnh) trước khi nhắn <Code>ok</Code>.</li>
         </ul>
       </Section>
 

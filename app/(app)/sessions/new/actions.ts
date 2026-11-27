@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
+import { standaloneDesignLabel } from "@/lib/jobs/ai-state";
 import { canEditCustomer } from "@/lib/permissions";
 import { fileUrl } from "@/lib/storage";
 
@@ -115,8 +116,10 @@ export type LogoSessionOption = {
   failed: number;
   running: number;
   total: number;
-  /** phiên thiết kế theo mẫu Pinterest (D125): loại sản phẩm; phiên ảnh chất liệu thì null */
+  /** phiên thiết kế không có phiên cha (theo mẫu Pinterest D125, hoặc theo chất liệu chỉ định D129): loại sản phẩm; phiên ảnh chất liệu thì null */
   pinDesign: string | null;
+  /** tên gọi của kiểu phiên thiết kế đó ("Thiết kế theo mẫu Pinterest"...); phiên ảnh chất liệu thì null */
+  designLabel: string | null;
 };
 
 /** Phiên hiện ở danh sách: phiên ảnh chất liệu, và phiên thiết kế theo mẫu Pinterest (phiên DESIGN không có phiên cha). */
@@ -148,6 +151,7 @@ export async function listLogoSessionsAction(logoId: string): Promise<{ sessions
         running: s.images.length - done - failed,
         total: s.images.length,
         pinDesign: s.type === "DESIGN" ? (s.productType ?? "Thiết kế") : null,
+        designLabel: s.type === "DESIGN" ? standaloneDesignLabel(s.aiAnalysis) : null,
       };
     }),
   };

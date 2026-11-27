@@ -6,10 +6,32 @@
  * các tài khoản Zalo cá nhân, theo dõi việc bot đang làm và hỏi kie.ai kết quả ảnh; chạy hai bản sẽ gửi trùng và tranh nhau.
  *
  * Cổng mặc định 3000, chỉ mở trên 127.0.0.1 (nginx hoặc Caddy đứng trước lo HTTPS). Cổng 3000 đã có ứng dụng khác dùng thì
- * đặt cổng khác:  APP_PORT=3100 pm2 start deploy/ecosystem.config.cjs   (và sửa cổng trong cấu hình nginx).
+ * thêm dòng  APP_PORT="3100"  vào file .env của dự án (và sửa cổng trong cấu hình nginx).
  */
+const fs = require("node:fs");
 const path = require("node:path");
-const port = process.env.APP_PORT || "3000";
+
+/**
+ * Cổng của web: biến APP_PORT lúc gõ lệnh, không có thì dòng APP_PORT trong .env của dự án, không có nữa thì 3000.
+ * Phải đọc được từ .env vì deploy/update-pm2.sh nạp lại bằng `pm2 startOrReload ... --update-env`: nếu chỉ dựa vào biến lúc
+ * gõ lệnh thì lần nạp lại nào không gõ APP_PORT=... web sẽ khởi động ở cổng 3000, đụng ứng dụng khác và sập (đã gặp 27/11/2026).
+ */
+function appPort() {
+  const isPort = (v) => /^\d{2,5}$/.test(v);
+  if (process.env.APP_PORT && isPort(process.env.APP_PORT)) return process.env.APP_PORT;
+  try {
+    const line = fs
+      .readFileSync(path.resolve(__dirname, "..", ".env"), "utf8")
+      .split(/\r?\n/)
+      .find((l) => /^\s*APP_PORT\s*=/.test(l));
+    const value = line ? line.slice(line.indexOf("=") + 1).trim().replace(/^["']|["']$/g, "") : "";
+    if (isPort(value)) return value;
+  } catch {
+    // chưa có file .env: dùng cổng mặc định
+  }
+  return "3000";
+}
+const port = appPort();
 
 module.exports = {
   apps: [

@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { compareSessionImages } from "@/lib/jobs/order";
+import { readAiState } from "@/lib/jobs/ai-state";
 import { syncSession } from "@/lib/jobs/process";
 import type { LayoutSnapshot } from "@/lib/jobs/snapshot";
 import { shared } from "@/lib/jobs/throttle";
@@ -30,13 +31,16 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).sli
 
 const g = globalThis as unknown as { __zaloTaskWatching?: Set<string> };
 
-/** Gửi tin chữ vào một cuộc chat và lưu vào hội thoại (nếu cuộc chat đã có trong Hộp thư). Không bao giờ ném lỗi. */
-export async function sayToChat(chatId: string, text: string): Promise<boolean> {
+/**
+ * Gửi tin chữ vào một cuộc chat và lưu vào hội thoại (nếu cuộc chat đã có trong Hộp thư). Không bao giờ ném lỗi.
+ * `usage`: số token AI đã dùng để ra được tin này, ghi vào đoạn đầu để trang thống kê Zalo cộng được.
+ */
+export async function sayToChat(chatId: string, text: string, usage?: { promptTokens: number; completionTokens: number }): Promise<boolean> {
   const client = await getChatClient(chatId);
   if (!client) return false;
   const chunks = splitMessage(stripMarkdown(text));
   const contact = await db.zaloContact.findUnique({ where: { chatId }, select: { id: true } }).catch(() => null);
-  for (const chunk of chunks) {
+  for (const [i, chunk] of chunks.entries()) {
     let error: string | null = null;
     let zaloId: string | undefined;
     try {
@@ -47,7 +51,19 @@ export async function sayToChat(chatId: string, text: string): Promise<boolean> 
     }
     if (contact) {
       await db.zaloMessage
-        .create({ data: { contactId: contact.id, direction: "OUT", author: "BOT", kind: "TEXT", text: chunk, zaloMessageId: zaloId ?? null, failed: !!error, error } })
+        .create({
+          data: {
+            contactId: contact.id,
+            direction: "OUT",
+            author: "BOT",
+            kind: "TEXT",
+            text: chunk,
+            zaloMessageId: zaloId ?? null,
+            failed: !!error,
+            error,
+            ...(i === 0 && usage && usage.promptTokens + usage.completionTokens > 0 ? { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens } : {}),
+          },
+        })
         .catch(() => {});
     }
     if (error) return false;
@@ -79,7 +95,9 @@ async function watch(taskId: string): Promise<void> {
       console.error(`Zalo agent: syncSession ${task.sessionId} lỗi:`, errText(e));
     }
     open = await db.generatedImage.count({ where: { sessionId: task.sessionId, retries: { none: {} }, status: { in: ["PENDING", "PROCESSING"] } } });
-    if (open === 0 || Date.now() > deadline) break;
+    // Phiên do AI chọn chất liệu (D115, D125) chưa có ảnh nào trong lúc AI còn đọc logo: vẫn phải chờ, chưa phải "xong mà không có ảnh"
+    const analysing = open === 0 && readAiState((await db.consultSession.findUnique({ where: { id: task.sessionId }, select: { aiAnalysis: true } }))?.aiAnalysis).kind === "analyzing";
+    if ((open === 0 && !analysing) || Date.now() > deadline) break;
     await sleep(WATCH_INTERVAL_MS);
   }
 
@@ -125,7 +143,9 @@ async function deliver(taskId: string, stillOpen: number): Promise<void> {
   const what = task.kind === "CATALOG" ? "catalog chất liệu" : "ảnh thiết kế";
 
   if (rows.length === 0) {
-    const why = failedRows.find((f) => f.errorMessage)?.errorMessage ?? (stillOpen > 0 ? "ảnh tạo quá lâu" : "không rõ lý do");
+    // phiên AI chọn chất liệu hỏng ngay từ bước phân tích thì không có ảnh nào: lấy lý do AI đã ghi vào phiên
+    const ai = readAiState(task.session.aiAnalysis);
+    const why = failedRows.find((f) => f.errorMessage)?.errorMessage ?? (ai.kind === "failed" ? ai.error : stillOpen > 0 ? "ảnh tạo quá lâu" : "không rõ lý do");
     await sayToChat(task.chatId, `Rất tiếc, ${what} của ${brand.name} chưa tạo được (${why.slice(0, 200)}). Nhờ ${task.user.name} mở web bấm "Tạo lại"${url ? `: ${url}` : "."}`);
     await finish("FAILED", null, why.slice(0, 500));
     return;
@@ -149,7 +169,7 @@ async function deliver(taskId: string, stillOpen: number): Promise<void> {
   for (const img of rows) {
     if (viaGroup && group) {
       // đi qua đường gửi nhóm chung: có ghi nhận, ảnh đã gửi vào nhóm này rồi thì bỏ qua, không gửi trùng
-      const r = await deliverImage(img.id, group);
+      const r = await deliverImage(img.id, group, { force: task.resend }); // "gửi lại ảnh": gửi cả ảnh đã từng vào nhóm này
       if (r.outcome === "failed") {
         lastError = r.error;
         if (r.stop) break;

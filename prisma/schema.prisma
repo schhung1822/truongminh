@@ -737,6 +737,8 @@ model ZaloBotTask {
   logoId         String?
   imageMessageId String?           @db.VarChar(40) // tin ảnh (ZaloMessage.id) đã dùng làm logo, để lệnh sau dùng lại logo thay vì tạo trùng
   status         ZaloBotTaskStatus @default(RUNNING)
+  // true = gửi lại ảnh của một phiên đã có (trợ lý: "gửi lại mẫu lần trước"): ảnh đã từng gửi vào nhóm này vẫn được gửi lần nữa
+  resend         Boolean           @default(false)
   summary        String?           @db.Text
   error          String?           @db.Text
   createdAt      DateTime          @default(now())
@@ -748,6 +750,24 @@ model ZaloBotTask {
   @@index([chatId, createdAt])
   @@index([status])
   @@map("zalo_bot_tasks")
+}
+
+// Trí nhớ ngắn hạn của trợ lý Zalo (D129): mỗi nhân viên trong mỗi cuộc chat có một "mạch" trò chuyện với bot, để bot hỏi lại
+// rồi làm tiếp được ("có 2 khách tên Minh, chọn ai?"). Để yên quá lâu thì mạch được làm mới (xem lib/zalo/agent/thread.ts).
+model ZaloAssistantThread {
+  id        String   @id @default(cuid())
+  chatId    String   @db.VarChar(100) // cuộc chat (nhóm hoặc chat riêng với bot)
+  staffId   String // ZaloContact.id của nhân viên ra lệnh
+  // { messages: các lượt gần đây (lời nhân viên, bước của AI, kết quả công cụ rút gọn), refs: bảng tham chiếu ngắn K1/L2... → id thật }
+  state     Json
+  // việc tốn lượt đang chờ nhân viên xác nhận (kế hoạch đã chốt sẵn từng tham số); trống = không có
+  pending   Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([chatId, staffId])
+  @@index([updatedAt])
+  @@map("zalo_assistant_threads")
 }
 
 // ---------- Kho kiến thức cho AI (xem docs/DECISIONS.md D87) ----------

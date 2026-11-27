@@ -145,6 +145,44 @@ export async function createDesignSession(
   }
   if (materialIds.some((id) => !allowed.has(id))) return { error: "Có chất liệu không thuộc phiên catalog này." };
 
+  return saveDesignSession(user, { logoId: parent.logoId, parentId: parent.id, logoIsBadge: parent.logo.isBadge, materialIds, productType, variants: input.variants, note, styleRefPinIds });
+}
+
+/**
+ * Tạo phiên THIẾT KẾ đi thẳng từ một logo với các chất liệu chỉ định sẵn, KHÔNG cần phiên catalog trước (D129). Dùng cho trợ
+ * lý Zalo khi làm lại các chất liệu khách từng chọn: chất liệu lấy từ lịch sử của khách chứ không phải từ một ảnh catalog.
+ * Phiên tạo ra là phiên DESIGN không có phiên cha, giống phiên thiết kế theo mẫu Pinterest (D125) nhưng không nhờ AI chọn
+ * chất liệu. Cột aiAnalysis ghi { direct: true, pinIds } để trang phiên hiện lại các mẫu Pinterest đã dùng làm phong cách.
+ */
+export async function createDirectDesignSession(
+  user: SessionUser,
+  input: { logoId: string; materialIds: string[]; productType: string; variants: number; note: string; styleRefPinIds?: string[] },
+): Promise<{ error?: string; sessionId?: string }> {
+  const materialIds = [...new Set(input.materialIds)];
+  const productType = input.productType.trim().slice(0, 200);
+  const note = input.note.trim().slice(0, 1000);
+  const styleRefPinIds = [...new Set(input.styleRefPinIds ?? [])].slice(0, MAX_STYLE_REF_PINS);
+
+  const invalid = validateDesignRequest({ materialCount: materialIds.length, variants: input.variants, productType });
+  if (invalid) return { error: invalid };
+  if (styleRefPinIds.length > 0) {
+    const found = await db.pinterestPin.count({ where: { id: { in: styleRefPinIds } } });
+    if (found !== styleRefPinIds.length) return { error: "Một mẫu Pinterest đã chọn không còn trong thư viện." };
+  }
+  const logo = await db.logo.findUnique({ where: { id: input.logoId }, select: { id: true, isBadge: true } });
+  if (!logo) return { error: "Không tìm thấy logo." };
+  const usable = await db.material.count({ where: { id: { in: materialIds }, isActive: true, referencePath: { not: null } } });
+  if (usable !== materialIds.length) return { error: "Có chất liệu đã tắt hoặc chưa có ảnh tham chiếu." };
+
+  return saveDesignSession(user, { logoId: logo.id, parentId: null, logoIsBadge: logo.isBadge, materialIds, productType, variants: input.variants, note, styleRefPinIds });
+}
+
+/** Phần chung của hai cách tạo phiên thiết kế: dựng ảnh cho từng chất liệu x phương án, kiểm tra hạn mức, lưu phiên và lượt dùng. */
+async function saveDesignSession(
+  user: SessionUser,
+  input: { logoId: string; parentId: string | null; logoIsBadge: boolean; materialIds: string[]; productType: string; variants: number; note: string; styleRefPinIds: string[] },
+): Promise<{ error?: string; sessionId?: string }> {
+  const { materialIds, productType, note, styleRefPinIds } = input;
   const [materialRows, styles, settings] = await Promise.all([
     db.material.findMany({ where: { id: { in: materialIds } } }),
     db.designStyle.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
@@ -184,7 +222,7 @@ export async function createDesignSession(
         note,
         template,
         settings,
-        logoIsBadge: parent.logo.isBadge,
+        logoIsBadge: input.logoIsBadge,
         styleRefPinIds,
       });
       if ("error" in r) return { error: r.error };
@@ -197,8 +235,10 @@ export async function createDesignSession(
     const session = await tx.consultSession.create({
       data: {
         type: "DESIGN",
-        logoId: parent.logoId,
-        parentId: parent.id,
+        logoId: input.logoId,
+        parentId: input.parentId,
+        // phiên đi thẳng từ logo (không có phiên cha): ghi lại các mẫu Pinterest đã dùng làm phong cách để trang phiên hiện lại
+        ...(input.parentId ? {} : { aiAnalysis: { direct: true, pinIds: styleRefPinIds } }),
         productType,
         variantsPerMaterial: input.variants,
         note: note || null,

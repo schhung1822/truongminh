@@ -9,7 +9,7 @@ import { BackButton } from "@/components/back-button";
 import { FolderTile, TileGrid } from "@/components/folder-ui";
 import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import { readAiState, readPinIds } from "@/lib/jobs/ai-state";
+import { readAiState, readPinIds, standaloneDesignLabel } from "@/lib/jobs/ai-state";
 import { loadSessionViews } from "@/lib/jobs/views";
 import { canEditOwned } from "@/lib/permissions";
 import { listQuotes } from "@/lib/quoting/store";
@@ -92,7 +92,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         <div className="min-w-0">
           <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold">
             {brand.name}
-            {isDesign && <Badge variant="secondary">{pinDesign ? "Thiết kế theo mẫu Pinterest" : "Bước 2: thiết kế"}</Badge>}
+            {isDesign && <Badge variant="secondary">{pinDesign ? standaloneDesignLabel(session.aiAnalysis) : "Bước 2: thiết kế"}</Badge>}
           </h1>
           <p className="text-muted-foreground">
             {brand.customer.name}
@@ -109,7 +109,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           )}
           {samplePins.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Mẫu Pinterest đã chọn:</span>
+              <span className="text-muted-foreground">{aiState.kind === "none" ? "Mẫu Pinterest làm phong cách:" : "Mẫu Pinterest đã chọn:"}</span>
               {samplePins.map((p) => (
                 <a key={p.id} href={p.sourceImageUrl} target="_blank" rel="noreferrer noopener" className="block size-12 overflow-hidden rounded-md border" title={p.title ?? "Mở ảnh mẫu"}>
                   <img src={p.sourceImageUrl} alt={p.title ?? "Mẫu Pinterest"} className="size-full object-cover" loading="lazy" />

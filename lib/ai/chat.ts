@@ -1,6 +1,7 @@
 import "server-only";
 import { getEnv } from "@/lib/env";
 import { MATERIAL_PICK_MARKER } from "@/lib/materials/suggest";
+import { ASSISTANT_MARKER, STEP_SUFFIX, TOOL_RESULT_PREFIX } from "@/lib/zalo/agent/protocol";
 import { PLAN_MARKER } from "@/lib/zalo/care-plan";
 
 /**
@@ -160,22 +161,23 @@ export class MockChat implements ChatProvider {
       return { text: JSON.stringify({ summary: "(Mock) Logo đơn giản, nét đậm.", isBadge: false, picks }), promptTokens: 30, completionTokens: 60 };
     }
     const last = [...input.messages].reverse().find((m) => m.role === "user");
-    const said = last?.content.map((p) => (p.type === "text" ? p.text : "[ảnh]")).join(" ") ?? "";
-    // Trợ lý nhận lệnh: đoán lệnh đơn giản bằng từ khóa để thử luồng mà không tốn token
-    if (sys.includes("bộ phận hiểu lệnh")) {
+    const said = (last?.content.map((p) => (p.type === "text" ? p.text : "[ảnh]")).join(" ") ?? "").replace(STEP_SUFFIX, "");
+    // Trợ lý Zalo (D129): đoán bước đơn giản bằng từ khóa để thử luồng gọi công cụ mà không tốn token
+    if (sys.includes(ASSISTANT_MARKER)) {
+      const reply = (o: unknown) => ({ text: JSON.stringify(o), promptTokens: 10, completionTokens: 5 });
+      // vừa nhận kết quả một công cụ: nói lại cho người ra lệnh
+      if (said.startsWith(TOOL_RESULT_PREFIX)) return reply({ say: `(Mock) ${said.slice(0, 300)}` });
       const t = said.toLowerCase();
       const nums = [...t.matchAll(/số\s*(\d+(?:\s*(?:,|và|va)\s*\d+)*)/g)].flatMap((m) => m[1].match(/\d+/g) ?? []).map(Number);
       const image = /ảnh\s*(\d+)/.exec(t)?.[1];
-      const intent = /xong chưa|tiến độ/.test(t)
-        ? { intent: "status" }
-        : nums.length
-          ? { intent: "design", picks: [{ image: image ? Number(image) : null, cells: nums }], productType: /móc khóa/.test(t) ? "móc khóa" : null, variants: null }
-          : /catalog|mẫu chất liệu|logo/.test(t)
-            ? { intent: "catalog" }
-            : /\?|không/.test(t)
-              ? { intent: "ask", question: said }
-              : { intent: "other" };
-      return { text: JSON.stringify(intent), promptTokens: 10, completionTokens: 5 };
+      const customer = /khách\s+([^,.?!]+)/.exec(said)?.[1]?.trim();
+      if (/xong chưa|tiến độ/.test(t)) return reply({ tool: "tien_do", args: {} });
+      if (/bao nhiêu lượt|hạn mức/.test(t)) return reply({ tool: "han_muc", args: {} });
+      if (nums.length) return reply({ tool: "tao_thiet_ke_tu_catalog", args: { chon: [{ anh: image ? Number(image) : null, o: nums }], san_pham: /móc khóa/.test(t) ? "móc khóa" : "tem nhãn" } });
+      if (/catalog|mẫu chất liệu|logo/.test(t)) return reply({ tool: "tao_catalog", args: { kieu: "bo_mac_dinh" } });
+      if (customer) return reply({ tool: "tim_khach", args: { ten: customer } });
+      if (/\?|không/.test(t)) return reply({ tool: "hoi_kien_thuc", args: { cau_hoi: said } });
+      return reply({ say: `(Mock) Em đã nhận: ${said.slice(0, 120)}` });
     }
     const wantsHuman = /nhân viên|nhan vien|\[\[nhan_vien\]\]/i.test(said);
     return {

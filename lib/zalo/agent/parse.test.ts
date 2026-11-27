@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIntentPrompt, extractJson, parseIntent, resolvePicks, stripTag, type CatalogImageCells } from "./parse";
+import { extractJson, resolvePicks, stripTag, type CatalogImageCells } from "./parse";
 
 describe("stripTag", () => {
   it("chưa đặt tên bot thì mọi tin là lệnh", () => {
@@ -17,22 +17,13 @@ describe("stripTag", () => {
   });
 });
 
-describe("extractJson / parseIntent", () => {
+describe("extractJson", () => {
   it("lấy JSON trong khối code và có chữ thừa", () => {
     expect(extractJson('Đây:\n```json\n{"a":{"b":"}"}}\n``` hết')).toEqual({ a: { b: "}" } });
   });
   it("không có JSON thì null", () => {
     expect(extractJson("không có gì")).toBeNull();
     expect(extractJson('{"a":')).toBeNull();
-  });
-  it("đọc đúng lệnh thiết kế", () => {
-    const i = parseIntent('{"intent":"design","picks":[{"image":2,"cells":[3,5]}],"productType":"móc khóa","variants":2,"brandName":null}');
-    expect(i?.intent).toBe("design");
-    expect(i?.picks?.[0].cells).toEqual([3, 5]);
-  });
-  it("loại lệnh lạ hoặc sai kiểu thì bỏ", () => {
-    expect(parseIntent('{"intent":"hack"}')).toBeNull();
-    expect(parseIntent('{"intent":"design","picks":"abc"}')).toBeNull();
   });
 });
 
@@ -67,14 +58,5 @@ describe("resolvePicks", () => {
     expect(resolvePicks(IMAGES, [], []).ok).toBe(false);
     const big: CatalogImageCells[] = [{ imageNumber: 1, cells: cells(12, "c") }];
     expect(resolvePicks(big, [{ image: 1, cells: Array.from({ length: 11 }, (_, i) => i + 1) }], []).ok).toBe(false);
-  });
-});
-
-describe("buildIntentPrompt", () => {
-  it("liệt kê trang mẫu và tình trạng logo", () => {
-    const p = buildIntentPrompt({ sheets: [{ name: "Mẫu 80", isDefault: true }], hasLogo: false, lastCatalogImages: 3 });
-    expect(p).toContain('"Mẫu 80" (mặc định)');
-    expect(p).toContain("KHÔNG có logo");
-    expect(p).toContain("có 3 ảnh");
   });
 });
