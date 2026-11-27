@@ -243,6 +243,15 @@ Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web k
 ### Cấu hình Zalo và hướng dẫn sử dụng
 Bot Zalo **không tự nói chuyện với khách**: nhân viên nói với khách, bot chỉ làm việc khi nhân viên đã ghép nối tag bot (làm ảnh, hỏi kỹ thuật) hoặc bấm "AI soạn" trong Hộp thư. Các chức năng (gửi ảnh vào nhóm, trợ lý nhận lệnh, Hộp thư, ghép nối nhân viên, lệnh, chăm sóc nhóm) bật/tắt và chỉnh ở **Quản trị > Cài đặt Zalo**. Thông tin xưởng cho AI (hồ sơ, bài kiến thức, mức hiển thị Công khai/Nội bộ/Chỉ admin, ngân sách từng AI, trang Thử AI) nằm ở **Quản trị > Thông tin doanh nghiệp**. Hướng dẫn từng bước (kết nối bot, mời bot vào nhóm, tag bot ra lệnh, xử lý sự cố) nằm ngay trong web ở menu **Zalo > Hướng dẫn Zalo**. Bản này thêm bảng và cột vào CSDL: trên VPS tự áp dụng khi web khởi động lại, trên máy cá nhân chạy `npm run db:deploy`.
 
+### Xem lỗi để tối ưu
+
+Hai nơi (chỉ quản trị viên):
+
+- **Quản trị > Thống kê**, mục "Phân tích lỗi tạo ảnh" ở cuối trang: ảnh lỗi theo ngày, tỉ lệ lỗi theo model AI, lỗi gom theo nguyên nhân (kèm ai gỡ được và nên làm gì), danh sách ảnh lỗi lọc theo nguyên nhân, và nút tải CSV ảnh lỗi. Chọn khoảng ngày ở đầu trang.
+- **Cài đặt Zalo**, thẻ "Sự cố của trợ lý nhận lệnh": mỗi lần trợ lý Zalo không xử lý được một lệnh (kèm câu lệnh và lỗi gốc), và cả những lần AI trả lời lệch nhưng trợ lý tự nhắc lại được. Giữ 180 ngày.
+
+Quản trị viên nhắn riêng cho bot mà gặp lỗi thì câu báo lỗi có thêm dòng "Chi tiết (admin)" ghi nguyên nhân. Thiết kế ở `docs/DECISIONS.md` D130.
+
 ### Trợ lý Zalo: ra lệnh bằng lời thường
 Khi bật **Trợ lý nhận lệnh** (Cài đặt Zalo > Trợ lý AI), nhân viên đã ghép nối và được gắn tài khoản web tag bot trong nhóm (hoặc nhắn riêng) rồi nói việc cần làm, ví dụ:
 - `tạo ảnh cho khách Lascote theo mẫu khách từng ưng`: bot xem lịch sử (chất liệu đã chốt báo giá, đã chọn làm thiết kế, mẫu Pinterest khách thích), nêu đề xuất kèm số lượt, chờ nhắn `ok` rồi mới tạo và gửi ảnh về cuộc chat.

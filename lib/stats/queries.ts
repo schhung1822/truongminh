@@ -4,6 +4,7 @@ import { COUNTED_USAGE } from "@/lib/jobs/limits";
 import { zonedStartOfDay } from "@/lib/time";
 import { addDays } from "./range";
 import type { UsageRow } from "./aggregate";
+import type { FailureInput } from "./failure-causes";
 
 /** Kết quả đếm của MySQL có thể là number, bigint, string hoặc Decimal: đổi hết về number. */
 function num(v: unknown): number {
@@ -91,27 +92,37 @@ export async function loadTopStyles(start: Date, end: Date): Promise<RankItem[]>
   return rows.map((r) => ({ id: r.id, label: r.name, value: num(r.n) }));
 }
 
-export type FailureItem = {
+/** Số ảnh lỗi tối đa đem ra phân tích cho một khoảng ngày (lấy các ảnh mới nhất). */
+export const FAILURE_SCAN_LIMIT = 1000;
+
+export type FailureItem = FailureInput & {
   id: string;
   sessionId: string;
-  at: Date;
   brand: string;
   userName: string;
-  message: string | null;
+  model: string;
   attempt: number;
 };
 
-export async function loadRecentFailures(start: Date, end: Date): Promise<FailureItem[]> {
+/**
+ * Mọi ảnh lỗi tạo trong khoảng (mới nhất trước, tối đa FAILURE_SCAN_LIMIT), kèm kết quả lần bấm Tạo lại nếu có. Trang
+ * Thống kê phân loại nguyên nhân bằng lib/stats/failure-causes.ts rồi mới gom đếm, lọc và chia trang, nên lấy cả về một lượt.
+ */
+export async function loadFailures(start: Date, end: Date): Promise<FailureItem[]> {
   const rows = await db.generatedImage.findMany({
     where: { status: "FAILED", createdAt: { gte: start, lt: end } },
     orderBy: { createdAt: "desc" },
-    take: 10,
+    take: FAILURE_SCAN_LIMIT,
     select: {
       id: true,
       sessionId: true,
       createdAt: true,
+      kind: true,
+      model: true,
       errorMessage: true,
       attempt: true,
+      material: { select: { code: true } },
+      retries: { select: { status: true } },
       createdBy: { select: { name: true } },
       session: { select: { logo: { select: { brand: { select: { name: true } } } } } },
     },
@@ -120,11 +131,22 @@ export async function loadRecentFailures(start: Date, end: Date): Promise<Failur
     id: r.id,
     sessionId: r.sessionId,
     at: r.createdAt,
+    kind: r.kind,
+    model: r.model,
     brand: r.session.logo.brand.name,
     userName: r.createdBy.name,
     message: r.errorMessage,
     attempt: r.attempt,
+    // chỉ ảnh thiết kế gắn với đúng một chất liệu; ảnh catalog có nhiều chất liệu nên không quy cho chất liệu nào
+    materialCode: r.kind === "DESIGN" ? (r.material?.code ?? null) : null,
+    retry: r.retries.length === 0 ? "none" : r.retries.some((x) => x.status === "SUCCESS") ? "ok" : r.retries.some((x) => x.status === "PENDING" || x.status === "PROCESSING") ? "running" : "failed",
   }));
+}
+
+/** Số ảnh theo (model, trạng thái) tạo trong khoảng, để tính tỉ lệ lỗi của từng model AI. */
+export async function loadModelStatusCounts(start: Date, end: Date): Promise<{ model: string; status: string; count: number }[]> {
+  const groups = await db.generatedImage.groupBy({ by: ["model", "status"], where: { createdAt: { gte: start, lt: end } }, _count: { _all: true } });
+  return groups.map((g) => ({ model: g.model, status: g.status, count: g._count._all }));
 }
 
 export async function loadSessionCount(start: Date, end: Date): Promise<{ catalog: number; design: number }> {

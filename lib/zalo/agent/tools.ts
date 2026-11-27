@@ -40,7 +40,11 @@ import type { Thread } from "./thread";
  *    câu hỏi xác nhận), để AI không thể nói sai con số; chuỗi rỗng = kết thúc mà không nói thêm (nơi khác sẽ báo);
  *  - error: câu báo cho AI biết vì sao không làm được, để nó sửa tham số hoặc hỏi lại người ra lệnh.
  */
-export type ToolOutcome = { data: unknown } | { final: string } | { error: string };
+export type ToolOutcome =
+  | { data: unknown }
+  | { final: string }
+  /** `fault`: lỗi do chương trình ("crash") hoặc do AI đưa tham số sai ("args"), khác với kết quả bình thường kiểu "không tìm thấy khách"; vòng lệnh ghi các lỗi này vào nhật ký sự cố (D130) */
+  | { error: string; fault?: "crash" | "args"; detail?: string };
 
 export type ToolCtx = {
   /** tài khoản web chịu trách nhiệm (gắn với người ra lệnh ở Quản trị > Zalo > Nhân viên và lệnh) */
@@ -769,12 +773,17 @@ export async function runTool(ctx: ToolCtx, name: string, rawArgs: Record<string
   const parsed = tool.schema.safeParse(rawArgs);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    return { error: `Tham số của ${name} chưa đúng (${issue.path.join(".") || "args"}: ${issue.message}). Xem lại mô tả tham số của lệnh.` };
+    const where = `${issue.path.join(".") || "args"}: ${issue.message}`;
+    return { error: `Tham số của ${name} chưa đúng (${where}). Xem lại mô tả tham số của lệnh.`, fault: "args", detail: `${where} | args: ${clip(JSON.stringify(rawArgs), 600)}` };
   }
   try {
     return await tool.run(ctx, parsed.data);
   } catch (e) {
     console.error(`Zalo agent: công cụ ${name} lỗi:`, e);
-    return { error: "Chương trình gặp lỗi máy chủ khi chạy lệnh này. Báo người ra lệnh thử lại sau ít phút." };
+    return {
+      error: "Chương trình gặp lỗi máy chủ khi chạy lệnh này. Báo người ra lệnh thử lại sau ít phút.",
+      fault: "crash",
+      detail: `${e instanceof Error ? e.message : String(e)} | args: ${clip(JSON.stringify(rawArgs), 600)}`,
+    };
   }
 }

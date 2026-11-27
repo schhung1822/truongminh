@@ -7,7 +7,9 @@ import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { isZaloConfigured } from "@/lib/zalo";
 import { getZaloSettings, type ZaloSettings } from "@/lib/zalo/settings";
+import { loadIssueReport } from "@/lib/zalo/agent/issues";
 import { loadZaloStats } from "@/lib/zalo/stats";
+import { AssistantIssuesCard } from "./assistant-issues";
 import { CleanupCard, MasterSwitch } from "./overview-cards";
 
 export const metadata: Metadata = { title: "Cài đặt Zalo" };
@@ -29,9 +31,11 @@ function featureRows(s: ZaloSettings): Row[] {
 
 export default async function ZaloAdminPage() {
   await requireAdmin();
-  const [settings, stats, messages, configured, dbBots, personal] = await Promise.all([
+  const [settings, stats, issues, messages, configured, dbBots, personal] = await Promise.all([
     getZaloSettings(),
     loadZaloStats(),
+    // bảng nhật ký chưa có (máy chủ cập nhật mã mà chưa chạy migrate) thì chỉ ô này báo, cả trang không sập theo
+    loadIssueReport().catch(() => null),
     db.zaloMessage.count(),
     isZaloConfigured(),
     db.zaloBot.count({ where: { isActive: true } }),
@@ -127,6 +131,8 @@ export default async function ZaloAdminPage() {
           />
         </CardContent>
       </Card>
+
+      <AssistantIssuesCard report={issues} />
 
       <CleanupCard messages={messages} />
     </div>

@@ -18,6 +18,8 @@ import {
   type PromptFacts,
   type ThreadMsg,
 } from "./protocol";
+import type { IssueKind } from "./issue-kinds";
+import { logIssue } from "./issues";
 import { executePlan, runTool, TOOL_NAMES, TOOL_SPECS, type ToolCtx } from "./tools";
 
 /**
@@ -85,6 +87,9 @@ export async function runAssistantTurn(input: {
   const history = thread.state.messages;
   /** các bước của riêng lượt này: lời người ra lệnh, bước AI chọn, kết quả công cụ */
   const turn: ThreadMsg[] = [{ r: "u", c: input.text }];
+  /** ghi một sự cố của lượt này vào nhật ký để quản trị viên xem lại ở Cài đặt Zalo (D130); không bao giờ ném lỗi */
+  const note = (kind: IssueKind, extra: { detail?: string | null; tool?: string } = {}) =>
+    logIssue({ kind, chatId: ctx.chat.chatId, isGroup: ctx.isGroup, chatName: ctx.groupName, staffName: ctx.user.name, command: input.text, model, ...extra });
 
   /**
    * Kết thúc lượt: nói với người ra lệnh (nếu có lời) và cất lượt vào trí nhớ. `byTool` = tên công cụ đã tự viết lời này
@@ -127,13 +132,16 @@ export async function runAssistantTurn(input: {
       usage.steps++;
       raw = r.text;
     } catch (e) {
+      await note("AI_UNREACHABLE", { detail: e instanceof Error ? e.message : String(e) });
       return finish(`Em chưa gọi được AI để xử lý (${e instanceof ChatError ? e.message : "lỗi mạng"}). Anh/chị thử lại sau ít phút nhé.`, { forget: true });
     }
 
     const action = parseAction(raw, TOOL_NAMES);
     if (!action) {
       console.error(`Zalo agent (model ${model}): câu trả lời không đúng quy ước:`, raw.slice(0, 1000));
-      if (formatRemindersLeft-- > 0) {
+      const remind = formatRemindersLeft-- > 0;
+      await note(remind ? "BAD_FORMAT" : "NOT_UNDERSTOOD", { detail: raw });
+      if (remind) {
         turn.push({ r: "a", c: raw.slice(0, 1500) }, { r: "t", c: FORMAT_REMINDER });
         continue;
       }
@@ -145,7 +153,9 @@ export async function runAssistantTurn(input: {
       const usedTool = turn.some((m) => m.r === "t" && m.c.startsWith(TOOL_RESULT_PREFIX));
       if (!usedTool && skipsTools(action.text)) {
         console.error(`Zalo agent (model ${model}): AI né công cụ:`, action.text.slice(0, 300));
-        if (nudgesLeft-- > 0) {
+        const nudge = nudgesLeft-- > 0;
+        await note(nudge ? "DODGE" : "DODGE_FALLBACK", { detail: action.text });
+        if (nudge) {
           turn.push({ r: "a", c: JSON.stringify({ say: action.text }) }, { r: "t", c: TOOL_NUDGE });
           continue;
         }
@@ -163,7 +173,9 @@ export async function runAssistantTurn(input: {
 
     const outcome = await runTool(ctx, action.tool, action.args);
     if ("final" in outcome) return finish(outcome.final, { byTool: action.tool });
+    if ("error" in outcome && outcome.fault) await note(outcome.fault === "crash" ? "TOOL_CRASH" : "BAD_ARGS", { tool: action.tool, detail: outcome.detail });
     turn.push({ r: "t", c: toolResultMessage(action.tool, "error" in outcome ? { loi: outcome.error } : outcome.data) });
   }
+  await note("TOO_LONG", { detail: lastCall ? `Lệnh cuối: ${lastCall}` : null });
   return finish(TOO_LONG, { forget: true });
 }

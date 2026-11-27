@@ -8,6 +8,7 @@ import { roleLabel } from "@/lib/roles";
 import { getSettings } from "@/lib/settings";
 import { getChatClient } from "../index";
 import type { ZaloSettings } from "../settings";
+import { logIssue } from "./issues";
 import { runAssistantTurn } from "./loop";
 import { stripTag } from "./parse";
 import { sayToChat } from "./tasks";
@@ -81,10 +82,25 @@ export async function handleAgentMessage(input: AgentInput): Promise<boolean> {
   try {
     await runForStaff({ ...input, text: tag.text.slice(0, 1500) }, staff, sessionUser, say);
   } catch (e) {
-    console.error("Zalo agent: lỗi xử lý lệnh:", e instanceof Error ? e.message : e);
-    await say("Em gặp lỗi khi xử lý lệnh này, anh/chị thử lại sau ít phút nhé.");
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error("Zalo agent: lỗi xử lý lệnh:", detail);
+    await logIssue({ kind: "CRASH", chatId: chat.chatId, isGroup, staffName: user.name, command: tag.text, detail, model: s.chatModel });
+    await say(`Em gặp lỗi khi xử lý lệnh này, anh/chị thử lại sau ít phút nhé.${agentErrorDetail(detail, { isAdmin: user.role === "ADMIN", isGroup })}`);
   }
   return true;
+}
+
+/**
+ * Phần "Chi tiết (admin)" nối vào câu báo lỗi chung, để quản trị viên biết nguyên nhân mà không phải mở nhật ký máy chủ.
+ * Chỉ hiện ở chat riêng của quản trị viên với bot: trong nhóm có khách, và nhân viên thường không cần thấy lỗi gốc.
+ */
+export function agentErrorDetail(detail: string, who: { isAdmin: boolean; isGroup: boolean }): string {
+  if (!who.isAdmin || who.isGroup) return "";
+  const short = detail.replace(/\s+/g, " ").trim().slice(0, 400);
+  if (!short) return "";
+  // bảng/cột chưa có = mã mới chạy trên CSDL chưa cập nhật cấu trúc (lỗi hay gặp nhất sau khi cập nhật thiếu bước)
+  const stale = /does(?:n't| not) exist|unknown column/i.test(short);
+  return `\nChi tiết (admin): ${short}${stale ? "\nCSDL trên máy chủ chưa được cập nhật cấu trúc: chạy lại bash deploy/update-pm2.sh (hoặc npx prisma migrate deploy)." : ""}`;
 }
 
 /**

@@ -770,6 +770,27 @@ model ZaloAssistantThread {
   @@map("zalo_assistant_threads")
 }
 
+// Nhật ký sự cố của trợ lý Zalo (D130): mỗi lần trợ lý xử lý hỏng một lệnh, hoặc AI trả lời lệch quy ước, ghi một dòng để
+// quản trị viên xem lại ở Cài đặt Zalo và biết cần sửa gì (trước đây chỉ nằm trong nhật ký máy chủ). Dòng cũ tự xóa sau
+// 180 ngày (lib/zalo/agent/issues.ts). Tên người và tên nhóm chép lại tại thời điểm đó, không nối khóa, để xóa liên hệ vẫn đọc được.
+model ZaloAssistantIssue {
+  id        String   @id @default(cuid())
+  kind      String   @db.VarChar(30) // loại sự cố, xem lib/zalo/agent/issue-kinds.ts
+  visible   Boolean  @default(true) // true = người ra lệnh đã nhận câu báo lỗi; false = trợ lý tự xử lý tiếp được
+  chatId    String   @db.VarChar(100)
+  isGroup   Boolean  @default(false)
+  chatName  String?  @db.VarChar(150) // tên nhóm Zalo; trống = chat riêng hoặc nhóm chưa đặt tên
+  staffName String?  @db.VarChar(150)
+  command   String?  @db.Text // tin của người ra lệnh
+  detail    String?  @db.Text // lỗi gốc, hoặc nguyên văn câu AI trả lời lệch
+  tool      String?  @db.VarChar(40) // lệnh (công cụ) đang chạy khi gặp sự cố
+  model     String?  @db.VarChar(100)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("zalo_assistant_issues")
+}
+
 // ---------- Kho kiến thức cho AI (xem docs/DECISIONS.md D87) ----------
 
 enum KnowledgeVisibility {

@@ -14,6 +14,7 @@ import { deliverImage } from "../send";
 import { getZaloSettings, groupSendEnabled } from "../settings";
 import { splitMessage, stripMarkdown } from "../text";
 import { toJpeg } from "@/lib/imaging/webp";
+import { logIssue } from "./issues";
 
 /**
  * Giao kết quả của việc nhân viên giao cho bot: theo dõi phiên ảnh đã tạo, khi xong thì gửi ảnh lại đúng cuộc chat đã ra lệnh.
@@ -37,9 +38,15 @@ const g = globalThis as unknown as { __zaloTaskWatching?: Set<string> };
  */
 export async function sayToChat(chatId: string, text: string, usage?: { promptTokens: number; completionTokens: number }): Promise<boolean> {
   const client = await getChatClient(chatId);
-  if (!client) return false;
+  const contact = await db.zaloContact.findUnique({ where: { chatId }, select: { id: true, chatType: true, displayName: true } }).catch(() => null);
+  // tin không tới được người ra lệnh: ghi vào nhật ký sự cố (D130), vì ngoài nhật ký máy chủ không còn dấu vết nào khác
+  const lost = (why: string, unsent: string) =>
+    logIssue({ kind: "SEND_FAILED", chatId, isGroup: contact?.chatType === "GROUP", staffName: contact?.chatType === "GROUP" ? null : contact?.displayName, detail: `${why} | Tin chưa gửi được: ${unsent.slice(0, 400)}` });
+  if (!client) {
+    await lost("Chưa kết nối bot Zalo hoặc bot của cuộc chat này đang tắt.", text);
+    return false;
+  }
   const chunks = splitMessage(stripMarkdown(text));
-  const contact = await db.zaloContact.findUnique({ where: { chatId }, select: { id: true } }).catch(() => null);
   for (const [i, chunk] of chunks.entries()) {
     let error: string | null = null;
     let zaloId: string | undefined;
@@ -48,6 +55,7 @@ export async function sayToChat(chatId: string, text: string, usage?: { promptTo
     } catch (e) {
       error = e instanceof ZaloError ? e.message : errText(e);
       console.error("Zalo agent: gửi tin lỗi:", error);
+      await lost(error, chunk);
     }
     if (contact) {
       await db.zaloMessage
@@ -141,6 +149,9 @@ async function deliver(taskId: string, stillOpen: number): Promise<void> {
   const brand = task.session.logo.brand;
   const url = publicSessionUrl(getEnv().APP_URL, task.sessionId);
   const what = task.kind === "CATALOG" ? "catalog chất liệu" : "ảnh thiết kế";
+  /** việc không ra ảnh, hoặc ảnh không tới được cuộc chat: ghi vào nhật ký sự cố của trợ lý (D130) */
+  const failed = (detail: string) =>
+    logIssue({ kind: "TASK_FAILED", chatId: task.chatId, isGroup: task.chatType === "GROUP", staffName: task.user.name, detail: `${detail}${url ? ` | Phiên: ${url}` : ""}` });
 
   if (rows.length === 0) {
     // phiên AI chọn chất liệu hỏng ngay từ bước phân tích thì không có ảnh nào: lấy lý do AI đã ghi vào phiên
@@ -148,6 +159,7 @@ async function deliver(taskId: string, stillOpen: number): Promise<void> {
     const why = failedRows.find((f) => f.errorMessage)?.errorMessage ?? (ai.kind === "failed" ? ai.error : stillOpen > 0 ? "ảnh tạo quá lâu" : "không rõ lý do");
     await sayToChat(task.chatId, `Rất tiếc, ${what} của ${brand.name} chưa tạo được (${why.slice(0, 200)}). Nhờ ${task.user.name} mở web bấm "Tạo lại"${url ? `: ${url}` : "."}`);
     await finish("FAILED", null, why.slice(0, 500));
+    await failed(`${what[0].toUpperCase()}${what.slice(1)} của ${brand.name} không ra ảnh nào: ${why}`);
     return;
   }
 
@@ -215,6 +227,7 @@ async function deliver(taskId: string, stillOpen: number): Promise<void> {
   }
   if (sent < rows.length) await sayToChat(task.chatId, `Em gửi được ${sent}/${rows.length} ảnh${lastError ? ` (${lastError.slice(0, 200)})` : ""}.${url ? ` Xem đủ ảnh tại ${url}` : ""}`);
   await finish(sent > 0 ? "DONE" : "FAILED", `Gửi ${sent}/${rows.length} ảnh`, sent < rows.length ? lastError : null);
+  if (sent < rows.length) await failed(`Chỉ gửi được ${sent}/${rows.length} ảnh của ${brand.name} vào cuộc chat: ${lastError ?? "không rõ lý do"}`);
 }
 
 /** Khi máy chủ khởi động: theo dõi tiếp các việc còn dang dở, việc quá cũ thì đóng lại. Không chờ, không ném lỗi. */
