@@ -36,7 +36,7 @@ export function Explorer({
   /** tiền tố tiêu đề, ví dụ "Bước 1: " */
   stepPrefix?: string;
   logoFooter?: React.ReactNode;
-  /** true = sau khi tải logo mới lên, AI tự chọn chất liệu hợp và tạo ảnh mẫu ngay (D115) */
+  /** true = có ô tick "tải lên xong thì AI tự chọn chất liệu hợp và tạo ảnh mẫu ngay" (D115); ô này mặc định không tick (D128) */
   autoCreate?: boolean;
 }) {
   const { customer, brand } = nav;
@@ -60,9 +60,7 @@ export function Explorer({
       ? "Mỗi khách hàng là một thư mục, bên trong là các thương hiệu, bên trong thương hiệu là các logo."
       : level === "brand"
         ? "Mở thư mục thương hiệu để xem các logo, hoặc tạo thư mục thương hiệu mới."
-        : autoCreate
-          ? "Bấm vào một logo để chọn, hoặc tải logo mới lên (AI sẽ tự chọn chất liệu và tạo ảnh mẫu)."
-          : "Bấm vào logo để chọn, hoặc tải logo mới lên thư mục này.";
+        : "Bấm vào logo để chọn, hoặc tải logo mới lên thư mục này. Tải xong thì chọn cách tạo ảnh ở các nút bên dưới.";
 
   return (
     <Card>
@@ -383,8 +381,9 @@ function LogoFiles({
   const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState("");
   const [badge, setBadge] = useState(false);
-  // tự phân tích và tạo ảnh mẫu sau khi tải lên (bỏ tick nếu chỉ muốn lưu logo, chưa tạo ảnh)
-  const [autoRun, setAutoRun] = useState(true);
+  // Mặc định TẮT (D128): tải logo lên chỉ lưu logo, người dùng tự bấm nút tạo ảnh mình muốn. Tick ô trong "Tùy chọn khi tải
+  // logo mới" thì tải xong AI chọn chất liệu và tạo ảnh mẫu luôn.
+  const [autoRun, setAutoRun] = useState(false);
 
   /** Logo vừa tải lên: AI chọn chất liệu hợp rồi tạo ảnh mẫu, xong thì sang trang kết quả. Lỗi thì ở lại để tự bấm nút tạo ảnh. */
   async function runAuto(logo: LogoOption) {

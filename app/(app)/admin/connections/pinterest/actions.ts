@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import { syncPinterestAccount } from "@/lib/pinterest/sync";
+import { syncPinterestAccount, watchBoard } from "@/lib/pinterest/sync";
 
 export type PinterestActionResult = { error?: string; ok?: string };
 
@@ -51,4 +51,25 @@ export async function setBoardTechniqueHintAction(boardId: string, value: string
   await db.pinterestBoard.update({ where: { id: boardId }, data: { techniqueHint: clean || null } });
   revalidatePath("/admin/connections", "layout");
   return { ok: "Đã cập nhật gợi ý board." };
+}
+
+/**
+ * Bật/tắt "gửi pin mới vào nhóm Zalo" cho một board (docs/DECISIONS.md D127). Lúc bật, hệ thống tải đủ pin hiện có của
+ * board trước (không gửi), nên chỉ pin lưu SAU lúc bật mới được bot gửi vào nhóm.
+ */
+export async function setBoardZaloFeedAction(boardId: string, on: boolean): Promise<PinterestActionResult> {
+  await requireAdmin();
+  const board = await db.pinterestBoard.findUnique({ where: { id: boardId }, select: { id: true, name: true } });
+  if (!board) return { error: "Không tìm thấy board." };
+  if (on) {
+    try {
+      await watchBoard(board.id);
+    } catch (e) {
+      return { error: `Chưa bật được vì không tải được pin của board: ${e instanceof Error ? e.message : "lỗi không xác định"}` };
+    }
+  } else {
+    await db.pinterestBoard.update({ where: { id: board.id }, data: { zaloFeed: false } });
+  }
+  revalidatePath("/admin/connections", "layout");
+  return { ok: on ? `Đã bật. Pin lưu vào "${board.name}" từ bây giờ sẽ được bot gửi vào các nhóm Zalo nhận mẫu.` : `Đã tắt gửi pin mới của "${board.name}".` };
 }

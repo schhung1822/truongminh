@@ -27,11 +27,15 @@ export type PinterestBoardApi = {
   description?: string | null;
   privacy?: "PUBLIC" | "PROTECTED" | "SECRET";
   pin_count?: number | null;
+  /** lần cuối pin trong board thay đổi (thêm/bớt); cùng với pin_count làm "dấu" để biết board có gì mới (lib/pinterest/feed.ts) */
+  board_pins_modified_at?: string | null;
   media?: { image_cover_url?: string | null };
 };
 
 export type PinterestPinApi = {
   id: string;
+  /** lúc pin được tạo; pin lưu lại từ pin của người khác là một pin MỚI nên đây là lúc lưu */
+  created_at?: string | null;
   title?: string | null;
   description?: string | null;
   alt_text?: string | null;

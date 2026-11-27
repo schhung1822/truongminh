@@ -35,6 +35,7 @@ function account(overrides: Partial<PinterestAccount> = {}): PinterestAccount {
     connectedById: "admin",
     lastSyncedAt: null,
     lastSyncError: null,
+    feedError: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

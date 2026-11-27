@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { S3Client } from "@aws-sdk/client-s3";
 import { R2Storage } from "./r2";
+import { StorageNotFoundError } from "./types";
 
 /** S3 giả: ghi lại các lệnh và trả kết quả theo từng loại lệnh. */
 function fakeClient(handler: (cmd: { constructor: { name: string }; input: Record<string, unknown> }) => unknown) {
@@ -42,6 +43,19 @@ describe("R2Storage", () => {
   it("get: trả về đúng nội dung", async () => {
     const { client } = fakeClient(() => ({ Body: { transformToByteArray: async () => new Uint8Array([1, 2, 3]) } }));
     expect([...(await new R2Storage(settings, client).get("a/b.webp"))]).toEqual([1, 2, 3]);
+  });
+
+  it("get: file không có trong kho thì báo lỗi ghi rõ key (không còn câu 'The specified key does not exist' trống trơn)", async () => {
+    const { client } = fakeClient(() => {
+      throw Object.assign(new Error("The specified key does not exist."), { name: "NoSuchKey", $metadata: { httpStatusCode: 404 } });
+    });
+    const failed = new R2Storage(settings, client).get("materials/a/reference-x.webp");
+    await expect(failed).rejects.toBeInstanceOf(StorageNotFoundError);
+    await expect(failed).rejects.toThrow("Không tìm thấy file trong kho ảnh: materials/a/reference-x.webp");
+    const denied = fakeClient(() => {
+      throw Object.assign(new Error("denied"), { name: "AccessDenied", $metadata: { httpStatusCode: 403 } });
+    });
+    await expect(new R2Storage(settings, denied.client).get("a/b.webp")).rejects.toThrow("denied"); // lỗi khác giữ nguyên
   });
 
   it("exists: có / không có (404) / lỗi khác thì ném lên", async () => {

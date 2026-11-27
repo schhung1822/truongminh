@@ -9,6 +9,7 @@ import { PINTEREST_PUBLIC_SCOPES } from "./types";
 
 const AUTHORIZE_BASE = "https://www.pinterest.com/oauth/";
 const API_BASE = "https://api.pinterest.com/v5";
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export class PinterestApiError extends Error {
   constructor(
@@ -22,6 +23,11 @@ export class PinterestApiError extends Error {
 /** true = Pinterest báo access_token hết hạn/không hợp lệ (cần làm mới bằng refresh_token). */
 export function isPinterestAuthError(e: unknown): boolean {
   return e instanceof PinterestApiError && e.status === 401;
+}
+
+/** true = Pinterest báo đã gọi quá hạn mức (gói Trial: 1000 lượt/ngày cho cả ứng dụng). Gọi tiếp ngay cũng chỉ nhận lại lỗi này. */
+export function isPinterestRateLimit(e: unknown): boolean {
+  return e instanceof PinterestApiError && e.status === 429;
 }
 
 export function buildAuthorizeUrl(input: { clientId: string; redirectUri: string; state: string; scopes?: readonly string[] }): string {
@@ -39,8 +45,20 @@ function basicAuth(clientId: string, clientSecret: string): string {
   return "Basic " + Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 }
 
+/**
+ * Gọi Pinterest có giới hạn thời gian chờ. Không có giới hạn thì một kết nối treo sẽ giữ mãi khóa đồng bộ, làm vòng theo dõi
+ * pin mới (lib/pinterest/zalo-feed.ts) đứng luôn. Lỗi mạng đổi thành câu đọc được thay cho "fetch failed".
+ */
+async function pinterestFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch {
+    throw new PinterestApiError("Không kết nối được tới Pinterest (lỗi mạng hoặc quá thời gian chờ).", 0);
+  }
+}
+
 async function tokenRequest(clientId: string, clientSecret: string, body: Record<string, string>): Promise<PinterestTokenResponse> {
-  const res = await fetch(`${API_BASE}/oauth/token`, {
+  const res = await pinterestFetch(`${API_BASE}/oauth/token`, {
     method: "POST",
     headers: { Authorization: basicAuth(clientId, clientSecret), "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(body).toString(),
@@ -61,7 +79,7 @@ export function refreshAccessToken(input: { clientId: string; clientSecret: stri
 }
 
 async function apiGet<T>(accessToken: string, path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await pinterestFetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
   const text = await res.text();
   if (!res.ok) throw new PinterestApiError(`Pinterest API lỗi (mã ${res.status}) ở ${path}: ${text.slice(0, 300)}`, res.status);
   return JSON.parse(text) as T;
@@ -76,6 +94,11 @@ export function listBoards(accessToken: string, bookmark?: string): Promise<Pint
   const sp = new URLSearchParams({ page_size: "250" });
   if (bookmark) sp.set("bookmark", bookmark);
   return apiGet(accessToken, `/boards?${sp.toString()}`);
+}
+
+/** Thông tin một board (số pin, mốc pin thay đổi lần cuối...). */
+export function getBoard(accessToken: string, boardId: string): Promise<PinterestBoardApi> {
+  return apiGet(accessToken, `/boards/${encodeURIComponent(boardId)}`);
 }
 
 /** Liệt kê pin trong một board. page_size tối đa 250. */

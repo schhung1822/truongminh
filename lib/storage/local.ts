@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { StorageDriver } from "./types";
+import { StorageNotFoundError, type StorageDriver } from "./types";
 
 /** Chuẩn hóa và kiểm tra key, chặn thoát ra ngoài thư mục gốc (path traversal). */
 export function sanitizeKey(key: string): string {
@@ -37,7 +37,12 @@ export class LocalStorage implements StorageDriver {
   }
 
   async get(key: string): Promise<Buffer> {
-    return fs.readFile(this.resolve(key));
+    try {
+      return await fs.readFile(this.resolve(key));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") throw new StorageNotFoundError(key);
+      throw e;
+    }
   }
 
   async exists(key: string): Promise<boolean> {

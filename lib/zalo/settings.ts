@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { DEFAULT_PIN_FEED_CAPTION, DEFAULT_PIN_FEED_INTERVAL_SEC, PIN_FEED_INTERVAL_MAX_SEC, PIN_FEED_INTERVAL_MIN_SEC } from "@/lib/pinterest/feed";
 import { isZaloConfigured } from "./index";
 
 /**
@@ -54,6 +55,20 @@ export const zaloSettingsSchema = z.object({
   captionTemplate: z.string().trim().min(1, "Mẫu chữ đi kèm ảnh không được để trống.").max(1000),
   /** Khoảng nghỉ giữa hai ảnh gửi vào nhóm (mili giây), để không dồn dập. */
   sendGapMs: z.coerce.number().int("Phải là số nguyên.").min(200, "Tối thiểu 200 ms.").max(10000, "Tối đa 10000 ms."),
+
+  /**
+   * Gửi mẫu Pinterest mới vào nhóm (D127): pin vừa lưu vào board đang theo dõi (bật ở Hệ thống > Kết nối > Pinterest) được bot gửi
+   * ngay vào các nhóm bật "Nhận mẫu Pinterest". Bật lại sau khi tắt là bắt đầu lại từ đầu: pin lưu trong lúc tắt không được gửi.
+   */
+  pinFeed: z.boolean(),
+  /** Chữ đi kèm mỗi pin. Dùng {board} {tieu_de} {mo_ta} {link}; để trống = chỉ gửi ảnh. */
+  pinFeedCaption: z.string().trim().max(1000, "Chữ đi kèm tối đa 1000 ký tự."),
+  /** Cách bao nhiêu giây thì hỏi Pinterest một lần xem có pin mới không (mỗi lần hỏi tốn một lượt gọi API của Pinterest). */
+  pinFeedIntervalSec: z.coerce
+    .number()
+    .int("Phải là số nguyên.")
+    .min(PIN_FEED_INTERVAL_MIN_SEC, `Tối thiểu ${PIN_FEED_INTERVAL_MIN_SEC} giây.`)
+    .max(PIN_FEED_INTERVAL_MAX_SEC, `Tối đa ${PIN_FEED_INTERVAL_MAX_SEC} giây.`),
 });
 
 export type ZaloSettings = z.infer<typeof zaloSettingsSchema>;
@@ -79,6 +94,9 @@ export const ZALO_SETTING_DEFAULTS: ZaloSettings = {
   careHorizonDays: 2,
   captionTemplate: "{thuong_hieu} · {khach}\n{nhan}\nSale: {sale}\n{link}",
   sendGapMs: 600,
+  pinFeed: true, // không có board và nhóm nào được đánh dấu thì bật cũng không làm gì
+  pinFeedCaption: DEFAULT_PIN_FEED_CAPTION,
+  pinFeedIntervalSec: DEFAULT_PIN_FEED_INTERVAL_SEC,
 };
 
 const KEY_PREFIX = "zalo.";

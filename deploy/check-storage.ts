@@ -66,7 +66,7 @@ async function main() {
   const refs: Ref[] = [];
   const add = (table: string, column: string, keys: (string | null)[]) => refs.push({ table, column, keys: [...new Set(keys.filter((k): k is string => !!k))] });
 
-  const materials = await db.material.findMany({ select: { layer1Path: true, layer2Path: true, productPhotoPath: true, referencePath: true } });
+  const materials = await db.material.findMany({ select: { code: true, isActive: true, layer1Path: true, layer2Path: true, productPhotoPath: true, referencePath: true } });
   add("chất liệu", "ảnh lớp 1", materials.map((m) => m.layer1Path));
   add("chất liệu", "ảnh lớp 2", materials.map((m) => m.layer2Path));
   add("chất liệu", "ảnh sản phẩm", materials.map((m) => m.productPhotoPath));
@@ -91,11 +91,13 @@ async function main() {
 
   let totalMissing = 0;
   let totalKeys = 0;
+  const allMissing = new Set<string>();
   console.log("\nĐối chiếu CSDL với thư mục ảnh:");
   for (const r of refs) {
     if (r.keys.length === 0) continue;
     const missing: string[] = [];
     for (const k of r.keys) if (!(r2 ? await r2.exists(k).catch(() => false) : await exists(path.join(root, ...k.split("/"))))) missing.push(k);
+    for (const k of missing) allMissing.add(k);
     totalKeys += r.keys.length;
     totalMissing += missing.length;
     const mark = missing.length === 0 ? "đủ " : "THIẾU";
@@ -111,6 +113,18 @@ async function main() {
       }
     }
   }
+  // Chất liệu mất ảnh ghép (ảnh gửi AI) là thứ làm hỏng việc tạo ảnh: ảnh nào có chất liệu đó đều lỗi. Liệt kê đủ theo mã.
+  const brokenMaterials = materials.filter((m) => m.referencePath && allMissing.has(m.referencePath));
+  if (brokenMaterials.length > 0) {
+    const on = brokenMaterials.filter((m) => m.isActive).map((m) => m.code);
+    const off = brokenMaterials.filter((m) => !m.isActive).map((m) => m.code);
+    console.log(`\nChất liệu mất ảnh gửi AI (${brokenMaterials.length}): tạo ảnh có các chất liệu ĐANG BẬT dưới đây sẽ lỗi.`);
+    if (on.length > 0) console.log(`  Đang bật: ${on.join(", ")}`);
+    if (off.length > 0) console.log(`  Đang tắt: ${off.join(", ")}`);
+    console.log("  Nếu máy này dùng chung kho ảnh với máy khác (dev và máy chủ chung một bucket R2): dữ liệu chất liệu ở đây đã cũ.");
+    console.log("  Đồng bộ lại:  ở máy có dữ liệu đúng chạy  npm run materials:export , chép file backups/chat-lieu.json sang đây, rồi  npm run materials:import");
+  }
+
   console.log(`\nKết luận: ${totalKeys - totalMissing}/${totalKeys} ảnh CSDL nhắc tới đang có trong thư mục ảnh.`);
   if (totalMissing === 0) console.log("Thư mục ảnh đủ. Nếu trình duyệt vẫn không hiện ảnh, xem nhật ký:  pm2 logs truongminh --lines 80  (tìm ENOENT, EACCES hoặc 401/403 ở /api/files).");
   else if (!rootOk) console.log("Thư mục ảnh chưa có ở chỗ web tìm. Giải nén gói ảnh vào đúng thư mục, hoặc đặt STORAGE_DIR trong .env trỏ tới nơi đã giải nén, rồi  pm2 restart truongminh.");

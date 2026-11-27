@@ -3,7 +3,7 @@ import { getEnv, getR2Config } from "@/lib/env";
 import { isPublicKey } from "./keys";
 import { LocalStorage } from "./local";
 import { R2Storage } from "./r2";
-import type { StorageDriver } from "./types";
+import { withoutDelete, type StorageDriver } from "./types";
 
 let instance: StorageDriver | undefined;
 
@@ -21,6 +21,7 @@ export function getStorage(): StorageDriver {
   } else {
     instance = new LocalStorage(env.STORAGE_DIR);
   }
+  if (env.STORAGE_NEVER_DELETE) instance = withoutDelete(instance);
   return instance;
 }
 

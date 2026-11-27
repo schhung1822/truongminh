@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2Icon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react";
+import { Loader2Icon, PlusIcon, RotateCwIcon, SendIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { addGroupAction, deleteGroupAction, testGroupAction, updateGroupAction, type ActionResult } from "./actions";
+import { addGroupAction, deleteGroupAction, retryPinDeliveryAction, testGroupAction, updateGroupAction, type ActionResult } from "./actions";
 
 function report(r: ActionResult) {
   if (r.error) toast.error(r.error);
@@ -26,6 +26,8 @@ type Group = {
   lastSeen: string | null;
   /** bot đang ở trong nhóm; rỗng = bot trong .env / bot mặc định */
   botId: string;
+  /** nhóm nhận mẫu Pinterest mới (pin vừa lưu vào board đang theo dõi) */
+  pinFeed: boolean;
 };
 
 function GroupRow({ group, tokenSet, bots }: { group: Group; tokenSet: boolean; bots: BotOption[] }) {
@@ -65,6 +67,14 @@ function GroupRow({ group, tokenSet, bots }: { group: Group; tokenSet: boolean; 
       <TableCell>
         <Switch checked={group.isActive} disabled={pending} onCheckedChange={(v) => patch({ isActive: v })} aria-label="Bật nhóm" />
       </TableCell>
+      <TableCell>
+        <Switch
+          checked={group.pinFeed}
+          disabled={pending || !group.isActive}
+          onCheckedChange={(v) => patch({ pinFeed: v })}
+          aria-label={`Nhóm ${group.name} nhận mẫu Pinterest mới`}
+        />
+      </TableCell>
       <TableCell className="text-right whitespace-nowrap">
         <Button
           variant="outline"
@@ -89,6 +99,16 @@ function GroupRow({ group, tokenSet, bots }: { group: Group; tokenSet: boolean; 
         </Button>
       </TableCell>
     </TableRow>
+  );
+}
+
+/** Nút gửi lại một mẫu Pinterest đã gửi lỗi vào nhóm. */
+export function PinDeliveryRetryButton({ id }: { id: string }) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button variant="outline" size="sm" disabled={pending} onClick={() => startTransition(async () => report(await retryPinDeliveryAction(id)))}>
+      {pending ? <Loader2Icon className="animate-spin" /> : <RotateCwIcon />} Gửi lại
+    </Button>
   );
 }
 
@@ -126,6 +146,7 @@ export function GroupsBoard({ groups, tokenSet, bots }: { groups: Group[]; token
                 <TableHead>Nhóm</TableHead>
                 {multi && <TableHead>Bot</TableHead>}
                 <TableHead>Bật</TableHead>
+                <TableHead>Nhận mẫu Pinterest</TableHead>
                 <TableHead className="text-right">Thao tác</TableHead>
               </TableRow>
             </TableHeader>

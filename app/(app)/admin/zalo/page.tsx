@@ -17,6 +17,7 @@ type Row = { label: string; on: boolean; href: string; tab: string };
 function featureRows(s: ZaloSettings): Row[] {
   return [
     { label: "Gửi ảnh vào nhóm", on: s.groupSend, href: "/admin/zalo/groups", tab: "Nhóm và gửi ảnh" },
+    { label: "Mẫu Pinterest mới vào nhóm", on: s.pinFeed, href: "/admin/zalo/groups", tab: "Nhóm và gửi ảnh" },
     { label: "Trợ lý nhận lệnh (tag bot)", on: s.agent, href: "/admin/zalo/bot", tab: "Trợ lý AI" },
     { label: "Hộp thư Zalo", on: s.inbox, href: "/admin/zalo/bot", tab: "Trợ lý AI" },
     { label: "Nút “AI soạn” trong Hộp thư", on: s.aiDraft, href: "/admin/zalo/bot", tab: "Trợ lý AI" },

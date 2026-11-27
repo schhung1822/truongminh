@@ -1,7 +1,14 @@
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { contentTypeOf, isPublicKey } from "./keys";
 import { sanitizeKey } from "./local";
-import type { PutOptions, StorageDriver } from "./types";
+import { StorageNotFoundError, type PutOptions, type StorageDriver } from "./types";
+
+/** R2 báo "không có file này": 404, NotFound (lệnh HEAD) hoặc NoSuchKey (lệnh GET). */
+function isMissing(e: unknown): boolean {
+  const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+  const name = (e as { name?: string }).name;
+  return status === 404 || name === "NotFound" || name === "NoSuchKey";
+}
 
 export type R2Settings = { accountId: string; accessKeyId: string; secretAccessKey: string; bucket: string };
 
@@ -45,7 +52,13 @@ export class R2Storage implements StorageDriver {
   }
 
   async get(key: string): Promise<Buffer> {
-    const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: sanitizeKey(key) }));
+    let res;
+    try {
+      res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: sanitizeKey(key) }));
+    } catch (e) {
+      if (isMissing(e)) throw new StorageNotFoundError(key);
+      throw e;
+    }
     if (!res.Body) throw new Error(`File rỗng: ${key}`);
     return Buffer.from(await res.Body.transformToByteArray());
   }
@@ -55,9 +68,7 @@ export class R2Storage implements StorageDriver {
       await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: sanitizeKey(key) }));
       return true;
     } catch (e) {
-      const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-      const name = (e as { name?: string }).name;
-      if (status === 404 || name === "NotFound" || name === "NoSuchKey") return false;
+      if (isMissing(e)) return false;
       throw e;
     }
   }

@@ -8,6 +8,12 @@ const schema = z.object({
   STORAGE_DRIVER: z.enum(["local", "r2"]).default("local"),
   // Với "r2" thư mục này vẫn dùng cho file khóa nhỏ (.secret-key của tài khoản Zalo cá nhân), không còn chứa ảnh.
   STORAGE_DIR: z.string().default("./storage"),
+  // "true" = máy này KHÔNG BAO GIỜ xóa file khỏi kho ảnh (lệnh xóa bị bỏ qua, file thừa nằm lại). Bật ở máy dev khi nó dùng
+  // chung bucket R2 với máy chủ: nếu không, thay hay xóa ảnh ở máy dev sẽ xóa mất file mà CSDL máy chủ còn trỏ tới (D128).
+  STORAGE_NEVER_DELETE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
   // Cloudflare R2. R2_BUCKET_PUBLIC là tên cũ của biến này, vẫn nhận.
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),

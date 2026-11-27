@@ -1,11 +1,12 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Loader2Icon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
-import { disconnectPinterestAction, setBoardTechniqueHintAction, syncPinterestAction, type PinterestActionResult } from "./actions";
+import { Switch } from "@/components/ui/switch";
+import { disconnectPinterestAction, setBoardTechniqueHintAction, setBoardZaloFeedAction, syncPinterestAction, type PinterestActionResult } from "./actions";
 
 function toastResult(r: PinterestActionResult) {
   if (r.error) toast.error(r.error);
@@ -38,6 +39,31 @@ export function DisconnectButton() {
       {pending ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}
       Ngắt kết nối
     </Button>
+  );
+}
+
+/**
+ * Công tắc "gửi pin mới vào nhóm Zalo" của một board. Bật mất vài giây vì máy chủ tải đủ pin hiện có của board trước
+ * (để chỉ pin lưu sau lúc bật mới bị coi là mới); không tải được thì công tắc tự trả về tắt.
+ */
+export function BoardZaloFeedSwitch({ boardId, boardName, checked }: { boardId: string; boardName: string; checked: boolean }) {
+  const [on, setOn] = useState(checked);
+  const [pending, startTransition] = useTransition();
+
+  function change(value: boolean) {
+    setOn(value);
+    startTransition(async () => {
+      const r = await setBoardZaloFeedAction(boardId, value);
+      if (r.error) setOn(!value);
+      toastResult(r);
+    });
+  }
+
+  return (
+    <label className="mt-2 flex items-center gap-2 text-xs">
+      <Switch checked={on} onCheckedChange={change} disabled={pending} aria-label={`Gửi pin mới của board ${boardName} vào nhóm Zalo`} />
+      <span className={on ? "font-medium" : "text-muted-foreground"}>{pending && on ? "Đang tải pin hiện có..." : "Gửi pin mới vào Zalo"}</span>
+    </label>
   );
 }
 

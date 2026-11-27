@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
+import { restartPinFeed } from "@/lib/pinterest/feed-queue";
 import { testChat } from "@/lib/zalo/bot";
 import { ZALO_SETTING_DEFAULTS, updateZaloSettings, type ZaloSettings } from "@/lib/zalo/settings";
 
@@ -28,7 +29,10 @@ export async function toggleZaloFeatureAction(name: keyof ZaloSettings, value: b
   if (typeof ZALO_SETTING_DEFAULTS[name] !== "boolean") return { error: "Công tắc không hợp lệ." };
   const r = await updateZaloSettings({ [name]: value });
   if (!r.ok) return { error: r.error };
+  // Bật lại Zalo hoặc bật lại "gửi mẫu Pinterest mới": bắt đầu theo dõi lại từ lúc này, pin lưu trong lúc tắt không bị gửi (D127)
+  if (value && (name === "enabled" || name === "pinFeed")) await restartPinFeed();
   refresh();
+  if (name === "pinFeed" || name === "enabled") revalidatePath("/admin/connections", "layout"); // thẻ trạng thái ở Kết nối > Pinterest
   if (name === "inbox") revalidatePath("/", "layout"); // mục Hộp thư Zalo hiện/ẩn trên menu của mọi trang
   return { ok: value ? "Đã bật." : "Đã tắt." };
 }

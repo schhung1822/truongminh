@@ -180,6 +180,17 @@ node --env-file=.env --import tsx scripts/migrate-to-r2.ts             # chạy 
 ```
 Sau đó đặt `STORAGE_DRIVER="r2"` và khởi động lại. Script **không xóa** thư mục ảnh cũ: cứ giữ làm bản sao lưu cho tới khi kiểm tra kỹ. Giữ lại file `storage/.secret-key` (khóa mã hóa tài khoản Zalo cá nhân), thư mục `STORAGE_DIR` vẫn cần cho file này. Kiểm tra ảnh còn thiếu: `node --env-file=.env --import tsx deploy/check-storage.ts`.
 
+**Máy dev và máy chủ dùng chung một bucket (CSDL riêng):** tránh nếu được, vì thay hoặc xóa ảnh ở máy này sẽ xóa file mà CSDL máy kia còn trỏ tới, và máy kia tạo ảnh báo lỗi "Ảnh của chất liệu ... không còn trong kho ảnh". Nếu vẫn dùng chung:
+1. Ở máy dev đặt `STORAGE_NEVER_DELETE="true"` trong `.env`: máy đó không bao giờ xóa file khỏi kho nữa (file thừa nằm lại, tốn dung lượng không đáng kể).
+2. Mỗi lần sửa chất liệu ở máy dev xong, chép dữ liệu chất liệu sang máy chủ (file ảnh đã nằm sẵn trong kho chung, chỉ cần chép các dòng CSDL):
+```bash
+npm run materials:export                    # ở máy dev: ghi backups/chat-lieu.json
+scp backups/chat-lieu.json user@máy-chủ:/đường/dẫn/dự-án/backups/
+npm run materials:import                    # ở máy chủ: chỉ IN kế hoạch, chưa ghi gì
+npm run materials:import -- --apply --disable-broken   # ghi vào CSDL
+```
+Chất liệu khớp theo mã: mã đã có thì cập nhật (giữ nguyên id nên trang mẫu, ảnh đã tạo, báo giá không ảnh hưởng), mã mới thì tạo. Không xóa chất liệu hay file nào. Thông số tấm và giá của chất liệu đã có được giữ theo máy chủ, thêm `--with-stock` nếu muốn lấy theo file. `--disable-broken` tắt các chất liệu đang bật mà ảnh không có trong kho (ví dụ chất liệu đã xóa ở máy dev). Trang mẫu không được đồng bộ. File có giá tấm, đừng gửi cho người ngoài.
+
 ### Thử bot Zalo trên VPS
 Bot Zalo chính thức cần một địa chỉ https công khai để Zalo đẩy tin về, nên VPS có tên miền là chỗ thử bot đúng nhất. Làm sau khi web đã chạy và đăng nhập được:
 1. Vào **Hệ thống > Kết nối > Zalo**, bấm **Thêm bot**, dán token của bot (lấy ở mini app Zalo Bot Creator). Thêm được nhiều bot; token lưu mã hóa trong CSDL. (Cách cũ vẫn dùng được: điền `ZALO_BOT_TOKEN` và `ZALO_WEBHOOK_SECRET` trong `.env` rồi `docker compose up -d`; bot đó hiện chung trong danh sách.) `APP_URL` phải là địa chỉ https của web.
@@ -272,6 +283,14 @@ Mặc định phải vào **Hệ thống > Kết nối > Pinterest** bấm **Đ�
 ```
 0 */6 * * * curl -fsS -X POST -H "x-cron-secret: KHÓA_CỦA_BẠN" https://tên-miền/api/jobs/pinterest-sync >> /root/truongminh/backups/pinterest-sync.log 2>&1
 ```
+
+### Pin mới trên Pinterest tự gửi vào nhóm Zalo
+Lưu thêm ảnh vào một board được chỉ định là bot Zalo gửi ngay ảnh đó vào các nhóm được đánh dấu. Không cần cron, không cần biến `.env` mới: web tự hỏi Pinterest định kỳ ngay trong tiến trình đang chạy.
+1. **Hệ thống > Kết nối > Pinterest**: bật công tắc **Gửi pin mới vào Zalo** ở từng board cần theo dõi. Lúc bật, hệ thống tải các pin đang có của board (không gửi); chỉ pin lưu sau lúc đó mới được gửi.
+2. **Cài đặt Zalo > Nhóm và gửi ảnh**: bật cột **Nhận mẫu Pinterest** cho các nhóm nhận. Ở thẻ **Mẫu Pinterest mới vào nhóm** chỉnh chữ đi kèm, số giây giữa hai lần hỏi Pinterest (mặc định 120) và công tắc tạm tắt. Bảng **Mẫu Pinterest gửi vào nhóm** bên dưới cho xem lượt nào đã gửi, lượt nào lỗi và nút gửi lại.
+3. Pinterest không có cách báo tức thì khi có pin mới, nên độ trễ gần bằng số giây đã đặt. App Pinterest ở gói Trial chỉ được 1000 lượt gọi API mỗi ngày (mỗi lần hỏi tốn 1 lượt, đồng bộ thư viện cũng tính vào đó): giữ 120 giây trở lên. Khi app được duyệt lên gói Standard thì đặt 30-60 giây được.
+4. Tắt công tắc (hoặc tắt Zalo) rồi bật lại là bắt đầu lại từ lúc bật: ảnh lưu trong lúc tắt không được gửi. Máy chủ nghỉ dưới 24 giờ thì gửi bù khi chạy lại, lâu hơn thì bỏ qua.
+5. Mỗi ảnh gửi vào mỗi nhóm tính 1 tin trong hạn mức tháng của bot Zalo. Pin video không có ảnh thì bỏ qua.
 
 ### Sự cố thường gặp
 | Hiện tượng | Cách xử lý |

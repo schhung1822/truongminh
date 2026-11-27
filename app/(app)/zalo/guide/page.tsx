@@ -77,6 +77,7 @@ export default async function ZaloGuidePage() {
       <Section id="tong-quan" title="Zalo làm được gì" desc="Mỗi chức năng có công tắc bật/tắt riêng, nên chỉ bật cái bạn cần.">
         <ul>
           <li><b>Gửi ảnh mẫu vào nhóm Zalo</b>: ảnh được gửi vào nhóm khi nhân viên tag bot giao việc (hoặc gửi tay từ Hộp thư), kèm chữ ghi thương hiệu, sale. Ảnh tạo trên web không tự gửi vào nhóm.</li>
+          <li><b>Mẫu Pinterest mới vào nhóm</b>: lưu thêm ảnh vào board Pinterest đang theo dõi là bot gửi ngay ảnh đó vào các nhóm bật &quot;Nhận mẫu Pinterest&quot;. Chọn board ở Hệ thống &gt; Kết nối &gt; Pinterest, chọn nhóm và chữ đi kèm ở Cài đặt Zalo &gt; Nhóm và gửi ảnh.</li>
           <li><b>Tag bot ra lệnh</b>: nhân viên đã ghép nối tag bot trong nhóm khách để làm catalog, làm ảnh thiết kế hoặc hỏi kỹ thuật; bot làm rồi gửi kết quả lại đúng nhóm đó.</li>
           <li><b>Kho kiến thức</b>: thông tin xưởng (hồ sơ, bài kiến thức) mà các AI dùng chung. Mỗi AI chỉ nhận phần dành cho nó; thông tin chỉ admin thấy không AI nào đọc.</li>
           <li><b>Ghép nối nhân viên</b>: nhân viên nhắn bot lệnh như /status, /today.</li>

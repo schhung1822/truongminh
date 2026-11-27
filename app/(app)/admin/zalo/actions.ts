@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
+import { pinFeedEnabled } from "@/lib/pinterest/feed-queue";
+import { deliverPendingPins } from "@/lib/pinterest/zalo-feed";
 import { getBotClient, NO_BOT_MESSAGE } from "@/lib/zalo";
 import { ZaloError } from "@/lib/zalo/client";
 
@@ -51,14 +53,16 @@ export async function addGroupAction(input: { name: string; chatId: string; botI
 const patchSchema = z.object({
   name: z.string().trim().min(1, "Tên nhóm không được để trống.").max(100).optional(),
   isActive: z.boolean().optional(),
+  /** nhóm nhận mẫu Pinterest mới (D127): nhóm vừa bật chỉ nhận các pin phát hiện từ lúc bật trở đi */
+  pinFeed: z.boolean().optional(),
 });
 
-/** Sửa tên, bật/tắt, hoặc đổi bot của nhóm (`botId` rỗng = bot trong .env / bot mặc định). */
+/** Sửa tên, bật/tắt, bật/tắt nhận mẫu Pinterest, hoặc đổi bot của nhóm (`botId` rỗng = bot trong .env / bot mặc định). */
 export async function updateGroupAction(id: string, patch: z.input<typeof patchSchema> & { botId?: string | null }): Promise<ActionResult> {
   await requireAdmin();
   const parsed = patchSchema.safeParse(patch);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  const data: { name?: string; isActive?: boolean; botId?: string | null } = { ...parsed.data };
+  const data: { name?: string; isActive?: boolean; pinFeed?: boolean; botId?: string | null } = { ...parsed.data };
   if (patch.botId !== undefined) {
     const bot = await resolveBotId(patch.botId);
     if ("error" in bot) return bot;
@@ -70,6 +74,8 @@ export async function updateGroupAction(id: string, patch: z.input<typeof patchS
     return { error: "Không tìm thấy nhóm." };
   }
   revalidatePath("/admin/zalo", "layout");
+  if (data.pinFeed !== undefined || data.isActive !== undefined) revalidatePath("/admin/connections", "layout"); // danh sách nhóm nhận mẫu ở Kết nối > Pinterest
+  if (data.pinFeed !== undefined) return { ok: data.pinFeed ? "Nhóm này sẽ nhận mẫu Pinterest mới từ bây giờ." : "Nhóm này không nhận mẫu Pinterest nữa." };
   return { ok: "Đã lưu." };
 }
 
@@ -82,6 +88,23 @@ export async function deleteGroupAction(id: string): Promise<ActionResult> {
   }
   revalidatePath("/admin/zalo", "layout");
   return { ok: "Đã xóa nhóm khỏi danh sách (bot vẫn còn trong nhóm Zalo nếu chưa bị mời ra)." };
+}
+
+/**
+ * Gửi lại một mẫu Pinterest đã gửi lỗi vào nhóm (D127). Xếp lại vào hàng đợi rồi gửi ngay; nếu đang có một đợt gửi khác
+ * chạy dở thì lượt này được vòng theo dõi nhặt ở nhịp kế tiếp (vài giây sau).
+ */
+export async function retryPinDeliveryAction(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!(await pinFeedEnabled())) return { error: "Chức năng gửi mẫu Pinterest mới đang tắt (hoặc Zalo đang tắt)." };
+  const claimed = await db.pinterestPinDelivery.updateMany({ where: { id, status: "FAILED" }, data: { status: "PENDING", error: null, queuedAt: new Date() } });
+  if (claimed.count === 0) return { error: "Lượt gửi này không còn ở trạng thái lỗi (đã gửi, đang chờ hoặc đã bị xóa)." };
+  await deliverPendingPins();
+  revalidatePath("/admin/zalo", "layout");
+  const row = await db.pinterestPinDelivery.findUnique({ where: { id }, select: { status: true, error: true } });
+  if (row?.status === "SENT") return { ok: "Đã gửi vào nhóm." };
+  if (row?.status === "FAILED") return { error: row.error ?? "Gửi lại vẫn lỗi." };
+  return { ok: "Đã xếp hàng, bot sẽ gửi trong ít giây." };
 }
 
 /** Gửi một tin chữ thử vào nhóm (bằng đúng bot của nhóm) để chắc chắn bot gửi được. Tốn 1 tin trong hạn mức tháng của bot. */

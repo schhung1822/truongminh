@@ -12,7 +12,7 @@ import { mapLimit } from "./async";
 import { renderFinal } from "./finish";
 import { ensurePinterestPinUrl, PinterestReferenceError } from "./pinterest-reference";
 import { finishKindOf } from "@/lib/prompts/finish";
-import { ensureLogoUrl, ensureMaterialUrl, ensureTaggedMaterialUrl, NoReferenceError } from "./references";
+import { ensureLogoUrl, ensureMaterialUrl, ensureTaggedMaterialUrl, MissingReferenceFileError, missingReferenceMessage, NoReferenceError } from "./references";
 import { getStyleRefPinIds, MAX_ATTEMPTS, type LayoutSnapshot } from "./snapshot";
 import { readTiles, TILE_ASPECT, type ImageTile } from "./tiles";
 import { MAX_REFERENCE_IMAGES } from "@/lib/image-options";
@@ -174,14 +174,22 @@ export async function submitImage(imageId: string): Promise<void> {
       const tile = tilesForRefs?.find((t) => i >= t.from && i < t.from + t.count);
       return tile ? i - tile.from + 1 : i + 1;
     };
-    const [logoUrl, ...materialUrls] = await Promise.all([
+    // Chờ MỌI ảnh tham chiếu rồi mới xét lỗi: chất liệu nào mất file trong kho thì gom hết vào một câu báo, để quản trị viên
+    // sửa một lượt thay vì mỗi lần bấm Tạo lại chỉ biết thêm một chất liệu (D128).
+    const prepared = await Promise.allSettled([
       ensureLogoUrl(img.session.logo),
-      ...snapshot.cells.map((c, i) => {
+      ...snapshot.cells.map(async (c, i) => {
         const m = byId.get(c.materialId);
         if (!m) throw new NoReferenceError(c.code);
         return img.kind === "SHEET" ? ensureTaggedMaterialUrl(m, cellNumber(i), finishKindOf(m)) : ensureMaterialUrl(m);
       }),
     ]);
+    const lostFiles = prepared.flatMap((p) => (p.status === "rejected" && p.reason instanceof MissingReferenceFileError ? [p.reason.code] : []));
+    if (lostFiles.length > 0) throw new NoReferenceError(lostFiles[0], missingReferenceMessage(lostFiles));
+    const [logoUrl, ...materialUrls] = prepared.map((p) => {
+      if (p.status === "rejected") throw p.reason;
+      return p.value;
+    });
 
     // Ảnh thiết kế có chọn (các) ảnh phong cách tham khảo (Pinterest): thêm làm ảnh tham chiếu cuối cùng, đúng thứ
     // tự đã chọn. Không được âm thầm bỏ qua vì prompt đang trỏ đúng tới các ảnh này; thiếu ảnh thì kết quả sẽ sai

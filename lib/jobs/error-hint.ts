@@ -28,6 +28,12 @@ export function hintForError(raw: string | null): ErrorHint {
       message: "Một chất liệu trong trang mẫu này chưa có đủ ảnh để AI tham khảo. Báo quản trị viên kiểm tra Thư viện mẫu; \"Tạo lại\" sẽ vẫn lỗi tới khi đó.",
     };
   }
+  if (text.includes("không còn trong kho ảnh")) {
+    return {
+      kind: "admin",
+      message: "Ảnh của một số chất liệu trong ảnh này không còn trong kho ảnh của hệ thống. Báo quản trị viên đồng bộ lại dữ liệu chất liệu; \"Tạo lại\" sẽ vẫn lỗi tới khi đó.",
+    };
+  }
   if (text.includes("ảnh phong cách pinterest")) {
     return {
       kind: "admin",

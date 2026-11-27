@@ -483,12 +483,14 @@ model ZaloGroup {
   careEnabled Boolean   @default(false) // true = AI lên kịch bản chăm sóc cho nhóm này
   postsPerDay Int       @default(2) // số lượt đăng mỗi ngày (2-3)
   botId       String? // bot Zalo đang ở trong nhóm này (bảng zalo_bots); trống = bot đặt trong .env (hoặc bot mặc định nếu .env không có)
+  pinFeed     Boolean   @default(false) // true = nhóm nhận mẫu Pinterest mới: pin vừa lưu vào board đang theo dõi được bot gửi vào đây (D127)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  bot        ZaloBot?       @relation(fields: [botId], references: [id], onDelete: SetNull)
-  deliveries ZaloDelivery[]
-  posts      ZaloPost[]
+  bot           ZaloBot?               @relation(fields: [botId], references: [id], onDelete: SetNull)
+  deliveries    ZaloDelivery[]
+  posts         ZaloPost[]
+  pinDeliveries PinterestPinDelivery[]
 
   @@index([botId])
   @@map("zalo_groups")
@@ -1282,6 +1284,8 @@ model PinterestAccount {
   connectedById         String
   lastSyncedAt          DateTime?
   lastSyncError         String?   @db.Text
+  // lỗi của lần gần nhất máy chủ hỏi Pinterest xem board đang theo dõi có pin mới không (D127); trống = lần đó ổn
+  feedError             String?   @db.Text
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -1304,6 +1308,14 @@ model PinterestBoard {
   // dùng để picker ảnh phong cách tự gợi ý đúng board theo công nghệ chất liệu đang chọn khi thiết kế
   techniqueHint    String?   @db.VarChar(60)
   lastSyncedAt     DateTime?
+  // Gửi pin mới vào nhóm Zalo (D127, lib/pinterest/zalo-feed.ts). zaloFeed = board được theo dõi: pin vừa lưu vào board
+  // này được bot gửi vào các nhóm có zalo_groups.pinFeed.
+  zaloFeed         Boolean   @default(false)
+  // "Dấu" của board lúc nhập pin gần nhất (số pin + mốc board_pins_modified_at của Pinterest): dấu chưa đổi thì khỏi tải lại pin
+  pinsStamp        String?   @db.VarChar(80)
+  // lần gần nhất xem pin của board này (nhập pin, hoặc thấy dấu chưa đổi). Trống hoặc quá cũ = việc theo dõi đã bị ngắt quãng:
+  // lần xem kế tiếp chỉ nhập pin, KHÔNG gửi (không dội vào nhóm cả loạt pin lưu trong lúc tạm ngừng)
+  feedCheckedAt    DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -1334,9 +1346,40 @@ model PinterestPin {
   styleTags        PinterestPinStyleTag[]
   favoritedByLogos LogoFavoritePin[]
   referenceUses    GeneratedImageStyleRefPin[]
+  zaloDeliveries   PinterestPinDelivery[]
 
   @@index([boardId])
   @@map("pinterest_pins")
+}
+
+enum PinFeedStatus {
+  PENDING // vừa phát hiện pin mới, chờ bot gửi
+  SENT
+  FAILED
+}
+
+// Mỗi pin mới gửi vào mỗi nhóm đúng một dòng (D127): vừa là hàng đợi gửi (PENDING), vừa chống gửi trùng, vừa là lịch sử
+// để xem lý do khi lỗi và bấm gửi lại.
+model PinterestPinDelivery {
+  id        String        @id @default(cuid())
+  pinId     String
+  groupId   String
+  status    PinFeedStatus @default(PENDING)
+  messageId String?       @db.VarChar(100)
+  error     String?       @db.Text
+  queuedAt  DateTime      @default(now()) // lúc xếp hàng (hoặc lúc bấm gửi lại): gửi theo thứ tự này, chờ quá lâu thì bỏ
+  sentAt    DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  pin   PinterestPin @relation(fields: [pinId], references: [id], onDelete: Cascade)
+  group ZaloGroup    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([pinId, groupId])
+  @@index([status, queuedAt])
+  @@index([updatedAt])
+  @@index([groupId])
+  @@map("pinterest_pin_deliveries")
 }
 
 // Tag phong cách gắn cho pin (dùng CHUNG danh sách MaterialOption loại STYLE_TAG với Chất liệu, không có danh mục

@@ -18,6 +18,8 @@
     "db:seed-demo": "tsx prisma/seed-demo.ts",
     "db:update-prompts": "tsx prisma/update-prompts.ts",
     "db:seed-styles": "tsx prisma/seed-styles.ts",
+    "materials:export": "node --env-file=.env --import tsx scripts/sync-materials.ts export",
+    "materials:import": "node --env-file=.env --import tsx scripts/sync-materials.ts import",
     "ext:build": "node extension/build.mjs",
     "ext:check": "tsc -p extension/tsconfig.json --noEmit"
   },

@@ -5,6 +5,7 @@ import { REFERENCE_TAG_VERSION, tagReference } from "@/lib/imaging/reference-tag
 import { getProvider } from "@/lib/providers";
 import { getPublicUrl, getStorage, usesPublicStorage } from "@/lib/storage";
 import { logoAiKey, refTagKey } from "@/lib/storage/keys";
+import { StorageNotFoundError } from "@/lib/storage/types";
 import { once, shared } from "./throttle";
 
 /** Hậu tố có trong tên file logo đã chuẩn bị cho AI. Đổi số khi thay cách chuẩn bị logo để buộc tải lại. */
@@ -68,18 +69,22 @@ export async function ensureMaterialUrl(material: {
   kieRefExpiresAt: Date | null;
 }): Promise<string> {
   if (!material.referencePath) throw new NoReferenceError(material.code);
-  // Kho công khai (R2): ảnh tham chiếu đã nằm sẵn trên kho, dùng thẳng địa chỉ công khai.
-  if (usesPublicStorage()) return getPublicUrl(material.referencePath);
+  const referencePath = material.referencePath;
+  // Kho công khai (R2): ảnh tham chiếu đã nằm sẵn trên kho, dùng thẳng địa chỉ công khai. Kiểm tra file còn đó không trước
+  // khi đưa địa chỉ cho nhà cung cấp: file mất thì báo đúng tên chất liệu, thay vì để AI nhận một địa chỉ chết.
+  if (usesPublicStorage()) {
+    if (!(await getStorage().exists(referencePath))) throw new MissingReferenceFileError(material.code);
+    return getPublicUrl(referencePath);
+  }
   const provider = getProvider();
   if (provider.cacheReferences && stillValid(material.kieRefUrl, material.kieRefExpiresAt)) {
     return material.kieRefUrl;
   }
 
-  const referencePath = material.referencePath;
   // nhiều phiên cùng cần chất liệu này lúc chưa có link: chỉ upload một lần
   return once(`material:${material.id}`, () =>
     shared().uploadLimit(async () => {
-      const buffer = await getStorage().get(referencePath);
+      const buffer = await readReference(material.code, referencePath);
       const up = await provider.uploadReference({
         buffer,
         fileName: `material-${material.id}.jpg`,
@@ -111,7 +116,7 @@ export async function ensureTaggedMaterialUrl(
     return once(`reftag:${key}`, async () => {
       const storage = getStorage();
       if (!(await storage.exists(key))) {
-        await storage.put(key, await tagReference(await storage.get(referencePath), { cell, kind }), { contentType: "image/jpeg" });
+        await storage.put(key, await tagReference(await readReference(material.code, referencePath), { cell, kind }), { contentType: "image/jpeg" });
       }
       return getPublicUrl(key);
     });
@@ -119,15 +124,44 @@ export async function ensureTaggedMaterialUrl(
 
   const provider = getProvider();
   return shared().uploadLimit(async () => {
-    const buffer = await tagReference(await getStorage().get(referencePath), { cell, kind });
+    const buffer = await tagReference(await readReference(material.code, referencePath), { cell, kind });
     const up = await provider.uploadReference({ buffer, fileName: `material-${material.id}-c${cell}.jpg`, contentType: "image/jpeg" });
     return up.url;
   });
 }
 
+/** Đọc ảnh tham chiếu của một chất liệu từ kho; file không còn thì báo lỗi ghi rõ mã chất liệu. */
+async function readReference(code: string, referencePath: string): Promise<Buffer> {
+  try {
+    return await getStorage().get(referencePath);
+  } catch (e) {
+    if (e instanceof StorageNotFoundError) throw new MissingReferenceFileError(code);
+    throw e;
+  }
+}
+
 /** Lỗi không thể tự khắc phục bằng cách thử lại (thiếu ảnh tham chiếu). */
 export class NoReferenceError extends Error {
-  constructor(public code: string) {
-    super(`Chất liệu ${code} chưa có ảnh tham chiếu.`);
+  constructor(
+    public code: string,
+    message = `Chất liệu ${code} chưa có ảnh tham chiếu.`,
+  ) {
+    super(message);
   }
+}
+
+/**
+ * CSDL ghi chất liệu có ảnh tham chiếu nhưng FILE không còn trong kho ảnh. Gặp khi hai máy (dev và máy chủ) dùng chung một
+ * bucket R2 nhưng CSDL riêng: máy này thay ảnh chất liệu thì file cũ bị xóa, trong khi CSDL máy kia vẫn trỏ tới file cũ (D128).
+ * Thử lại không tự hết: phải đồng bộ lại dữ liệu chất liệu (scripts/sync-materials.ts) hoặc tải lại ảnh của chất liệu đó.
+ */
+export class MissingReferenceFileError extends NoReferenceError {
+  constructor(code: string) {
+    super(code, missingReferenceMessage([code]));
+  }
+}
+
+/** Câu báo khi ảnh của một hay nhiều chất liệu không còn trong kho (gộp mọi chất liệu của một ảnh vào một câu). */
+export function missingReferenceMessage(codes: string[]): string {
+  return `Ảnh của chất liệu ${codes.join(", ")} không còn trong kho ảnh (file đã bị xóa, hoặc dữ liệu chất liệu của máy này chưa được đồng bộ). Quản trị viên cần đồng bộ lại dữ liệu chất liệu, hoặc vào Quản trị > Chất liệu tải lại ảnh hai lớp của ${codes.length > 1 ? "các chất liệu này" : "chất liệu này"}.`;
 }
