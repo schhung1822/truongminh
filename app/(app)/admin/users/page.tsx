@@ -34,6 +34,10 @@ export default async function UsersPage() {
           <Link href="/admin/activity" className="underline underline-offset-4">
             Nhật ký hoạt động
           </Link>
+          . Ai được dùng bot Zalo và mã ghép nối của từng người nằm ở{" "}
+          <Link href="/admin/zalo/staff" className="underline underline-offset-4">
+            Cài đặt Zalo &gt; Nhân viên và quyền
+          </Link>
           .
         </p>
       </div>

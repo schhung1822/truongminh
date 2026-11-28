@@ -53,7 +53,7 @@ export function BotSettings({ initial, tokenSet }: { initial: ZaloSettings; toke
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <SwitchRow checked={v.agent} onChange={(c) => toggle("agent", c)} disabled={off} title="Bật trợ lý nhận lệnh" desc="Cần webhook, ghép nối nhân viên và gắn tài khoản web cho nhân viên (Nhân viên và lệnh). Bot chỉ nhận được tin trong nhóm khi có người @bot." />
+          <SwitchRow checked={v.agent} onChange={(c) => toggle("agent", c)} disabled={off} title="Bật trợ lý nhận lệnh" desc="Cần webhook, và nhân viên đã ghép nối Zalo với tài khoản web của mình (Nhân viên và quyền). Bot chỉ nhận được tin trong nhóm khi có người @bot." />
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="agentTagName">Tên bot trên Zalo (để nhận ra @tag)</Label>
             <Input id="agentTagName" value={v.agentTagName} onChange={(e) => set("agentTagName", e.target.value)} maxLength={60} className="h-10 sm:max-w-sm" placeholder="Ví dụ: Trợ lý xưởng" />

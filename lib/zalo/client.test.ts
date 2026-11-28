@@ -108,6 +108,55 @@ describe("ZaloClient khác", () => {
   });
 });
 
+describe("bộ đếm hạn mức tin tháng (D133)", () => {
+  const metered = () => {
+    const events: string[] = [];
+    return { events, c: new ZaloClient("TOKEN123", "https://api.example", (e) => events.push(e)) };
+  };
+
+  it("mỗi tin chữ, ảnh, file gửi thành công được đếm 1 tin", async () => {
+    mockFetch(200, { ok: true, result: { message_id: "m" } });
+    const { events, c } = metered();
+    await c.sendMessage("g", "hi");
+    await c.sendPhoto({ chatId: "g", image: Buffer.from([1, 2, 3]), fileName: "a.jpg" });
+    await c.sendFile({ chatId: "g", data: Buffer.from([1]), fileName: "a.pdf" });
+    expect(events).toEqual(["sent", "sent", "sent"]);
+  });
+
+  it("kiểm tra token, đăng ký webhook, hiệu ứng đang soạn tin không tốn hạn mức nên không đếm", async () => {
+    mockFetch(200, { ok: true, result: {} });
+    const { events, c } = metered();
+    await c.getMe();
+    await c.setWebhook("https://x/y", "secret-123456");
+    await c.sendTyping("g");
+    expect(events).toEqual([]);
+  });
+
+  it("Zalo trả 429 thì ghi nhận hết hạn mức, không đếm là đã gửi", async () => {
+    mockFetch(200, { ok: false, error_code: 429, description: "quota" });
+    const { events, c } = metered();
+    await expect(c.sendMessage("g", "hi")).rejects.toMatchObject({ code: 429 });
+    expect(events).toEqual(["quota"]);
+  });
+
+  it("lỗi khác (422, mạng) không đếm gì", async () => {
+    const { events, c } = metered();
+    mockFetch(422, { ok: false, error_code: 422 });
+    await expect(c.sendMessage("g", "hi")).rejects.toMatchObject({ code: 422 });
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("fetch failed"))));
+    await expect(c.sendMessage("g", "hi")).rejects.toMatchObject({ retryable: true });
+    expect(events).toEqual([]);
+  });
+
+  it("bộ đếm hỏng không làm hỏng việc gửi", async () => {
+    mockFetch(200, { ok: true, result: { message_id: "m" } });
+    const c = new ZaloClient("TOKEN123", "https://api.example", () => {
+      throw new Error("đếm hỏng");
+    });
+    await expect(c.sendMessage("g", "hi")).resolves.toEqual({ message_id: "m" });
+  });
+});
+
 describe("caption", () => {
   it("ghép thương hiệu, nhãn ảnh, sale và link (nếu có)", () => {
     const c = buildCaption({ brandName: "Nextgency", customerName: "Anh Hùng", label: "Ảnh 1 · Trang A", saleName: "Lan", sessionUrl: "https://a/b" });

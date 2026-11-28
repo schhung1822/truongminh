@@ -4,6 +4,7 @@ import { decryptSecret } from "@/lib/crypto/secret-box";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { ZaloClient } from "./client";
+import { meterFor } from "./usage";
 
 /**
  * Các bot Zalo của hệ thống. Chạy được nhiều bot cùng lúc (docs/DECISIONS.md D116):
@@ -21,13 +22,17 @@ let envClient: ZaloClient | undefined;
 export function envBotClient(): ZaloClient | null {
   const env = getEnv();
   if (!env.ZALO_BOT_TOKEN) return null;
-  return (envClient ??= new ZaloClient(env.ZALO_BOT_TOKEN, env.ZALO_API_BASE));
+  return (envClient ??= new ZaloClient(env.ZALO_BOT_TOKEN, env.ZALO_API_BASE, meterFor(null)));
 }
 
-/** Tạo client từ token đã mã hóa; null nếu không giải mã được (đổi khóa mã hóa, mất file .secret-key). */
-export function clientFromEncryptedToken(tokenEnc: string): ZaloClient | null {
+/**
+ * Tạo client từ token đã mã hóa; null nếu không giải mã được (đổi khóa mã hóa, mất file .secret-key).
+ * `botId` = bot của token này: tin gửi qua client được đếm vào hạn mức tháng của bot đó (D133). Bỏ trống thì không đếm
+ * (chỉ dùng khi kiểm tra token, đăng ký webhook: các lệnh đó không tốn hạn mức).
+ */
+export function clientFromEncryptedToken(tokenEnc: string, botId?: string): ZaloClient | null {
   try {
-    return new ZaloClient(decryptSecret(tokenEnc), getEnv().ZALO_API_BASE);
+    return new ZaloClient(decryptSecret(tokenEnc), getEnv().ZALO_API_BASE, botId ? meterFor(botId) : undefined);
   } catch {
     return null;
   }
@@ -40,12 +45,12 @@ export function clientFromEncryptedToken(tokenEnc: string): ZaloClient | null {
 export async function getBotClient(botId?: string | null): Promise<ZaloClient | null> {
   if (botId) {
     const row = await db.zaloBot.findUnique({ where: { id: botId }, select: { tokenEnc: true, isActive: true } });
-    return row?.isActive ? clientFromEncryptedToken(row.tokenEnc) : null;
+    return row?.isActive ? clientFromEncryptedToken(row.tokenEnc, botId) : null;
   }
   const fromEnv = envBotClient();
   if (fromEnv) return fromEnv;
-  const first = await db.zaloBot.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" }, select: { tokenEnc: true } });
-  return first ? clientFromEncryptedToken(first.tokenEnc) : null;
+  const first = await db.zaloBot.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" }, select: { id: true, tokenEnc: true } });
+  return first ? clientFromEncryptedToken(first.tokenEnc, first.id) : null;
 }
 
 /** Bot của một cuộc chat, tra theo chat id của Zalo: hội thoại trước, rồi tới nhóm. null = bot trong .env / bot mặc định. */

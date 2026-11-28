@@ -1,11 +1,13 @@
 import "server-only";
 import type { ZaloContact } from "@/generated/prisma/client";
+import type { ZaloBotAccess } from "@/generated/prisma/enums";
 import type { SessionUser } from "@/lib/auth/dal";
 import { getChatProvider, type ChatProvider } from "@/lib/ai/chat";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { roleLabel } from "@/lib/roles";
 import { getSettings } from "@/lib/settings";
+import { canUseBot } from "../access";
 import { getChatClient } from "../index";
 import type { ZaloSettings } from "../settings";
 import { logIssue } from "./issues";
@@ -71,16 +73,21 @@ export async function handleAgentMessage(input: AgentInput): Promise<boolean> {
   }
 
   const user = staff.user;
-  if (!user || !user.isActive) {
+  if (!user) {
     await say(
-      `Tài khoản Zalo của ${staff.displayName} chưa được gắn với tài khoản trên web nên em chưa nhận lệnh được. Nhờ quản trị viên gắn ở Quản trị > Zalo > Nhân viên và lệnh.`,
+      `Tài khoản Zalo của ${staff.displayName} chưa được gắn với tài khoản trên web nên em chưa nhận lệnh được. Anh/chị nhắn riêng cho em /ghepnoi kèm mã ở trang Tài khoản của tôi trên web, hoặc nhờ quản trị viên gắn ở Cài đặt Zalo > Nhân viên và quyền.`,
     );
+    return true;
+  }
+  // tài khoản web đã khóa, hoặc quản trị viên đặt quyền "Không dùng bot" (D133)
+  if (!canUseBot(user)) {
+    await say(`Tài khoản ${user.name} đang bị khóa hoặc chưa được cấp quyền dùng bot Zalo nên em chưa nhận lệnh được. Nhờ quản trị viên xem ở Cài đặt Zalo > Nhân viên và quyền.`);
     return true;
   }
   const sessionUser: SessionUser = { id: user.id, email: user.email, name: user.name, role: user.role, mustChangePassword: false };
 
   try {
-    await runForStaff({ ...input, text: tag.text.slice(0, 1500) }, staff, sessionUser, say);
+    await runForStaff({ ...input, text: tag.text.slice(0, 1500) }, staff, sessionUser, say, undefined, user.zaloBotAccess);
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
     console.error("Zalo agent: lỗi xử lý lệnh:", detail);
@@ -105,9 +112,17 @@ export function agentErrorDetail(detail: string, who: { isAdmin: boolean; isGrou
 
 /**
  * Chạy một lượt trợ lý cho một tin của nhân viên: gom bối cảnh của cuộc chat, nạp trí nhớ của mạch, cho AI làm, rồi lưu lại
- * trí nhớ. `chatProvider` để kiểm thử thay AI thật bằng kịch bản soạn sẵn.
+ * trí nhớ. `chatProvider` để kiểm thử thay AI thật bằng kịch bản soạn sẵn. `access` = quyền dùng bot của tài khoản web (D133):
+ * "Chỉ tra cứu" thì các lệnh tạo ảnh bị từ chối ngay ở runTool.
  */
-export async function runForStaff(input: AgentInput, staff: ZaloContact, user: SessionUser, say: ToolCtx["say"], chatProvider: ChatProvider = getChatProvider()): Promise<void> {
+export async function runForStaff(
+  input: AgentInput,
+  staff: ZaloContact,
+  user: SessionUser,
+  say: ToolCtx["say"],
+  chatProvider: ChatProvider = getChatProvider(),
+  access: ZaloBotAccess = "FULL",
+): Promise<void> {
   const { s, chat, isGroup } = input;
   const [sheets, lastCatalog, logoMsg, group, settings, thread] = await Promise.all([
     db.sheet.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { name: true } }),
@@ -121,7 +136,7 @@ export async function runForStaff(input: AgentInput, staff: ZaloContact, user: S
   // tên nhóm do quản trị viên đặt (nhóm mới nhận ra có tên tạm "Nhóm mới (...)" thì coi như chưa đặt)
   const groupName = group && !/^Nhóm mới/.test(group.name) ? group.name.replace(/\s+/g, " ").trim().slice(0, 150) || null : null;
 
-  const ctx: ToolCtx = { user, staff, chat, isGroup, settings: s, thread, groupName, logoMsg, lastCatalog, say };
+  const ctx: ToolCtx = { user, access, staff, chat, isGroup, settings: s, thread, groupName, logoMsg, lastCatalog, say };
   const client = isGroup ? null : await getChatClient(chat.chatId); // "đang soạn tin" chỉ có ở chat riêng
   try {
     await runAssistantTurn({

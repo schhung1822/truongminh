@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { ZaloBotTask, ZaloContact } from "@/generated/prisma/client";
+import type { ZaloBotAccess } from "@/generated/prisma/enums";
 import type { SessionUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { DEFAULT_VARIANTS, MAX_VARIANTS } from "@/lib/design/assign";
@@ -20,6 +21,7 @@ import { fetchPinJpeg } from "@/lib/pinterest/pin-image";
 import { getSettings } from "@/lib/settings";
 import { countSheetTasks } from "@/lib/sheets/split";
 import { getStorage } from "@/lib/storage";
+import { BOT_ACCESS_LABELS, toolAllowed } from "../access";
 import { getChatClient } from "../index";
 import type { ZaloSettings } from "../settings";
 import { fold, preview } from "../text";
@@ -47,8 +49,10 @@ export type ToolOutcome =
   | { error: string; fault?: "crash" | "args"; detail?: string };
 
 export type ToolCtx = {
-  /** tài khoản web chịu trách nhiệm (gắn với người ra lệnh ở Quản trị > Zalo > Nhân viên và lệnh) */
+  /** tài khoản web chịu trách nhiệm (gắn với người ra lệnh ở Cài đặt Zalo > Nhân viên và quyền) */
   user: SessionUser;
+  /** quyền dùng bot của tài khoản đó (D133); bỏ trống = Đầy đủ */
+  access?: ZaloBotAccess;
   staff: ZaloContact;
   /** cuộc chat đang nhắn (nhóm hoặc chat riêng với bot): kết quả gửi về đây */
   chat: ZaloContact;
@@ -770,6 +774,10 @@ export const TOOL_NAMES: ReadonlySet<string> = new Set(TOOLS.map((t) => t.name))
 export async function runTool(ctx: ToolCtx, name: string, rawArgs: Record<string, unknown>): Promise<ToolOutcome> {
   const tool = TOOLS.find((t) => t.name === name);
   if (!tool) return { error: `Không có lệnh "${name}".` };
+  // Quyền "Chỉ tra cứu" (D133): máy chủ tự từ chối và tự trả lời, không để AI quyết định hay nói sai lý do
+  if (!toolAllowed(ctx.access ?? "FULL", name)) {
+    return { final: `Tài khoản của ${ctx.user.name} đang ở quyền "${BOT_ACCESS_LABELS.LOOKUP}" nên em chưa tạo ảnh qua Zalo được. Nhờ quản trị viên đổi ở Cài đặt Zalo > Nhân viên và quyền.` };
+  }
   const parsed = tool.schema.safeParse(rawArgs);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

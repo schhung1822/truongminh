@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { BotIcon, CheckIcon, KeyRoundIcon, Loader2Icon, PencilIcon, PlugIcon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,6 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { usageLevel, ZALO_BASIC_LIMITS } from "@/lib/zalo/limits";
+import { cn } from "@/lib/utils";
 import { StatusPill } from "../status";
 import {
   addZaloBotAction,
@@ -31,7 +34,12 @@ export type BotRow = {
   isActive: boolean;
   canJoinGroups: boolean | null;
   groups: number;
-  contacts: number;
+  /** số người đã nhắn riêng với bot (Zalo giới hạn số người một bot tương tác) */
+  people: number;
+  /** tên nhân viên đã ghép nối với bot này */
+  staff: string[];
+  /** tin đã gửi tháng này do hệ thống đếm; `since` = "28/11" khi bắt đầu đếm giữa tháng; `quotaHit` = lúc Zalo báo hết hạn mức */
+  usage: { sent: number; since: string | null; quotaHit: string | null };
   webhookUrl: string;
   /** đủ điều kiện đăng ký webhook (bot .env cần có ZALO_WEBHOOK_SECRET) */
   webhookReady: boolean;
@@ -59,6 +67,10 @@ export function BotsBoard({ bots, isHttps }: { bots: BotRow[]; isHttps: boolean 
             {bots.length === 0 ? "Chưa kết nối bot nào." : `${bots.length} bot.`} Mỗi bot là một token lấy ở mini app Zalo Bot Creator. Kết nối nhiều bot được: mỗi nhóm và mỗi hội thoại tự gắn với bot đang ở trong đó, tin gửi
             đi luôn qua đúng bot ấy. Token lưu trong hệ thống ở dạng mã hóa và không hiện lại.
           </CardDescription>
+          <CardDescription className="mt-1">
+            Gói miễn phí của Zalo cho mỗi bot gửi {ZALO_BASIC_LIMITS.messagesPerMonth.toLocaleString("vi-VN")} tin mỗi tháng (ảnh cũng tính 1 tin), nhắn với {ZALO_BASIC_LIMITS.usersPerBot} người và vào {ZALO_BASIC_LIMITS.groupsPerBot} nhóm;
+            mỗi tài khoản Zalo tạo được {ZALO_BASIC_LIMITS.botsPerAccount} bot. Bot nào sắp đầy thì thêm bot khác rồi chuyển bớt nhóm sang.
+          </CardDescription>
         </div>
         <Button type="button" onClick={() => setAdding(true)}>
           <PlusIcon /> Thêm bot
@@ -84,8 +96,14 @@ export function BotsBoard({ bots, isHttps }: { bots: BotRow[]; isHttps: boolean 
           <summary className="cursor-pointer font-medium text-foreground">Cách lấy token và mời bot vào nhóm</summary>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li>Trên điện thoại mở mini app Zalo Bot Creator, tạo bot (hoặc chọn bot có sẵn) và sao chép token của bot.</li>
-            <li>Ở đây bấm &quot;Thêm bot&quot;, đặt tên gợi nhớ, dán token. Hệ thống hỏi Zalo ngay, token đúng mới lưu.</li>
-            <li>Bấm &quot;Đăng ký webhook&quot; ở bot vừa thêm để bot nhận được tin và tự nhận ra nhóm.</li>
+            <li>Ở đây bấm &quot;Thêm bot&quot;, đặt tên gợi nhớ, dán token. Hệ thống hỏi Zalo ngay, token đúng mới lưu, rồi tự đăng ký webhook để bot nhận được tin.</li>
+            <li>
+              Nhân viên mở chat riêng với bot mới và nhắn <code className="rounded bg-muted px-1 py-0.5">/ghepnoi</code> kèm mã của mình (mã ở{" "}
+              <Link href="/admin/zalo/staff" className="underline underline-offset-4">
+                Cài đặt Zalo &gt; Nhân viên và quyền
+              </Link>
+              , hoặc ở trang Tài khoản của tôi của từng người). Mỗi người làm một lần cho mỗi bot.
+            </li>
             <li>Lấy link của bot ở trang thông tin bot trong Zalo Bot Creator, gửi vào nhóm Zalo. Trưởng nhóm bấm vào link và xác nhận thêm bot.</li>
             <li>Trong nhóm, nhờ ai đó trả lời tin bot vừa gửi hoặc gõ @tên bot. Nhóm sẽ hiện ở Cài đặt Zalo &gt; Nhóm và gửi ảnh, gắn sẵn với bot này.</li>
           </ol>
@@ -123,13 +141,7 @@ function BotItem({ bot, isHttps, onReplace }: { bot: BotRow; isHttps: boolean; o
     run("name", () => updateZaloBotAction(bot.id!, { name: next }), (r) => r.error && setName(bot.name));
   }
 
-  const facts = [
-    bot.accountName ? `Tên trên Zalo: ${bot.accountName}` : null,
-    bot.tokenHint ? `Token kết thúc bằng ${bot.tokenHint}` : null,
-    `${bot.groups} nhóm`,
-    `${bot.contacts} hội thoại`,
-    bot.lastChecked ? `Kiểm tra ${bot.lastChecked}` : null,
-  ].filter(Boolean);
+  const facts = [bot.accountName ? `Tên trên Zalo: ${bot.accountName}` : null, bot.tokenHint ? `Token kết thúc bằng ${bot.tokenHint}` : null, bot.lastChecked ? `Kiểm tra ${bot.lastChecked}` : null].filter(Boolean);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-4">
@@ -183,6 +195,26 @@ function BotItem({ bot, isHttps, onReplace }: { bot: BotRow; isHttps: boolean; o
         )}
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Meter label="Tin đã gửi tháng này" used={bot.usage.sent} limit={ZALO_BASIC_LIMITS.messagesPerMonth} note={bot.usage.since ? `đếm từ ${bot.usage.since}` : undefined} />
+        <Meter label="Người đã nhắn riêng" used={bot.people} limit={ZALO_BASIC_LIMITS.usersPerBot} />
+        <Meter label="Nhóm" used={bot.groups} limit={ZALO_BASIC_LIMITS.groupsPerBot} />
+      </div>
+      {bot.usage.quotaHit && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Zalo báo bot này đã hết hạn mức tin nhắn tháng (lúc {bot.usage.quotaHit}). Bot không gửi được cho tới khi Zalo làm mới hạn mức: thêm bot khác và chuyển nhóm sang, hoặc chờ sang tháng.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <p className="text-sm text-muted-foreground">
+        {bot.staff.length === 0 ? "Chưa có nhân viên nào ghép nối với bot này." : `Nhân viên đang dùng (${bot.staff.length}): ${bot.staff.join(", ")}.`}{" "}
+        <Link href="/admin/zalo/staff" className="underline underline-offset-4">
+          Nhân viên và quyền
+        </Link>
+      </p>
+
       <div className="flex flex-col gap-1 rounded-md bg-muted/40 p-3 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-muted-foreground">Webhook</span>
@@ -227,7 +259,10 @@ function BotItem({ bot, isHttps, onReplace }: { bot: BotRow; isHttps: boolean; o
               className="ml-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
               disabled={pending}
               onClick={() => {
-                const used = bot.groups + bot.contacts > 0 ? ` ${bot.groups} nhóm và ${bot.contacts} hội thoại của bot này vẫn được giữ nhưng sẽ không gửi được cho tới khi gán bot khác.` : "";
+                const used =
+                  bot.groups + bot.people > 0
+                    ? ` ${bot.groups} nhóm và ${bot.people} hội thoại của bot này vẫn được giữ nhưng sẽ không gửi được cho tới khi gán bot khác.${bot.staff.length > 0 ? ` ${bot.staff.length} nhân viên đang ghép nối với bot này sẽ phải ghép nối lại với bot khác.` : ""}`
+                    : "";
                 if (!window.confirm(`Gỡ bot "${bot.name}" khỏi hệ thống?${used}`)) return;
                 run("delete", () => deleteZaloBotAction(bot.id!));
               }}
@@ -238,6 +273,30 @@ function BotItem({ bot, isHttps, onReplace }: { bot: BotRow; isHttps: boolean; o
         )}
       </div>
       {fromEnv && <p className="text-xs text-muted-foreground">Bot này đặt trong file .env trên máy chủ (ZALO_BOT_TOKEN): muốn đổi hoặc gỡ thì sửa file đó rồi khởi động lại.</p>}
+    </div>
+  );
+}
+
+/** Một con số so với giới hạn của Zalo: thanh đầy dần, đổi màu khi từ 80% và khi chạm giới hạn. */
+function Meter({ label, used, limit, note }: { label: string; used: number; limit: number; note?: string }) {
+  const level = usageLevel(used, limit);
+  const pct = Math.min(100, Math.round((used / limit) * 100));
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border p-3">
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className={cn("font-medium tabular-nums", level === "full" && "text-destructive", level === "warn" && "text-amber-700")}>
+          {used.toLocaleString("vi-VN")} / {limit.toLocaleString("vi-VN")}
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={label} aria-valuenow={used} aria-valuemin={0} aria-valuemax={limit}>
+        <div className={cn("h-full rounded-full", level === "full" ? "bg-destructive" : level === "warn" ? "bg-amber-500" : "bg-primary")} style={{ width: `${pct}%` }} />
+      </div>
+      {(note || level !== "ok") && (
+        <p className="text-xs text-muted-foreground">
+          {[level === "full" ? "Đã chạm giới hạn của Zalo" : level === "warn" ? "Sắp chạm giới hạn của Zalo" : null, note].filter(Boolean).join(" · ")}
+        </p>
+      )}
     </div>
   );
 }

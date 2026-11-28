@@ -7,8 +7,21 @@ import { hashPassword, passwordProblem, verifyPassword } from "@/lib/auth/passwo
 import { clearFailures, isLocked, recordFailure } from "@/lib/auth/rate-limit";
 import { revokeOtherSessions } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { regeneratePairCode } from "@/lib/zalo/staff";
 
 export type AccountState = { error?: string; ok?: string };
+
+/** Tự đổi mã ghép nối Zalo của mình (nghi lộ mã). Mã cũ hết hiệu lực ngay; tài khoản Zalo đã ghép vẫn dùng được. */
+export async function regenMyPairCodeAction(): Promise<AccountState> {
+  const user = await requireUser();
+  const row = await db.user.findUnique({ where: { id: user.id }, select: { zaloBotAccess: true } });
+  if (!row || row.zaloBotAccess === "NONE") return { error: "Tài khoản của bạn chưa được cấp quyền dùng bot Zalo." };
+  if (!(await regeneratePairCode(user.id))) return { error: "Chưa tạo được mã mới, hãy thử lại." };
+  await logActivity({ actor: user, action: "ZALO_PAIR_CODE", target: "Chính mình" });
+  revalidatePath("/account");
+  revalidatePath("/admin/zalo", "layout");
+  return { ok: "Đã đổi mã ghép nối. Mã cũ không dùng được nữa." };
+}
 
 /**
  * Người dùng tự đổi mật khẩu của mình: phải nhập đúng mật khẩu hiện tại. Đổi xong, mọi thiết bị KHÁC bị đăng xuất

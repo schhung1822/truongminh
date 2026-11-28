@@ -9,7 +9,7 @@ const TABS = [
   { href: "/admin/zalo", label: "Tổng quan" },
   { href: "/admin/zalo/groups", label: "Nhóm và gửi ảnh" },
   { href: "/admin/zalo/bot", label: "Trợ lý AI" },
-  { href: "/admin/zalo/staff", label: "Nhân viên và lệnh" },
+  { href: "/admin/zalo/staff", label: "Nhân viên và quyền" },
   { href: "/admin/zalo/care", label: "Chăm sóc nhóm" },
 ];
 

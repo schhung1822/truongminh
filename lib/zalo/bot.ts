@@ -6,21 +6,26 @@ import { ChatError, getChatProvider } from "@/lib/ai/chat";
 import { db } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { buildPdf, buildZip } from "@/lib/export/build";
+import { logActivity } from "@/lib/activity";
 import { COUNTED_USAGE, todayKey } from "@/lib/jobs/limits";
 import { compareSessionImages } from "@/lib/jobs/order";
 import { extractUnknown } from "@/lib/knowledge/rules";
 import { prepareKnowledgePrompt, recordKnowledgeUse } from "@/lib/knowledge";
 import { getKieCredits } from "@/lib/providers";
+import { roleLabel } from "@/lib/roles";
 import { getStorage } from "@/lib/storage";
 import { zonedStartOfDay } from "@/lib/time";
+import { canUseBot } from "./access";
 import { handleAgentMessage } from "./agent";
 import { resetThreads } from "./agent/thread";
 import { buildChatMessages } from "./bot-prompt";
 import { ZaloError, type ZaloClient } from "./client";
 import { helpText, parseCommand, PUBLIC_COMMANDS, type CommandName } from "./commands";
 import { envBotClient, getBotClient, NO_BOT_MESSAGE } from "./index";
+import { PAIR_CODE_LENGTH, PAIR_MAX_FAILS, readPairCode } from "./pairing";
 import { sendPersonalAttachments, sendPersonalText, type PersonalAttachment } from "./personal/send";
 import { getZaloSettings, type ZaloSettings } from "./settings";
+import { pairWithCode } from "./staff";
 import { preview, splitMessage, stripMarkdown } from "./text";
 import { toJpeg } from "@/lib/imaging/webp";
 
@@ -151,16 +156,16 @@ async function handleIncoming(client: ZaloClient, s: ZaloSettings, ev: ZaloEvent
   if (contact.role === "BLOCKED") return;
 
   if (cmd && cmdEnabled) {
-    await runCommand(client, s, contact, cmd.name, recording);
+    await runCommand(client, s, contact, cmd.name, cmd.args, recording);
     return;
   }
 
   // Trợ lý nhận lệnh: nhân viên đã ghép nối tag bot trong nhóm hoặc nhắn riêng. Người khác (khách) chỉ được ghi nhận, bot không trả lời.
   if (s.agent && (await handleAgentMessage({ s, chat: contact, isGroup, senderId: msg.from?.id, kind, text }))) return;
 
-  // Nhân viên đã ghép nối nhắn chữ thường: gợi ý lệnh
+  // Nhân viên đã ghép nối nhắn chữ thường: gợi ý lệnh (người đã bị khóa hoặc bị tắt quyền dùng bot thì bot im)
   if (contact.role === "STAFF" && !isGroup) {
-    if (s.commands && kind === "TEXT") await replySystem(client, contact, "Gõ /help để xem các lệnh.", recording);
+    if (s.commands && kind === "TEXT" && (await staffAllowed(contact))) await replySystem(client, contact, "Gõ /help để xem các lệnh.", recording);
     return;
   }
 
@@ -169,6 +174,16 @@ async function handleIncoming(client: ZaloClient, s: ZaloSettings, ev: ZaloEvent
     where: { id: contact.id },
     data: { lastMessageAt: new Date(), lastMessageText: preview(text || kindLabel(kind), 200) },
   });
+}
+
+/**
+ * Hội thoại này có đang là nhân viên dùng được bot không (D133). Nhân viên gắn với tài khoản web đã khóa hoặc đang ở quyền
+ * "Không dùng bot" coi như chưa ghép nối. Ghép nối kiểu cũ chưa gắn tài khoản web vẫn dùng được lệnh gõ nhanh như trước.
+ */
+async function staffAllowed(contact: Pick<ZaloContact, "role" | "userId">): Promise<boolean> {
+  if (contact.role !== "STAFF") return false;
+  if (!contact.userId) return true;
+  return canUseBot(await db.user.findUnique({ where: { id: contact.userId }, select: { isActive: true, zaloBotAccess: true } }));
 }
 
 function isCommandOn(s: ZaloSettings, name: CommandName): boolean {
@@ -275,19 +290,13 @@ async function dayStart(): Promise<Date> {
 
 /* ---------- Lệnh gõ nhanh và ghép nối ---------- */
 
-async function runCommand(client: ZaloClient, s: ZaloSettings, contact: ZaloContact, name: CommandName, record: boolean) {
-  const staff = contact.role === "STAFF";
+async function runCommand(client: ZaloClient, s: ZaloSettings, contact: ZaloContact, name: CommandName, args: string, record: boolean) {
   const say = (t: string) => replySystem(client, contact, t, record);
 
-  if (name === "pair") {
-    if (staff) return say("Tài khoản Zalo này đã được ghép nối rồi.");
-    const code = contact.pairCode ?? String(randomInt(1000, 10000));
-    await db.zaloContact.update({ where: { id: contact.id }, data: { pairCode: code, pairRequestedAt: new Date() } });
-    return say(`Mã ghép nối của bạn là ${code}. Nhờ quản trị viên mở Quản trị > Zalo > Nhân viên và lệnh, đối chiếu đúng mã này rồi bấm "Cho phép". Sau đó gõ /help.`);
-  }
+  if (name === "pair") return runPair(s, contact, args, say);
 
   // Người chưa ghép nối chỉ dùng được /ghepnoi; các lệnh khác bot im lặng (bot không tự nói chuyện với khách)
-  if (!PUBLIC_COMMANDS.has(name) && !staff) return;
+  if (!PUBLIC_COMMANDS.has(name) && !(await staffAllowed(contact))) return;
 
   switch (name) {
     case "help":
@@ -300,6 +309,43 @@ async function runCommand(client: ZaloClient, s: ZaloSettings, contact: ZaloCont
       return say(await statusText());
     case "today":
       return say(await todayText());
+  }
+}
+
+/**
+ * /ghepnoi. Kèm mã 6 số của tài khoản web (D133): Zalo này gắn ngay với tài khoản đó, không cần ai duyệt. Không kèm mã: cách
+ * cũ, bot cấp mã 4 số để quản trị viên đối chiếu rồi bấm Cho phép. Nhập sai nhiều lần thì bot im với người đó một giờ.
+ */
+async function runPair(s: ZaloSettings, contact: ZaloContact, args: string, say: (t: string) => Promise<void>) {
+  const input = readPairCode(args);
+  if (input.kind === "none") {
+    if (contact.role === "STAFF") return say("Tài khoản Zalo này đã được ghép nối rồi.");
+    const code = contact.pairCode ?? String(randomInt(1000, 10000));
+    await db.zaloContact.update({ where: { id: contact.id }, data: { pairCode: code, pairRequestedAt: new Date() } });
+    return say(
+      `Mã ghép nối của bạn là ${code}. Nhờ quản trị viên mở Cài đặt Zalo > Nhân viên và quyền, đối chiếu đúng mã này rồi bấm "Cho phép". Sau đó gõ /help.\nĐã có tài khoản trên web thì nhanh hơn: nhắn /ghepnoi kèm mã ${PAIR_CODE_LENGTH} số ở trang Tài khoản của tôi, không cần chờ duyệt.`,
+    );
+  }
+
+  const r = await pairWithCode(contact, input.kind === "code" ? input.code : null);
+  switch (r.kind) {
+    case "locked":
+      // đang bị tạm chặn thì im hẳn: không xét mã, không tốn tin trả lời
+      return r.first ? say(`Bạn đã nhập sai ${PAIR_MAX_FAILS} lần. Thử lại sau 1 giờ, hoặc nhờ quản trị viên xem lại mã ghép nối của bạn.`) : undefined;
+    case "wrong":
+      return say(
+        input.kind === "bad"
+          ? `Mã ghép nối gồm ${PAIR_CODE_LENGTH} số, ví dụ: /ghepnoi 482913. Xem mã của bạn ở web, trang Tài khoản của tôi (còn ${r.left} lần thử).`
+          : `Mã ghép nối chưa đúng (còn ${r.left} lần thử). Xem mã của bạn ở web, trang Tài khoản của tôi, hoặc hỏi quản trị viên.`,
+      );
+    case "denied":
+      return say(`Tài khoản ${r.user.name} chưa được cấp quyền dùng bot Zalo. Nhờ quản trị viên bật ở Cài đặt Zalo > Nhân viên và quyền.`);
+    case "paired": {
+      if (r.already) return say(`Zalo này đã ghép nối với tài khoản ${r.user.name} rồi.`);
+      await logActivity({ actor: r.user, action: "ZALO_PAIR", target: contact.displayName, detail: "Tự ghép nối bằng mã cá nhân" });
+      const next = [s.agent ? "Anh/chị nhắn việc cần làm bằng lời thường; trong nhóm thì tag em." : null, s.commands ? "Gõ /help để xem các lệnh." : null].filter(Boolean).join(" ");
+      return say(`Đã ghép nối Zalo này với tài khoản ${r.user.name} (${roleLabel(r.user.role)}).${next ? ` ${next}` : ""}`);
+    }
   }
 }
 

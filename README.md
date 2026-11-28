@@ -194,8 +194,8 @@ Chất liệu khớp theo mã: mã đã có thì cập nhật (giữ nguyên id 
 ### Thử bot Zalo trên VPS
 Bot Zalo chính thức cần một địa chỉ https công khai để Zalo đẩy tin về, nên VPS có tên miền là chỗ thử bot đúng nhất. Làm sau khi web đã chạy và đăng nhập được:
 1. Vào **Hệ thống > Kết nối > Zalo**, bấm **Thêm bot**, dán token của bot (lấy ở mini app Zalo Bot Creator). Thêm được nhiều bot; token lưu mã hóa trong CSDL. (Cách cũ vẫn dùng được: điền `ZALO_BOT_TOKEN` và `ZALO_WEBHOOK_SECRET` trong `.env` rồi `docker compose up -d`; bot đó hiện chung trong danh sách.) `APP_URL` phải là địa chỉ https của web.
-2. Ở bot vừa thêm bấm **Kiểm tra token**, rồi **Đăng ký webhook**. Sau đó vào **Quản trị > Cài đặt Zalo > Tổng quan** gạt **Bật Zalo**.
-3. Nhân viên mở chat với bot trên Zalo, gõ `/ghepnoi`; admin vào **Nhân viên và lệnh**, nhập mã 4 số, chọn tài khoản web cho nhân viên đó rồi bấm **Cho phép**.
+2. Bot thêm ở đây tự đăng ký webhook (bot báo "Chưa đăng ký" thì bấm **Đăng ký webhook**; bot trong `.env` luôn phải bấm). Sau đó vào **Quản trị > Cài đặt Zalo > Tổng quan** gạt **Bật Zalo**. Trang này cũng hiện mỗi bot đã gửi bao nhiêu tin trong tháng, bao nhiêu người và nhóm, so với giới hạn gói miễn phí của Zalo (3.000 tin/tháng, 50 người, 3 nhóm mỗi bot).
+3. Admin vào **Cài đặt Zalo > Nhân viên và quyền**, chọn quyền dùng bot cho từng tài khoản rồi bấm **Chép hướng dẫn** gửi cho người đó. Nhân viên mở chat riêng với bot và nhắn `/ghepnoi` kèm mã 6 số của mình (cũng xem được ở **Tài khoản của tôi**): ghép nối xong ngay, không cần duyệt. Thêm bot mới thì nhân viên nhắn lại đúng dòng đó cho bot mới.
 4. Vào **Trợ lý AI**, bật **Trợ lý nhận lệnh**, điền tên bot (đúng tên hiển thị trên Zalo) rồi lưu. Cần `IMAGE_PROVIDER="kie"` và khóa kie.ai vì trợ lý dùng model chat của kie.ai.
 5. Mời bot vào nhóm khách (link bot ở Zalo Bot Creator), tag bot trong nhóm để ra lệnh. Xem mục "Tag bot ra lệnh trong nhóm" ở **Zalo > Hướng dẫn Zalo**.
 Bot không tự nói chuyện với khách: chỉ nhân viên đã ghép nối gọi được. Mỗi lệnh tốn một ít token kie.ai.
@@ -253,7 +253,7 @@ Hai nơi (chỉ quản trị viên):
 Quản trị viên nhắn riêng cho bot mà gặp lỗi thì câu báo lỗi có thêm dòng "Chi tiết (admin)" ghi nguyên nhân. Thiết kế ở `docs/DECISIONS.md` D130.
 
 ### Trợ lý Zalo: ra lệnh bằng lời thường
-Khi bật **Trợ lý nhận lệnh** (Cài đặt Zalo > Trợ lý AI), nhân viên đã ghép nối và được gắn tài khoản web tag bot trong nhóm (hoặc nhắn riêng) rồi nói việc cần làm, ví dụ:
+Khi bật **Trợ lý nhận lệnh** (Cài đặt Zalo > Trợ lý AI), nhân viên đã ghép nối Zalo với tài khoản web của mình (`/ghepnoi` kèm mã, xem mục "Thử bot Zalo trên VPS") tag bot trong nhóm (hoặc nhắn riêng) rồi nói việc cần làm, ví dụ:
 - `tạo ảnh cho khách Lascote theo mẫu khách từng ưng`: bot xem lịch sử (chất liệu đã chốt báo giá, đã chọn làm thiết kế, mẫu Pinterest khách thích), nêu đề xuất kèm số lượt, chờ nhắn `ok` rồi mới tạo và gửi ảnh về cuộc chat.
 - Gửi logo kèm `làm catalog cho logo này, thương hiệu Cà phê Gió`; `ảnh 2 số 3 và 5 làm móc khóa`; `làm bảng tên cho Lascote bằng ZY-12 và SU-BAC`.
 - `khách Lascote từng làm gì?`, `gửi lại mẫu lần trước`, `xong chưa?`, `còn bao nhiêu lượt?`, câu hỏi kỹ thuật.

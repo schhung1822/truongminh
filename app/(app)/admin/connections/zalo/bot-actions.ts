@@ -69,7 +69,7 @@ export async function addZaloBotAction(input: { name: string; token: string }): 
     return { error: "Bot này đã được kết nối rồi. Nếu vừa đổi token trên Zalo, hãy dùng nút \"Đổi token\" của bot đó." };
   }
 
-  await db.zaloBot.create({
+  const bot = await db.zaloBot.create({
     data: {
       name: name.data,
       tokenEnc: encryptSecret(token.data),
@@ -80,10 +80,16 @@ export async function addZaloBotAction(input: { name: string; token: string }): 
       canJoinGroups: me?.can_join_groups ?? null,
       lastCheckedAt: new Date(),
     },
+    select: { id: true },
   });
   await logActivity({ actor: admin, action: "ZALO_BOT_ADD", target: name.data, detail: me?.account_name ? `Tên trên Zalo: ${me.account_name}` : null });
+
+  // Đăng ký webhook luôn (D133): trước đây là một bước bấm riêng, quên bấm thì bot kết nối xong mà không nhận được tin nào.
+  const label = me?.account_name ?? name.data;
+  const hook = await registerWebhook(bot.id);
   refresh();
-  return { ok: `Đã kết nối bot ${me?.account_name ?? name.data}. Bấm "Đăng ký webhook" để bot nhận được tin.` };
+  if (hook.ok) return { ok: `Đã kết nối bot ${label} và đăng ký webhook. Nhân viên nhắn riêng cho bot này /ghepnoi kèm mã của mình là dùng được.` };
+  return { ok: `Đã kết nối bot ${label}, nhưng chưa đăng ký được webhook nên bot chưa nhận được tin: ${hook.error} Sửa xong thì bấm "Đăng ký webhook" ở bot này.` };
 }
 
 /** Đổi tên gợi nhớ hoặc bật/tắt một bot. Tắt = bot không gửi, không xử lý tin đến; cấu hình và nhóm vẫn giữ. */
@@ -194,6 +200,13 @@ export async function checkZaloBotAction(id: string | null): Promise<BotActionRe
  */
 export async function registerZaloWebhookAction(id: string | null): Promise<BotActionResult> {
   await requireAdmin();
+  const r = await registerWebhook(id);
+  refresh();
+  return r;
+}
+
+/** Phần làm việc của việc đăng ký webhook (không kiểm quyền, không làm mới trang): dùng cho nút bấm và cho lúc thêm bot. */
+async function registerWebhook(id: string | null): Promise<BotActionResult> {
   const env = getEnv();
   if (!env.APP_URL.startsWith("https://")) {
     return { error: "Webhook cần APP_URL là địa chỉ https công khai. Máy dev (localhost) không dùng được, hãy thêm nhóm bằng tay." };
@@ -220,10 +233,7 @@ export async function registerZaloWebhookAction(id: string | null): Promise<BotA
 
   const url = zaloWebhookUrl(id);
   const fail = async (error: string): Promise<BotActionResult> => {
-    if (id) {
-      await db.zaloBot.update({ where: { id }, data: { lastError: error } }).catch(() => {});
-      refresh();
-    }
+    if (id) await db.zaloBot.update({ where: { id }, data: { lastError: error } }).catch(() => {});
     return { error };
   };
   try {
@@ -233,9 +243,6 @@ export async function registerZaloWebhookAction(id: string | null): Promise<BotA
   } catch (e) {
     return fail(msg(e));
   }
-  if (id) {
-    await db.zaloBot.update({ where: { id }, data: { webhookSetAt: new Date(), lastError: null } });
-    refresh();
-  }
+  if (id) await db.zaloBot.update({ where: { id }, data: { webhookSetAt: new Date(), lastError: null } });
   return { ok: `Đã đăng ký webhook: ${url}` };
 }

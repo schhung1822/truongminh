@@ -35,6 +35,10 @@ export const ACTIVITY = {
   ZALO_BOT_TOGGLE: { label: "Bật / tắt bot Zalo", group: "connection", tone: "normal" },
   ZALO_BOT_REMOVE: { label: "Gỡ bot Zalo", group: "connection", tone: "warn" },
   ZALO_ACCOUNT_REMOVE: { label: "Xóa tài khoản Zalo cá nhân", group: "connection", tone: "warn" },
+  ZALO_PAIR: { label: "Ghép nối Zalo với tài khoản", group: "connection", tone: "normal" },
+  ZALO_UNPAIR: { label: "Gỡ ghép nối Zalo", group: "connection", tone: "normal" },
+  ZALO_BOT_ACCESS: { label: "Đổi quyền dùng bot Zalo", group: "connection", tone: "warn" },
+  ZALO_PAIR_CODE: { label: "Đổi mã ghép nối Zalo", group: "connection", tone: "normal" },
   PINTEREST_CONNECT: { label: "Kết nối Pinterest", group: "connection", tone: "normal" },
   PINTEREST_DISCONNECT: { label: "Ngắt kết nối Pinterest", group: "connection", tone: "warn" },
 } as const satisfies Record<string, { label: string; group: ActivityGroup; tone: "normal" | "warn" }>;

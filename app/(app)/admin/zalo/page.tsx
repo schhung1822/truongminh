@@ -23,8 +23,8 @@ function featureRows(s: ZaloSettings): Row[] {
     { label: "Trợ lý nhận lệnh (tag bot)", on: s.agent, href: "/admin/zalo/bot", tab: "Trợ lý AI" },
     { label: "Hộp thư Zalo", on: s.inbox, href: "/admin/zalo/bot", tab: "Trợ lý AI" },
     { label: "Nút “AI soạn” trong Hộp thư", on: s.aiDraft, href: "/admin/zalo/bot", tab: "Trợ lý AI" },
-    { label: "Ghép nối nhân viên", on: s.pairing, href: "/admin/zalo/staff", tab: "Nhân viên và lệnh" },
-    { label: "Lệnh gõ nhanh", on: s.commands, href: "/admin/zalo/staff", tab: "Nhân viên và lệnh" },
+    { label: "Ghép nối nhân viên", on: s.pairing, href: "/admin/zalo/staff", tab: "Nhân viên và quyền" },
+    { label: "Lệnh gõ nhanh", on: s.commands, href: "/admin/zalo/staff", tab: "Nhân viên và quyền" },
     { label: "Kịch bản chăm sóc nhóm", on: s.care, href: "/admin/zalo/care", tab: "Chăm sóc nhóm" },
   ];
 }

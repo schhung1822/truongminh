@@ -66,11 +66,29 @@ export function classifyZaloError(code: number, description?: string): ZaloError
 
 type Envelope<T> = { ok?: boolean; result?: T; error_code?: number; description?: string };
 
+/**
+ * Bộ đếm hạn mức (D133): được gọi "sent" mỗi lần Zalo nhận một tin/ảnh/file (mỗi lần tính 1 tin vào hạn mức tháng của bot),
+ * và "quota" khi Zalo trả lỗi 429. Nơi tạo client gắn bộ đếm của đúng bot đó (lib/zalo/usage.ts).
+ */
+export type ZaloMeter = (event: "sent" | "quota") => void;
+
+/** Các lệnh tính vào hạn mức tin nhắn tháng. getMe, setWebhook, sendChatAction không tính. */
+const COUNTED_METHODS: ReadonlySet<string> = new Set(["sendMessage", "sendPhoto", "sendFile"]);
+
 export class ZaloClient {
   constructor(
     private readonly token: string,
     private readonly apiBase = "https://bot-api.zaloplatforms.com",
+    private readonly meter?: ZaloMeter,
   ) {}
+
+  private count(event: "sent" | "quota") {
+    try {
+      this.meter?.(event);
+    } catch {
+      /* đếm hỏng không được làm hỏng việc gửi */
+    }
+  }
 
   private async call<T>(method: string, init: { json?: unknown; form?: FormData; timeoutMs?: number }): Promise<T> {
     const url = `${this.apiBase.replace(/\/$/, "")}/bot${this.token}/${method}`;
@@ -91,11 +109,17 @@ export class ZaloClient {
     try {
       body = (await res.json()) as Envelope<T>;
     } catch {
+      if (res.status === 429) this.count("quota");
       if (!res.ok) throw classifyZaloError(res.status);
       throw new ZaloError(`Zalo trả về dữ liệu không đọc được (HTTP ${res.status}).`, res.status, true);
     }
-    if (res.ok && body.ok !== false) return body.result as T;
-    throw classifyZaloError(body.error_code ?? res.status, body.description);
+    if (res.ok && body.ok !== false) {
+      if (COUNTED_METHODS.has(method)) this.count("sent");
+      return body.result as T;
+    }
+    const error = classifyZaloError(body.error_code ?? res.status, body.description);
+    if (error.code === 429) this.count("quota");
+    throw error;
   }
 
   /** Kiểm tra token và xem thông tin bot. Không tốn hạn mức. */

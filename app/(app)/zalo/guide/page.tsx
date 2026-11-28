@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth/dal";
+import { BOT_ACCESS_DESC, BOT_ACCESS_LABELS, BOT_ACCESS_LEVELS } from "@/lib/zalo/access";
 import { CAPTION_PLACEHOLDERS } from "@/lib/zalo/caption";
 import { COMMAND_INFO, TOGGLEABLE_COMMANDS } from "@/lib/zalo/commands";
+import { ZALO_BASIC_LIMITS } from "@/lib/zalo/limits";
 
 export const metadata: Metadata = { title: "Hướng dẫn Zalo" };
 
@@ -49,7 +51,7 @@ export default async function ZaloGuidePage() {
     ["ket-noi", "Kết nối bot lần đầu"],
     ["nhom", "Gửi ảnh vào nhóm"],
     ["bot", "Kho kiến thức và model AI"],
-    ["nhan-vien", "Ghép nối nhân viên và lệnh"],
+    ["nhan-vien", "Ghép nối, quyền dùng bot và lệnh"],
     ["tro-ly", "Tag bot ra lệnh trong nhóm"],
     ["cham-soc", "Kịch bản chăm sóc nhóm"],
     ["gioi-han", "Giới hạn cần biết"],
@@ -176,14 +178,25 @@ export default async function ZaloGuidePage() {
         </ul>
       </Section>
 
-      <Section id="nhan-vien" title="Ghép nối nhân viên và lệnh" desc={admin ? "Cấu hình ở Cài đặt Zalo > Nhân viên và lệnh." : "Quản trị viên cấu hình ở Cài đặt Zalo > Nhân viên và lệnh."}>
-        <h3>Ghép nối nhân viên</h3>
+      <Section id="nhan-vien" title="Ghép nối, quyền dùng bot và lệnh" desc={admin ? "Cấu hình ở Cài đặt Zalo > Nhân viên và quyền." : "Quản trị viên cấu hình ở Cài đặt Zalo > Nhân viên và quyền."}>
+        <h3>Ghép nối Zalo với tài khoản của bạn</h3>
         <Steps>
-          <li>Nhân viên mở chat với bot trên Zalo, gõ <Code>/ghepnoi</Code>. Bot trả mã 4 số.</li>
-          <li>Quản trị viên mở <AdminLink admin={admin} href="/admin/zalo/staff">Nhân viên và lệnh</AdminLink>, thấy yêu cầu ở “Đang chờ cho phép”, hỏi nhân viên mã 4 số, nhập đúng mã rồi bấm <b>Cho phép</b>.</li>
-          <li>Nhân viên gõ <Code>/help</Code> để xem lệnh. Muốn thu hồi thì bấm “Thu hồi”.</li>
+          <li>Trên web, bấm tên mình ở góc phải, mở <Link href="/account#zalo" className="underline underline-offset-4">Tài khoản của tôi</Link>, xem mục “Dùng hệ thống qua Zalo”. Ở đó có dòng lệnh kèm mã 6 số của riêng bạn.</li>
+          <li>Mở Zalo, vào chat <b>riêng</b> với bot của xưởng, nhắn đúng dòng đó, ví dụ <Code>/ghepnoi 482913</Code>. Bot báo ghép nối xong là dùng được ngay, không cần chờ duyệt.</li>
+          <li>Xưởng có nhiều bot thì nhắn dòng đó cho từng bot bạn làm việc cùng. Bot mới kết nối sau này cũng vậy, vẫn dùng mã cũ.</li>
         </Steps>
-        <p>Phải nhập đúng mã để chắc chắn đúng người, tránh cho nhầm người lạ xin ghép nối.</p>
+        <p>Mã là của riêng bạn: ai có mã là ra lệnh được cho bot dưới tên bạn, nên đừng gửi vào nhóm. Nghi lộ thì bấm “Đổi mã” (Zalo đã ghép vẫn giữ). Nhập sai mã 5 lần thì bot im với bạn trong 1 giờ.</p>
+        <p>Chưa có mã (chưa có tài khoản web): nhắn <Code>/ghepnoi</Code> không kèm gì, bot trả mã 4 số, đọc mã đó cho quản trị viên để họ bấm <b>Cho phép</b> ở <AdminLink admin={admin} href="/admin/zalo/staff">Nhân viên và quyền</AdminLink>.</p>
+        <h3>Quyền dùng bot</h3>
+        <p>Quản trị viên đặt cho từng tài khoản ở <AdminLink admin={admin} href="/admin/zalo/staff">Nhân viên và quyền</AdminLink>, đổi là có hiệu lực ngay:</p>
+        <ul>
+          {BOT_ACCESS_LEVELS.map((a) => (
+            <li key={a}>
+              <b>{BOT_ACCESS_LABELS[a]}</b>: {BOT_ACCESS_DESC[a]}
+            </li>
+          ))}
+        </ul>
+        <p>Ngoài mức này, bot làm việc đúng như chính bạn thao tác trên web: sale chỉ thêm logo cho khách mình phụ trách, mỗi ảnh tạo qua bot tính vào hạn mức ngày của bạn. Tài khoản web bị khóa thì bot cũng thôi nhận lệnh.</p>
         <h3>Các lệnh</h3>
         <ul>
           {TOGGLEABLE_COMMANDS.map((c) => (
@@ -191,13 +204,13 @@ export default async function ZaloGuidePage() {
               <Code>{COMMAND_INFO[c].usage}</Code> (chỉ nhân viên): {COMMAND_INFO[c].desc}.
             </li>
           ))}
-          <li><Code>/ghepnoi</Code>: xin ghép nối (bật riêng bằng công tắc Ghép nối nhân viên).</li>
+          <li><Code>/ghepnoi</Code> kèm mã của bạn: ghép nối Zalo với tài khoản web (bật riêng bằng công tắc Ghép nối nhân viên).</li>
         </ul>
         <p>Lệnh gõ được không dấu hoặc có dấu. Từng lệnh bật/tắt riêng bằng ô tích trong trang cài đặt.</p>
       </Section>
 
-      <Section id="tro-ly" title="Tag bot ra lệnh trong nhóm" desc={admin ? "Bật ở Cài đặt Zalo > Trợ lý AI > Trợ lý nhận lệnh; gắn tài khoản web cho nhân viên ở Nhân viên và lệnh." : "Quản trị viên bật và gắn tài khoản web cho bạn trước khi dùng."}>
-        <p>Sale đã ghép nối và được gắn tài khoản web tag bot trong nhóm khách (hoặc nhắn riêng cho bot) rồi nói việc cần làm bằng lời thường, không cần nhớ cú pháp. Bot tự tra khách, xem lịch sử, tạo ảnh, hỏi lại khi thiếu thông tin, rồi gửi kết quả về đúng cuộc chat đó. Khách trong nhóm tag bot không ra lệnh được.</p>
+      <Section id="tro-ly" title="Tag bot ra lệnh trong nhóm" desc={admin ? "Bật ở Cài đặt Zalo > Trợ lý AI > Trợ lý nhận lệnh; quyền của từng người ở Nhân viên và quyền." : "Bạn cần ghép nối Zalo với tài khoản web của mình trước khi dùng (mục phía trên)."}>
+        <p>Sale đã ghép nối Zalo với tài khoản web của mình tag bot trong nhóm khách (hoặc nhắn riêng cho bot) rồi nói việc cần làm bằng lời thường, không cần nhớ cú pháp. Bot tự tra khách, xem lịch sử, tạo ảnh, hỏi lại khi thiếu thông tin, rồi gửi kết quả về đúng cuộc chat đó. Khách trong nhóm tag bot không ra lệnh được.</p>
         <h3>Tạo ảnh cho một khách theo mẫu khách từng ưng</h3>
         <Steps>
           <li>Nhắn, ví dụ: <Code>@Bot tạo ảnh cho khách Lascote theo mẫu khách từng ưng</Code> (gõ tên khách hoặc tên thương hiệu, không cần dấu).</li>
@@ -252,7 +265,12 @@ export default async function ZaloGuidePage() {
 
       <Section id="gioi-han" title="Giới hạn cần biết">
         <ul>
-          <li>Mỗi tin và mỗi ảnh gửi đều tính vào <b>hạn mức tin nhắn theo tháng</b> của bot do Zalo quy định. Hết hạn mức thì Zalo báo lỗi 429 và ngừng gửi tới tháng sau.</li>
+          <li>
+            Mỗi tin và mỗi ảnh gửi đều tính vào <b>hạn mức tin nhắn theo tháng</b> của bot do Zalo quy định: gói miễn phí là {ZALO_BASIC_LIMITS.messagesPerMonth.toLocaleString("vi-VN")} tin mỗi tháng cho mỗi bot (ảnh cũng tính 1 tin). Hết hạn mức thì Zalo báo lỗi 429 và bot ngừng gửi cho tới khi Zalo làm mới.
+          </li>
+          <li>
+            Cũng ở gói miễn phí: mỗi bot nhắn với tối đa {ZALO_BASIC_LIMITS.usersPerBot} người và vào tối đa {ZALO_BASIC_LIMITS.groupsPerBot} nhóm, mỗi tài khoản Zalo tạo được {ZALO_BASIC_LIMITS.botsPerAccount} bot. Trang Hệ thống &gt; Kết nối &gt; Zalo hiện từng bot đã dùng bao nhiêu; bot sắp đầy thì kết nối thêm bot khác.
+          </li>
           <li>Trong <b>nhóm</b>, Zalo chỉ gửi cho bot những tin có @bot hoặc trả lời tin của bot. Zalo ghi chú tính năng bot trong nhóm đang thử nghiệm nên có thể thay đổi.</li>
           <li>Bot chỉ hiểu lệnh bằng chữ của nhân viên. Tin thoại, file, sticker thì bot không đọc.</li>
           <li>Tin đã gửi không thu hồi được.</li>
@@ -262,10 +280,10 @@ export default async function ZaloGuidePage() {
 
       <Section id="su-co" title="Xử lý sự cố">
         <ul>
-          <li><b>Gửi ảnh báo lỗi 429</b>: hết hạn mức tháng của bot, hoặc gửi quá dồn. Tăng “Nghỉ giữa hai ảnh”.</li>
+          <li><b>Gửi ảnh báo lỗi 429</b>: bot đã hết hạn mức tin tháng của Zalo (xem số tin đã gửi ở Hệ thống &gt; Kết nối &gt; Zalo). Kết nối thêm bot khác rồi mời bot đó vào nhóm, hoặc chờ Zalo làm mới hạn mức.</li>
           <li><b>Gửi ảnh báo lỗi 401</b>: token sai hoặc đã bị đổi. Vào Hệ thống &gt; Kết nối &gt; Zalo, bấm “Kiểm tra token” ở bot của nhóm đó; token đã đổi thì bấm “Đổi token” (bot trong <Code>.env</Code> thì sửa <Code>ZALO_BOT_TOKEN</Code>).</li>
           <li><b>Nhóm không hiện trong danh sách</b>: chưa có webhook, hoặc chưa có ai @bot / trả lời tin của bot trong nhóm. Có thể thêm nhóm bằng tay bằng mã nhóm.</li>
-          <li><b>Bot không nhận lệnh của nhân viên</b>: kiểm tra lần lượt (1) công tắc Bật Zalo và Trợ lý nhận lệnh đều bật, (2) webhook đã đăng ký và <Code>ZALO_WEBHOOK_SECRET</Code> khớp, (3) nhân viên đã ghép nối và được gắn tài khoản web, (4) bấm Thử AI.</li>
+          <li><b>Bot không nhận lệnh của nhân viên</b>: kiểm tra lần lượt (1) công tắc Bật Zalo và Trợ lý nhận lệnh đều bật, (2) webhook đã đăng ký và <Code>ZALO_WEBHOOK_SECRET</Code> khớp, (3) nhân viên đã ghép nối Zalo với tài khoản web của mình <b>với đúng bot đó</b>, tài khoản không bị khóa và quyền dùng bot không phải “Không dùng bot”, (4) bấm Thử AI.</li>
           <li><b>AI trả lời “chưa có thông tin”</b>: kho kiến thức chưa có bài đó, hoặc bài đang ở trạng thái Nháp/Ngừng, hoặc bài không dành cho AI đó. Xem “Câu hỏi chưa trả lời được” và trang Thử AI ở Thông tin doanh nghiệp.</li>
           <li><b>Webhook đăng ký không được</b>: <Code>APP_URL</Code> phải là https công khai và có <Code>ZALO_WEBHOOK_SECRET</Code>.</li>
           <li><b>Không đăng được bài chăm sóc</b>: xem dòng lỗi ngay dưới bài (thường do hết hạn mức tháng hoặc bot chưa còn trong nhóm).</li>

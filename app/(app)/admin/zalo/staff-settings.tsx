@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { COMMAND_INFO, TOGGLEABLE_COMMANDS, type ToggleableCommand } from "@/lib/zalo/commands";
 import type { ZaloSettings } from "@/lib/zalo/settings";
-import { MasterOffNotice, SaveButton, SwitchRow, useZaloSettings } from "./settings-kit";
+import { SaveButton, SwitchRow, useZaloSettings } from "./settings-kit";
 
-export function StaffSettings({ initial, tokenSet }: { initial: ZaloSettings; tokenSet: boolean }) {
+export function StaffSettings({ initial }: { initial: ZaloSettings }) {
   const { v, set, toggle, save, saving, off } = useZaloSettings(initial);
 
   function toggleCommand(name: ToggleableCommand, on: boolean) {
@@ -16,7 +16,6 @@ export function StaffSettings({ initial, tokenSet }: { initial: ZaloSettings; to
 
   return (
     <div className="flex flex-col gap-6">
-      <MasterOffNotice enabled={v.enabled} tokenSet={tokenSet} />
       <Card>
         <CardHeader>
           <CardTitle>Ghép nối và lệnh gõ nhanh</CardTitle>
@@ -28,7 +27,7 @@ export function StaffSettings({ initial, tokenSet }: { initial: ZaloSettings; to
             onChange={(c) => toggle("pairing", c)}
             disabled={off}
             title="Ghép nối nhân viên"
-            desc="Nhân viên gõ /ghepnoi với bot để xin mã 4 số, bạn đối chiếu mã và bấm Cho phép ở bảng bên dưới. Tắt thì không ai xin ghép nối được (người đã ghép nối vẫn giữ quyền)."
+            desc="Cho lệnh /ghepnoi chạy: nhân viên nhắn /ghepnoi kèm mã của mình là ghép nối xong ngay; không kèm mã thì chờ bạn duyệt ở khối phía trên. Tắt thì không ai ghép nối thêm được (người đã ghép nối vẫn dùng bình thường)."
           />
           <SwitchRow
             checked={v.commands}
