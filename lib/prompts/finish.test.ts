@@ -63,7 +63,12 @@ describe("finishRule", () => {
 
   it("hàng khắc, logo dạng huy hiệu (D122): giữ hình bảng; MẶT BẢNG là mặt decal gốc, chỉ khung viền + chữ + biểu tượng được khắc chìm lộ lớp dưới", () => {
     const r = finishRule("ENGRAVE", true);
-    expect(r).toMatch(/keeps the logo's badge shape: ONE solid plate with the badge's outer shape/);
+    expect(r).toMatch(/keeps the logo's badge shape: ONE continuous thin sheet cut to the badge's outer shape/);
+    // D134: hàng thật là decal mỏng 0,3-0,5 mm, không phải tấm bảng dày; viền trang trí của logo là nét khắc phẳng
+    expect(r).toMatch(/never a thick plate or plaque/);
+    expect(r).toMatch(/A decorative border in the logo \(rope, hatching, beading, double line\) is engraved as flat line art/);
+    expect(r).toMatch(/any notched or cut corners/);
+    expect(r).not.toMatch(/solid plate/);
     expect(r).toMatch(/never the bare letters alone/);
     expect(r).toMatch(/badge's background, is the untouched FRONT material \(LEFT panel\)/);
     expect(r).toMatch(/border line, symbol, wordmark and tagline are engraved a hair below the surface and show the BACK material \(RIGHT panel\)/);

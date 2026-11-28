@@ -13,18 +13,24 @@
  * - cấm tráo, trộn chất liệu giữa các ô (D105, D112).
  *
  * Phần tả "tấm mỏng phẳng" (FLAT_LOOK) và vẻ khắc laser (ENGRAVE_LOOK ở finish.ts) giữ đúng câu chữ đầy đủ của phiên 13:27
- * ngày 25/11/2026 (D114): bản rút quá gọn ở D113 làm hàng khắc ra dày, nổi khối. Vẫn giữ nguyên tắc mỗi kiểu hàng chỉ định
- * nghĩa MỘT lần, nên prompt catalog 10 ô chỉ khoảng 4.600-5.400 ký tự, thừa xa giới hạn 20.000 của GPT Image 2.5 Sunburst (model
+ * ngày 25/11/2026 (D114): bản rút quá gọn ở D113 làm hàng khắc ra dày, nổi khối. D134 (28/11/2026) chỉ THÊM vào đó, không
+ * bớt câu nào: chủ xưởng báo ảnh vẫn dày hơn hàng thật, nên ghi độ dày thật của decal (0,3-0,5 mm thay cho "0,2-3 mm"),
+ * cấm vẻ "tấm bảng kim loại" và mép vát, dặn viền trang trí của logo (dây thừng, gạch chéo) là nét phẳng, và bỏ lại độ nổi
+ * khi ảnh logo là ảnh chụp một mẫu nổi khối. Bài học khi thử với AI thật: tả bóng và nền bằng điều MUỐN CÓ ("mặt nền sáng đều
+ * tới sát mép tấm"); bản nháp liệt kê thứ phải tránh ("no drop shadow, no dark halo") làm AI vẽ nền đen có quầng sáng.
+ * Vẫn giữ nguyên tắc mỗi kiểu hàng chỉ định
+ * nghĩa MỘT lần, nên prompt catalog 10 ô chỉ khoảng 6.500-7.700 ký tự, thừa xa giới hạn 20.000 của GPT Image 2.5 Sunburst (model
  * duy nhất đang cho chọn). Lưu ý nếu bật lại Seedream / MiniMax / Qwen (giới hạn 5.000 ký tự, lib/providers/kie-models.ts)
  * thì prompt này dài hơn mức các model đó nhận. Có test kiểm tra độ dài ở lib/prompts/defaults.test.ts.
  */
-const LOGO_REF = `Reference image 1 is the customer's logo (a clean graphic, or a photo of a physical sample). Use only its shapes: reproduce the symbol, letterforms, proportions and spacing exactly, without redrawing, restyling, adding or replacing anything. Never copy its colours, its plain background or the surface it lies on, its perspective or its lighting.`;
+const LOGO_REF = `Reference image 1 is the customer's logo (a clean graphic, or a photo of a physical sample). Use only its shapes: reproduce the symbol, letterforms, proportions and spacing exactly, without redrawing, restyling, adding or replacing anything. Never copy its colours, its plain background or the surface it lies on, its perspective or its lighting. If it shows a raised, embossed or cast sample, leave that thickness and relief behind as well and take its outlines only.`;
 
-const FLAT_LOOK = `Look and realism (very important): every piece is THIN and FLAT, only 0.2-3 mm thick, like a die-cut sticker, decal or thin plastic or fabric patch lying flat. It must look like a real photographed product, NOT a 3D render:
+const FLAT_LOOK = `Look and realism (very important): every piece is THIN and FLAT: a flexible decal film only about 0.3-0.5 mm thick, as thin as a vinyl sticker or a sheet of card, like a die-cut sticker, decal or thin plastic or fabric patch lying flat. It is never a rigid plate, plaque, metal nameplate, coin or moulded emblem, even when the material is mirror-like or metallic (that is a thin metallised film, not a piece of metal). It must look like a real photographed product, NOT a 3D render:
 - Shot perfectly top-down (flat lay, orthographic, no perspective, no tilt, no depth of field blur).
 - Every face is completely flat. The pattern, colour and texture lie flat in the surface and run continuously across the letters and symbol. No extrusion, no bevel, no rounded or puffy letters, no raised or chunky 3D lettering, no visible side walls, no inner or outer glow, no strong 3D highlights or reflections (only the material's own natural sheen, e.g. flat metallic foil or mirror gloss where the material is glossy).
-- Engraved areas sit only a hair below the top surface. Any border is thin, even and flat. Cut edges are hairlines, not thick walls.
-- Lighting is even, soft and diffused from above. The only shadow is a very small, tight, faint contact shadow, like a thin sheet resting on the surface.`;
+- The piece shows no thickness: seen from above, its outer edge is a single crisp cut line where the material simply ends, without a chamfer, a rim or a raised lip.
+- Engraved areas sit only a hair below the top surface (about a tenth of a millimetre): they read as a change of colour and finish, not as grooves with depth. Any border is thin, even and flat. Lines, hatching, rope or beaded borders and other ornaments of the logo are flat line art in the surface, never raised ridges or embossing. Cut edges are hairlines, not thick walls.
+- Lighting is even, soft and diffused from above. The piece lies in full contact with the surface beneath it, like a sticker pressed flat onto it: that surface stays evenly lit right up to the edge of the piece, with at most a very small, tight, faint contact shadow.`;
 
 export const DEFAULT_CATALOG_PROMPT = `Create one product-sample sheet as a strict grid of {{cols}} columns and {{rows}} rows, equal cells, thin white gutters, plain white background.
 

@@ -26,6 +26,16 @@ describe("prompt mặc định", () => {
       expect(p).toMatch(/reproduce them faithfully/);
       expect(p).toMatch(/Never copy the shape, holes/);
       expect(p).toMatch(/THIN and FLAT/);
+      // D134: độ dày thật của decal, không cho vẻ tấm bảng kim loại, mép vát hay bóng đổ
+      expect(p).toMatch(/only about 0\.3-0\.5 mm thick/);
+      expect(p).not.toMatch(/0\.2-3 mm/);
+      expect(p).toMatch(/never a rigid plate, plaque, metal nameplate, coin or moulded emblem/);
+      expect(p).toMatch(/The piece shows no thickness/);
+      expect(p).toMatch(/never raised ridges or embossing/);
+      expect(p).toMatch(/leave that thickness and relief behind as well and take its outlines only/);
+      // tả bóng và nền bằng điều muốn có; liệt kê thứ phải tránh từng làm AI vẽ nền đen có quầng sáng
+      expect(p).toMatch(/like a sticker pressed flat onto it: that surface stays evenly lit right up to the edge of the piece/);
+      expect(p).not.toMatch(/halo|drop shadow/);
     }
     expect(DEFAULT_CATALOG_PROMPT).toMatch(/Never show the logo printed on a tag, card or keychain/);
   });
@@ -65,9 +75,10 @@ describe("prompt mặc định", () => {
       const allEngrave = catalog(Array.from({ length: 10 }, () => ENGRAVE), { cols: 5, rows: 2 }, badge).length;
       expect(mixed).toBeLessThan(minLimit);
       expect(allEngrave).toBeLessThan(minLimit);
-      // mỗi kiểu hàng chỉ định nghĩa một lần: 10 ô khắc không được dài hơn bản trộn hai kiểu, và cả hai dưới 7.000 ký tự
+      // mỗi kiểu hàng chỉ định nghĩa một lần: 10 ô khắc không được dài hơn bản trộn hai kiểu, và cả hai dưới 8.500 ký tự
+      // (D134 thêm phần tả độ mỏng thật của decal nên dài hơn mốc 7.000 cũ; vẫn dưới nửa giới hạn 20.000 của model)
       expect(allEngrave).toBeLessThan(mixed);
-      expect(mixed).toBeLessThan(7000);
+      expect(mixed).toBeLessThan(8500);
     }
   });
 
@@ -79,7 +90,7 @@ describe("prompt mặc định", () => {
       expect(out).not.toContain("{{");
       // biến đã có sẵn trong mẫu: không bị nối thêm lần nữa
       expect(out.split(rule)).toHaveLength(2);
-      expect(out.length).toBeLessThan(4000);
+      expect(out.length).toBeLessThan(5000);
     }
   });
 });

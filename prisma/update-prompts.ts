@@ -29,7 +29,7 @@ async function main() {
           version,
           body,
           isActive: true,
-          note: "Kiểu hàng khắc/cắt định nghĩa một lần, mỗi ô ghi kiểu theo công nghệ chất liệu; hình tấm khắc theo ô logo dạng huy hiệu (D113); giữ cách tả vẻ khắc của phiên 13:27 25/11 (D114)",
+          note: "Tấm mỏng đúng độ dày thật 0,3-0,5 mm: không vẻ tấm bảng kim loại, không mép vát, không bóng đổ; viền trang trí của logo là nét khắc phẳng (D134). Giữ nguyên phần còn lại của D113, D114",
         },
       }),
     ]);
