@@ -271,8 +271,9 @@ async function contactlessSupplierLead(post: OfferPost, c: { id: string; authorN
 }
 
 /** Giới hạn mỗi lần quét, để một bài vài trăm comment không gọi AI vô hạn. Phần vượt giới hạn giữ câu mẫu và loại "chưa rõ". */
-const MAX_AI_PER_BATCH = 60;
+export const MAX_AI_PER_BATCH = 60;
 const AI_TIMEOUT_MS = 45_000;
+const MAX_AI_ATTEMPTS = 2;
 /** Lỗi không tự hết khi hỏi lại (sai khóa, hết tiền, sai tên model): dừng cả lượt thay vì hỏi tiếp từng comment. */
 const FATAL_CHAT_CODES = [401, 402, 404];
 
@@ -328,16 +329,19 @@ export async function runSupplierAi(input: { postId: string; commentIds: string[
     let parsed: ReturnType<typeof parseSupplierResponse> = null;
     try {
       summary.asked++;
-      const r = await chat.complete({
-        model: zalo.chatModel,
-        messages: [
-          { role: "system", content: [textPart(system)] },
-          { role: "user", content: [textPart(user)] },
-        ],
-        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
-      });
-      parsed = parseSupplierResponse(r.text);
-      if (!parsed) console.error(`AI nhà sản xuất (bài ${post.id}, model ${zalo.chatModel}): không đọc được câu trả lời:`, r.text.slice(0, 500));
+      // AI thỉnh thoảng trả lời sai dạng tới mức không vớt được: hỏi lại thêm một lần rồi mới bỏ qua comment này (như D121)
+      for (let attempt = 1; attempt <= MAX_AI_ATTEMPTS && !parsed; attempt++) {
+        const r = await chat.complete({
+          model: zalo.chatModel,
+          messages: [
+            { role: "system", content: [textPart(system)] },
+            { role: "user", content: [textPart(user)] },
+          ],
+          signal: AbortSignal.timeout(AI_TIMEOUT_MS),
+        });
+        parsed = parseSupplierResponse(r.text);
+        if (!parsed) console.error(`AI nhà sản xuất (bài ${post.id}, model ${zalo.chatModel}, lần ${attempt}/${MAX_AI_ATTEMPTS}): không đọc được câu trả lời:`, r.text.slice(0, 500));
+      }
     } catch (e) {
       console.error(`AI nhà sản xuất lỗi (bài ${post.id}, model ${zalo.chatModel}):`, e instanceof Error ? e.message : e);
       if (e instanceof ChatError && FATAL_CHAT_CODES.includes(e.code)) {
@@ -392,5 +396,29 @@ export async function runSupplierAi(input: { postId: string; commentIds: string[
     const leadCount = await db.fbLeadSource.count({ where: { comment: { postId: post.id } } });
     await db.fbPost.update({ where: { id: post.id }, data: { leadCount } });
   }
+  // Một dòng trong nhật ký máy chủ cho mỗi lượt, để khi "quét mà không thấy gì" còn biết AI đã xem và kết luận ra sao
+  console.info(
+    `AI nhà sản xuất (bài ${post.id}): xem ${summary.asked} comment, đọc được ${summary.classified}, lead mới ${summary.newLeads}, câu mời mới ${summary.newOffers}, câu AI soạn ${summary.drafted}, bỏ qua ${summary.skippedReplies}${summary.stopped ? `, dừng vì: ${summary.stopped}` : ""}.`,
+  );
   return summary;
+}
+
+/** Giới hạn số comment đã có được xét lại trong một lần bấm (bài rất nhiều comment thì bấm thêm lần nữa). */
+const MAX_BACKFILL_COMMENTS = 300;
+
+/**
+ * Soạn câu mời cho những comment ĐÃ QUÉT TỪ TRƯỚC của một bài tìm nhà sản xuất: dùng khi bài được đổi sang "Tìm bên sản xuất" sau
+ * khi đã có comment, hoặc khi lần xét trước bị lỡ (AI lỗi). Chỉ xét comment của người khác, chưa có dòng trong hàng chờ, chưa có
+ * trả lời của nick / fanpage và không phải spam. Đi đúng các quy tắc của lần quét (chống chào lặp, người đứng tên); trả về các
+ * comment cần AI xem để nơi gọi chạy `runSupplierAi` ở nền. Chỉ tạo dòng CHỜ DUYỆT, không gửi gì.
+ */
+export async function backfillPostOffers(postId: string, now = new Date()): Promise<EnqueueResult & { considered: number }> {
+  const comments = await db.fbComment.findMany({
+    where: { postId, isOwn: false, handled: false, reply: null, category: { not: "SPAM" } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: MAX_BACKFILL_COMMENTS,
+    select: { fbCommentId: true },
+  });
+  const result = await enqueueReplies({ postId, fbCommentIds: comments.map((c) => c.fbCommentId), now });
+  return { ...result, considered: comments.length };
 }

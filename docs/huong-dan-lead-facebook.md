@@ -521,6 +521,13 @@ Khi lần quét thấy comment mới của người khác trên bài **Tìm bên
 
 Câu soạn ra nằm ở **Hàng chờ trả lời**, trạng thái **Chờ duyệt**. Không có gì được gửi đi.
 
+**Quét mà không thấy câu nào?** Kiểm tra theo thứ tự:
+1. Bài có đúng mục đích **Tìm bên sản xuất** không (trang Bài đăng). Bài thêm bằng nút "Theo dõi bài này" trên extension mặc định là Tìm khách.
+2. Lần quét chỉ soạn cho comment **mới**. Bài vừa đổi mục đích thì bấm **Soạn câu mời cho comment đã có** ngay dưới ô sản phẩm của bài đó: hệ thống xét lại các comment đã quét (comment có số được soạn ngay; AI xem tiếp ở nền, tối đa 60 comment mỗi lần bấm).
+3. Comment không có số điện thoại chỉ có câu mời khi AI xếp người comment là **xưởng trực tiếp**. Comment chung chung ("bên mình có cung cấp, liên hệ nhé") hoặc quá ngắn ("ib") thì không.
+4. Comment của chính nick quét bài, hoặc của fanpage đã khai ở Mẫu câu & Fanpage, không bao giờ thành lead.
+5. Trên máy chủ, mỗi lượt AI ghi một dòng vào nhật ký: `pm2 logs truongminh --lines 200 --nostream | grep "AI nhà sản xuất"`.
+
 ### 17.4. Vòng đời của một câu trả lời
 ```
 Chờ duyệt ──(người duyệt)──► Đã duyệt ──(extension điền, dừng lại)──► Đã điền ──(NGƯỜI bấm gửi)──► Đã gửi

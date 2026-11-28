@@ -13,7 +13,7 @@ import { requireFbManager } from "@/lib/fb/access";
 import { fmtAgo, fmtDateTime } from "@/lib/fb/format";
 import { parseMaterialIds } from "@/lib/fb/offer-rules";
 import { pageWindow } from "@/lib/pagination";
-import { AddPostForm, PostOfferDialog, PurposeSelect, TrackingActions } from "./posts-client";
+import { AddPostForm, DraftExistingButton, PostOfferDialog, PurposeSelect, TrackingActions } from "./posts-client";
 
 export const metadata: Metadata = { title: "Bài đăng theo dõi" };
 
@@ -163,6 +163,7 @@ export default async function FbPostsPage({ searchParams }: { searchParams: Prom
                         </span>
                         <PurposeSelect id={p.id} purpose={p.purpose} />
                         {p.purpose === "FIND_SUPPLIER" && <PostOfferDialog id={p.id} productRef={p.productRef ?? ""} materialIds={parseMaterialIds(p.suggestedMaterialIds)} materials={materials} />}
+                        {p.purpose === "FIND_SUPPLIER" && <DraftExistingButton id={p.id} commentCount={p.commentCount} />}
                       </TableCell>
                       <TableCell>{p.group?.name ?? <span className="text-muted-foreground">Trang cá nhân</span>}</TableCell>
                       <TableCell>{p.account.displayName}</TableCell>

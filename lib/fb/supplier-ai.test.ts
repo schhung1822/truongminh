@@ -63,6 +63,32 @@ describe("parseSupplierResponse", () => {
   it("sai dạng hoặc loại lạ thì null (nơi gọi giữ câu mẫu, loại chưa rõ)", () => {
     expect(parseSupplierResponse("Xin lỗi, tôi không làm được")).toBeNull();
     expect(parseSupplierResponse('{"supplier_type":"factory"}')).toBeNull();
-    expect(parseSupplierResponse('{"supplier_type": manufacturer}')).toBeNull();
+    expect(parseSupplierResponse("supplier type là manufacturer")).toBeNull();
+  });
+
+  it("câu trả lời THẬT của gpt-5-2 qua kie.ai (28/11/2026): đối tượng kiểu JavaScript bọc trong JSON.stringify và thẻ", () => {
+    const real =
+      '<text preserveWhitespace>{JSON.stringify({supplier_type:"manufacturer",capability:"Xưởng nhận in áo theo yêu cầu, số lượng từ 50 cái.",should_reply:true,draft:"Vật Liệu Logo ABC bên em chuyên cung cấp vật liệu làm logo, nhãn cho xưởng sản xuất áo. Bên em có mẫu Navy xám than phù hợp làm logo áo thun, mời xưởng nhắn fanpage để nhận bảng mẫu tham khảo nhé!"},null,2)}</text>';
+    expect(parseSupplierResponse(real)).toEqual({
+      supplierType: "MANUFACTURER",
+      capability: "Xưởng nhận in áo theo yêu cầu, số lượng từ 50 cái.",
+      shouldReply: true,
+      draft: "Vật Liệu Logo ABC bên em chuyên cung cấp vật liệu làm logo, nhãn cho xưởng sản xuất áo. Bên em có mẫu Navy xám than phù hợp làm logo áo thun, mời xưởng nhắn fanpage để nhận bảng mẫu tham khảo nhé!",
+    });
+  });
+
+  it("câu trả lời THẬT dạng JSON chuẩn bọc trong thẻ <escape>", () => {
+    const real = '<escape>{\n  "supplier_type": "manufacturer",\n  "capability": "Có xưởng in.",\n  "should_reply": true,\n  "draft": "Chào bạn, Vật Liệu Logo ABC là bên cung cấp vật liệu."\n}</escape>';
+    expect(parseSupplierResponse(real)).toMatchObject({ supplierType: "MANUFACTURER", capability: "Có xưởng in.", shouldReply: true });
+  });
+
+  it("vớt được khi khóa dùng nháy đơn, có dấu nháy thoát trong chuỗi, hoặc should_reply là false", () => {
+    expect(parseSupplierResponse("{supplier_type:'broker', capability:'Nhận tìm xưởng hộ', should_reply:false, draft:''}")).toEqual({ supplierType: "BROKER", capability: "Nhận tìm xưởng hộ", shouldReply: false, draft: "" });
+    expect(parseSupplierResponse('{supplier_type:"manufacturer",capability:"Xưởng \\"Minh Anh\\" may áo",draft:"Dạ chào anh"}')).toMatchObject({ capability: 'Xưởng "Minh Anh" may áo', draft: "Dạ chào anh", shouldReply: true });
+  });
+
+  it("câu trả lời bị cắt giữa chừng: vẫn lấy được loại và năng lực, thiếu câu thì để rỗng (nơi gọi dùng câu mẫu)", () => {
+    const cut = '{supplier_type:"manufacturer",capability:"Xưởng may áo thun",should_reply:true,draft:"Dạ chào anh, bên em là';
+    expect(parseSupplierResponse(cut)).toEqual({ supplierType: "MANUFACTURER", capability: "Xưởng may áo thun", shouldReply: true, draft: "" });
   });
 });

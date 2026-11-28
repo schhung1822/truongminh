@@ -73,9 +73,46 @@ function extractJson(text: string): unknown {
 
 const TYPES: Record<string, SupplierType> = { manufacturer: "MANUFACTURER", broker: "BROKER", unknown: "UNKNOWN" };
 
-/** Đọc câu trả lời của AI. Không đúng dạng thì trả null (nơi gọi giữ câu soạn từ mẫu và để loại là "chưa rõ"). */
+/** Một chuỗi trong nháy kép hoặc nháy đơn (có thể chứa dấu nháy đã thoát). Hai nhóm bắt: nội dung nháy kép, nội dung nháy đơn. */
+const STR = String.raw`"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'`;
+/** Tên khóa có hoặc không có nháy, rồi dấu hai chấm. */
+const KEY = (name: string) => String.raw`["']?${name}["']?\s*:\s*`;
+
+function unescapeCaptured(double: string | undefined, single: string | undefined): string {
+  if (double !== undefined) {
+    try {
+      return JSON.parse(`"${double}"`) as string;
+    } catch {
+      /* rơi xuống gỡ tay */
+    }
+  }
+  return (double ?? single ?? "").replace(/\\n/g, " ").replace(/\\(["'\\])/g, "$1");
+}
+
+/**
+ * Vớt từng trường khi câu trả lời KHÔNG phải JSON chuẩn. Gặp thật với gpt-5-2 qua kie.ai (28/11/2026, cùng kiểu với D121):
+ * `<text preserveWhitespace>{JSON.stringify({supplier_type:"manufacturer",capability:"...",should_reply:true,draft:"..."},null,2)}</text>`,
+ * tức đối tượng kiểu JavaScript (tên khóa không có nháy) bọc trong hàm và thẻ, JSON.parse từ chối toàn bộ. Cũng vớt được câu
+ * trả lời bị cắt giữa chừng: thiếu `draft` thì nơi gọi dùng câu mẫu, phần xếp loại vẫn dùng được.
+ */
+function salvage(text: string): Record<string, unknown> | null {
+  const type = new RegExp(`${KEY("supplier_type")}["']?(manufacturer|broker|unknown)["']?`, "i").exec(text);
+  if (!type) return null;
+  const str = (name: string) => {
+    const m = new RegExp(`${KEY(name)}(?:${STR})`).exec(text);
+    return m ? unescapeCaptured(m[1], m[2]) : undefined;
+  };
+  const reply = new RegExp(`${KEY("should_reply")}["']?(true|false)`, "i").exec(text);
+  return { supplier_type: type[1], capability: str("capability"), draft: str("draft"), ...(reply ? { should_reply: reply[1].toLowerCase() === "true" } : {}) };
+}
+
+/**
+ * Đọc câu trả lời của AI: thử JSON chuẩn trước, không được thì vớt từng trường. Vẫn không ra loại nhà sản xuất thì trả null
+ * (nơi gọi hỏi lại một lần, rồi giữ câu soạn từ mẫu và để loại là "chưa rõ").
+ */
 export function parseSupplierResponse(text: string): SupplierAiResult | null {
-  const raw = extractJson(text);
+  const strict = extractJson(text);
+  const raw = strict && typeof strict === "object" && typeof (strict as Record<string, unknown>).supplier_type === "string" ? strict : salvage(text);
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const type = typeof o.supplier_type === "string" ? TYPES[o.supplier_type.trim().toLowerCase()] : undefined;

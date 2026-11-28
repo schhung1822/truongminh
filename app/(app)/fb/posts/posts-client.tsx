@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { CheckIcon, Loader2Icon, PackageIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { CheckIcon, Loader2Icon, PackageIcon, PauseIcon, PlayIcon, SparklesIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { addPostAction, setPostOfferAction, setPurposeAction, setTrackingAction, type PostFormState } from "./actions";
+import { addPostAction, draftExistingOffersAction, setPostOfferAction, setPurposeAction, setTrackingAction, type PostFormState } from "./actions";
 import { MaterialPicker, type PickerMaterial } from "./material-picker";
 
 export function AddPostForm({ accounts, materials }: { accounts: { id: string; displayName: string }[]; materials: PickerMaterial[] }) {
@@ -180,6 +180,38 @@ export function PostOfferDialog({ id, productRef, materialIds, materials }: { id
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Nút trên dòng một bài tìm nhà sản xuất: soạn câu mời cho các comment đã quét từ trước. Lần quét chỉ soạn cho comment MỚI,
+ * nên bài vừa đổi mục đích cần nút này để dùng được các comment đã có.
+ */
+export function DraftExistingButton({ id, commentCount }: { id: string; commentCount: number }) {
+  const [pending, startTransition] = useTransition();
+  if (commentCount === 0) return null;
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+      onClick={() => {
+        if (
+          !window.confirm(
+            "Soạn câu mời cho các comment đã quét của bài này?\n\n- Comment có số điện thoại: soạn ngay một câu, lead của người đó chuyển thành lead nhà sản xuất (nếu còn ở trạng thái Mới).\n- AI (nếu đang bật) xem từng comment, mỗi comment một lượt gọi, tối đa 60 comment mỗi lần bấm.\n- Chỉ tạo câu chờ duyệt ở Hàng chờ trả lời, không gửi gì lên Facebook.",
+          )
+        )
+          return;
+        startTransition(async () => {
+          const r = await draftExistingOffersAction(id);
+          if (r.error) toast.error(r.error);
+          else if (r.ok) toast.success(r.ok, { duration: 10_000 });
+        });
+      }}
+    >
+      {pending ? <Loader2Icon className="size-3 animate-spin" /> : <SparklesIcon className="size-3" />}
+      Soạn câu mời cho comment đã có
+    </button>
   );
 }
 

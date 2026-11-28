@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { requireFbManager } from "@/lib/fb/access";
 import { parseMaterialIds } from "@/lib/fb/offer-rules";
+import { backfillPostOffers, MAX_AI_PER_BATCH, runSupplierAi } from "@/lib/fb/offers";
 import { registerPost } from "@/lib/fb/register-post";
 import { zonedStartOfDay } from "@/lib/time";
 
@@ -97,6 +99,33 @@ export async function setPostOfferAction(postId: string, input: { productRef: st
   await db.fbPost.update({ where: { id: postId }, data: { productRef: productRef || null, suggestedMaterialIds: ids.length > 0 ? ids : Prisma.DbNull } });
   revalidatePath("/fb/posts");
   return { ok: "Đã lưu sản phẩm và vật liệu gợi ý. Áp dụng cho câu mời soạn từ lúc này." };
+}
+
+/**
+ * Soạn câu mời cho các comment ĐÃ QUÉT của một bài tìm nhà sản xuất (bài đổi mục đích sau khi đã có comment, hoặc lần xét
+ * trước bị lỡ). Comment có liên hệ được soạn ngay từ mẫu; AI (nếu bật) xem tiếp ở nền sau khi đã trả lời trình duyệt.
+ * Chỉ tạo câu CHỜ DUYỆT ở Hàng chờ trả lời, không gửi gì.
+ */
+export async function draftExistingOffersAction(postId: string): Promise<PostFormState> {
+  const user = await requireFbManager();
+  const post = await db.fbPost.findUnique({ where: { id: postId }, select: { id: true, purpose: true, account: { select: { userId: true } } } });
+  if (!post) return { error: "Không tìm thấy bài." };
+  if (user.role !== "ADMIN" && post.account.userId !== user.id) return { error: "Bài này không thuộc danh sách theo dõi của bạn." };
+  if (post.purpose !== "FIND_SUPPLIER") return { error: "Chỉ áp dụng cho bài có mục đích Tìm bên sản xuất." };
+
+  const r = await backfillPostOffers(post.id);
+  if (r.aiCommentIds.length > 0) {
+    const commentIds = r.aiCommentIds;
+    after(() => runSupplierAi({ postId: post.id, commentIds }).catch((e) => console.error(`AI nhà sản xuất (bài ${post.id}) lỗi:`, e)));
+  }
+  revalidatePath("/fb/posts");
+  revalidatePath("/fb/replies");
+  revalidatePath("/fb/leads");
+  if (r.considered === 0) return { ok: "Không có comment nào cần soạn: mọi comment của bài này đã có câu trong hàng chờ, đã được trả lời, hoặc là của nick / fanpage." };
+  const ai = Math.min(r.aiCommentIds.length, MAX_AI_PER_BATCH);
+  return {
+    ok: `Đã xét ${r.considered} comment: soạn ngay ${r.offers} câu mời từ comment có liên hệ.${ai > 0 ? ` AI đang xem ${ai} comment ở nền (vài phút); tải lại Hàng chờ trả lời để thấy thêm.` : ""}${r.aiCommentIds.length > MAX_AI_PER_BATCH ? ` Còn ${r.aiCommentIds.length - MAX_AI_PER_BATCH} comment chưa được AI xem, bấm lại sau.` : ""}`,
+  };
 }
 
 export async function setTrackingAction(postId: string, status: "TRACKING" | "PAUSED" | "DONE"): Promise<PostFormState> {
