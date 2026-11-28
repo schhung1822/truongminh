@@ -9,20 +9,25 @@ import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { fmtDateTime } from "@/lib/fb/format";
 import { parseLeadFilters } from "@/lib/fb/lead-filters";
+import { parseMaterialIds } from "@/lib/fb/offer-rules";
+import { SUPPLIER_TYPE_LABEL } from "@/lib/fb/reply-labels";
 import { pageWindow } from "@/lib/pagination";
 import { LeadFilterForm } from "./lead-filter-form";
 import { PAGE_SIZES, STATUS_LABEL, STATUS_TONE } from "./lead-status";
 import { LeadsTable, type LeadRow } from "./leads-client";
+import { SupplierLeadsTable, type SupplierInfo } from "./supplier-leads-client";
 
 export const metadata: Metadata = { title: "Lead Facebook" };
 
-type Params = { q?: string; status?: string; group?: string; assigned?: string; type?: string; from?: string; to?: string; page?: string; size?: string; sort?: string };
+type Params = { q?: string; status?: string; group?: string; assigned?: string; type?: string; from?: string; to?: string; page?: string; size?: string; sort?: string; view?: string; stype?: string };
 
 export default async function FbLeadsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const user = await requireUser();
   const params = await searchParams;
   const q = (params.q ?? "").trim();
-  const type = params.type === "CUSTOMER" || params.type === "SUPPLIER" ? params.type : "";
+  const supplierView = params.view === "supplier"; // tab "Nhà sản xuất" (v1.1 mục 6)
+  const type = supplierView ? "" : params.type === "CUSTOMER" || params.type === "SUPPLIER" ? params.type : "";
+  const stype = supplierView && params.stype && params.stype in SUPPLIER_TYPE_LABEL ? params.stype : "";
   const group = params.group ?? "";
   const assigned = params.assigned ?? "";
   const oldestFirst = params.sort === "old";
@@ -47,12 +52,36 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
     take: pageSize,
     include: {
       group: { select: { name: true } },
-      post: { select: { url: true } },
+      post: { select: { url: true, productRef: true, suggestedMaterialIds: true } },
       customer: { select: { name: true } },
       comment: { select: { text: true } },
+      // câu mời gần nhất của nhà sản xuất này, để hiện "trạng thái chào"
+      replies: { where: { intent: "SUPPLIER_OFFER" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1, select: { status: true, replyAs: true } },
       _count: { select: { sources: true } },
     },
   });
+  const supplierCount = manager ? await db.fbLead.count({ where: { leadType: "SUPPLIER" } }) : await db.fbLead.count({ where: { leadType: "SUPPLIER", assignedToId: user.id } });
+
+  // Tên vật liệu gợi ý của các bài nguồn (chỉ cần ở tab Nhà sản xuất)
+  const materialIds = supplierView ? [...new Set(leads.flatMap((l) => parseMaterialIds(l.post.suggestedMaterialIds)))] : [];
+  const materialNames = new Map(materialIds.length > 0 ? (await db.material.findMany({ where: { id: { in: materialIds } }, select: { id: true, name: true } })).map((m) => [m.id, m.name]) : []);
+  const supplierInfo: Record<string, SupplierInfo> = {};
+  if (supplierView) {
+    for (const l of leads) {
+      supplierInfo[l.id] = {
+        supplierType: l.supplierType ?? "UNKNOWN",
+        capability: l.capability ?? "",
+        productRef: l.post.productRef ?? "",
+        materials: parseMaterialIds(l.post.suggestedMaterialIds).map((id) => materialNames.get(id)).filter((n): n is string => !!n),
+        offerStatus: l.replies[0]?.status ?? null,
+        offerAs: l.replies[0]?.replyAs ?? null,
+        lastOfferedAt: l.lastOfferedAt ? fmtDateTime(l.lastOfferedAt) : null,
+        calledAt: l.calledAt ? fmtDateTime(l.calledAt) : null,
+        zaloMessagedAt: l.zaloMessagedAt ? fmtDateTime(l.zaloMessagedAt) : null,
+        sampleSentAt: l.sampleSentAt ? fmtDateTime(l.sampleSentAt) : null,
+      };
+    }
+  }
   const userNames: Record<string, string> = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]));
 
   const rows: LeadRow[] = leads.map((l) => ({
@@ -79,6 +108,8 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
   const href = (over: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
     const cur: Record<string, string | undefined> = {
+      view: supplierView ? "supplier" : undefined,
+      stype: stype || undefined,
       q: q || undefined,
       status: status || undefined,
       type: type || undefined,
@@ -98,7 +129,7 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
   /** Xuất CSV đúng theo bộ lọc đang xem (không phân trang). */
   const exportHref = () => {
     const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries({ q, status, type, group, assigned, from: params.from, to: params.to, sort: oldestFirst ? "old" : undefined })) {
+    for (const [k, v] of Object.entries({ view: supplierView ? "supplier" : "", stype, q, status, type, group, assigned, from: params.from, to: params.to, sort: oldestFirst ? "old" : undefined })) {
       if (v) sp.set(k, v);
     }
     const s = sp.toString();
@@ -115,7 +146,11 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
         <div>
           <h1 className="text-2xl font-semibold">Lead Facebook</h1>
           <p className="text-muted-foreground">
-            {manager ? "Khách để lại số điện thoại hoặc liên hệ trong comment trên các bài đang theo dõi." : "Các lead được gán cho bạn."}
+            {supplierView
+              ? "Xưởng sản xuất đã comment vào các bài tìm nhà sản xuất. Comment của fanpage chỉ là bước làm nóng: gọi hoặc nhắn Zalo theo số điện thoại để chốt."
+              : manager
+                ? "Khách để lại số điện thoại hoặc liên hệ trong comment trên các bài đang theo dõi."
+                : "Các lead được gán cho bạn."}
           </p>
         </div>
         {newCount > 0 && status !== "NEW" && (
@@ -123,6 +158,24 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
             Có {newCount} lead mới chưa xử lý
           </Button>
         )}
+      </div>
+
+      {/* Hai tab: mọi lead, và riêng nhà sản xuất (v1.1) */}
+      <div className="flex gap-1 border-b" role="tablist" aria-label="Loại danh sách">
+        {[
+          { key: false, label: "Tất cả lead", href: "/fb/leads" },
+          { key: true, label: `Nhà sản xuất (${supplierCount})`, href: "/fb/leads?view=supplier" },
+        ].map((t) => (
+          <Link
+            key={t.label}
+            href={t.href}
+            role="tab"
+            aria-selected={supplierView === t.key}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm ${supplierView === t.key ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            {t.label}
+          </Link>
+        ))}
       </div>
 
       {/* Nút lọc nhanh theo trạng thái, kèm số lượng */}
@@ -150,15 +203,27 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
         <CardContent>
           <LeadFilterForm>
             <input type="hidden" name="status" value={status} />
+            {supplierView && <input type="hidden" name="view" value="supplier" />}
             <div className="relative lg:col-span-2">
               <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input name="q" defaultValue={q} placeholder="Tìm theo tên, số điện thoại, Zalo, email, rồi nhấn Enter" className="h-10 pl-9" />
             </div>
-            <NativeSelect name="type" defaultValue={type} aria-label="Loại lead">
-              <option value="">Khách và bên sản xuất</option>
-              <option value="CUSTOMER">Tìm khách</option>
-              <option value="SUPPLIER">Tìm bên sản xuất</option>
-            </NativeSelect>
+            {supplierView ? (
+              <NativeSelect name="stype" defaultValue={stype} aria-label="Loại nhà sản xuất">
+                <option value="">Mọi loại nhà sản xuất</option>
+                {Object.entries(SUPPLIER_TYPE_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </NativeSelect>
+            ) : (
+              <NativeSelect name="type" defaultValue={type} aria-label="Loại lead">
+                <option value="">Khách và bên sản xuất</option>
+                <option value="CUSTOMER">Tìm khách</option>
+                <option value="SUPPLIER">Tìm bên sản xuất</option>
+              </NativeSelect>
+            )}
             <NativeSelect name="sort" defaultValue={oldestFirst ? "old" : "new"} aria-label="Sắp xếp">
               <option value="new">Mới nhất trước</option>
               <option value="old">Cũ nhất trước</option>
@@ -199,7 +264,7 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
                 Lọc
               </Button>
               {filtering && (
-                <Button type="button" variant="outline" className="h-10 px-4" render={<Link href="/fb/leads" />}>
+                <Button type="button" variant="outline" className="h-10 px-4" render={<Link href={supplierView ? "/fb/leads?view=supplier" : "/fb/leads"} />}>
                   Xoá lọc
                 </Button>
               )}
@@ -235,16 +300,20 @@ export default async function FbLeadsPage({ searchParams }: { searchParams: Prom
               <p>
                 {filtering
                   ? "Không có lead nào khớp bộ lọc."
-                  : manager
+                  : supplierView
+                    ? "Chưa có nhà sản xuất nào. Thêm một bài có mục đích Tìm bên sản xuất ở trang Bài đăng; xưởng comment kèm số điện thoại sẽ xuất hiện ở đây."
+                    : manager
                     ? "Chưa có lead nào. Lead xuất hiện sau khi extension quét được comment có số điện thoại."
                     : "Chưa có lead nào được gán cho bạn."}
               </p>
               {filtering && (
-                <Button variant="outline" size="sm" render={<Link href="/fb/leads" />}>
+                <Button variant="outline" size="sm" render={<Link href={supplierView ? "/fb/leads?view=supplier" : "/fb/leads"} />}>
                   Xoá lọc
                 </Button>
               )}
             </div>
+          ) : supplierView ? (
+            <SupplierLeadsTable rows={rows} info={supplierInfo} assignable={users} canDelete={user.role === "ADMIN"} currentUserId={user.id} currentUserName={user.name} userNames={userNames} />
           ) : (
             <LeadsTable
               rows={rows}

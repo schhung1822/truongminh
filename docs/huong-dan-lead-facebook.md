@@ -3,6 +3,7 @@
 Tài liệu này giải thích **cách hệ thống hoạt động từ đầu đến cuối**, bằng ngôn ngữ thường, để đọc, hiểu và nghiên cứu. Nó không thay thế hai tài liệu kỹ thuật:
 
 - `docs/thiet-ke-module-lead-facebook.md`: bản thiết kế gốc (yêu cầu, bảng dữ liệu, API).
+- `thiet-ke-module-lead-facebook-v1.1-luong-nha-san-xuat.md` (ở gốc dự án): bản bổ sung v1.1, luồng tìm nhà sản xuất và mời dùng vật liệu.
 - `extension/README.md`: hướng dẫn cài đặt nhanh.
 
 Mục lục:
@@ -22,6 +23,7 @@ Mục lục:
 14. Câu hỏi thường gặp
 15. Từ điển thuật ngữ
 16. Muốn đọc code thì bắt đầu từ đâu
+17. Trả lời comment và luồng nhà sản xuất (bổ sung v1.1)
 
 ---
 
@@ -35,9 +37,9 @@ Hệ thống làm thay đúng **phần đọc và ghi chép**:
 2. Tách số điện thoại, Zalo, email ra khỏi comment.
 3. Đưa vào danh sách **Lead** trên webapp để sale gọi lại.
 
-Hệ thống **không** đăng bài, không comment, không nhắn tin, không bấm gửi. Mọi thao tác "gửi" trên Facebook vẫn do người làm bằng tay.
+Hệ thống **không** đăng bài, không nhắn tin, không bấm gửi. Mọi thao tác "gửi" trên Facebook vẫn do người làm bằng tay.
 
-Hiện mới xong **giai đoạn 1** (thu thập và tạo lead). Soạn sẵn câu trả lời (giai đoạn 2) và hỗ trợ đăng bài (giai đoạn 3) chưa làm.
+Từ bản 0.4.0 của extension (28/11/2026) có thêm phần **trả lời comment bán tự động**: webapp soạn sẵn câu trả lời, người duyệt, extension điền sẵn vào đúng ô trả lời rồi dừng lại, người đọc lại và tự bấm gửi. Phần này phục vụ **luồng nhà sản xuất** (bổ sung v1.1): xưởng comment vào bài tìm nhà sản xuất thì fanpage vào mời dùng vật liệu. Xem mục 17. Hỗ trợ đăng bài (giai đoạn 3) chưa làm.
 
 ---
 
@@ -178,7 +180,7 @@ Sale thấy lead ở trang "Lead"
 
 ## 4. Webapp: từng trang dùng để làm gì
 
-Menu **Lead Facebook** có 4 mục.
+Menu **Lead Facebook** có các mục dưới đây, cộng hai mục của phần trả lời comment (Hàng chờ trả lời, Mẫu câu & Fanpage) mô tả ở mục 17.
 
 ### 4.1. Lead
 Danh sách người đã để lại liên hệ. Mỗi dòng: tên, số điện thoại / Zalo / email, nhóm nguồn, trạng thái, người phụ trách, thời gian.
@@ -261,7 +263,7 @@ Thứ tự kiểm tra (cái nào khớp trước thì lấy):
 | **Spam** | Có link ra ngoài Facebook/Zalo, hoặc có từ quảng cáo (tuyển CTV, kiếm tiền online...) | Lưu, bỏ qua. *Ưu tiên hơn "có số"*, vì comment quảng cáo thường kèm số của người khác |
 | **Có liên hệ** | Tách được số, Zalo hoặc email | **Tạo lead** |
 | **Câu hỏi** | Số viết bằng chữ; có dấu "?"; hỏi "bao nhiêu", "ở đâu", "có... không" | Lưu (người đọc kỹ sau) |
-| **Quan tâm** | "ib", "inbox", "quan tâm", "cần tư vấn", "báo giá", "xin giá", "chấm", dấu "." đứng riêng | Lưu. *Ở giai đoạn 2 sẽ dùng để soạn sẵn câu trả lời* |
+| **Quan tâm** | "ib", "inbox", "quan tâm", "cần tư vấn", "báo giá", "xin giá", "chấm", dấu "." đứng riêng | Lưu. Nếu bật công tắc ở Mẫu câu & Fanpage: soạn sẵn câu dẫn về inbox fanpage (mục 17) |
 | **Khác** | Còn lại, hoặc comment của chính nick mình | Lưu, bỏ qua |
 
 Từ khóa nằm trong file `lib/fb/keywords.ts`. Hiện sửa từ khóa phải sửa file; trang sửa từ khóa trên webapp sẽ làm ở giai đoạn 2.
@@ -293,7 +295,7 @@ Khách comment kèm số ──► Extension đọc ──► Webapp tạo LEAD 
 
 | Không làm | Được đảm bảo bằng |
 |---|---|
-| Tự đăng bài, tự comment, tự bấm gửi | Extension chỉ bấm các nút *mở rộng nội dung đã có*. Có một **test tự động** (`extension/src/guard.test.ts`) sẽ báo đỏ nếu code có giả lập bàn phím, gõ chữ vào ô, gửi form |
+| Tự đăng bài, tự gửi comment, tự bấm gửi | Khi quét, extension chỉ bấm các nút *mở rộng nội dung đã có*. Khi trả lời, nó chỉ **điền sẵn câu người đã duyệt** rồi dừng. Có một **test tự động** (`extension/src/guard.test.ts`) sẽ báo đỏ nếu code có giả lập bàn phím (phím Enter), gửi form, chèn chữ ở ngoài file `fill.ts`, hoặc bấm nút mà không qua bước kiểm tra "đây không phải nút gửi" |
 | Tự tìm hoặc quét bài chưa được đăng ký | Webapp chỉ giao đúng permalink người dùng đã chủ động thêm; API chỉ nhận comment cho bài thuộc danh sách theo dõi của nick quét gắn với mã, bài khác bị từ chối 404 |
 | Đọc cookie, token đăng nhập Facebook, tin nhắn | Extension không xin quyền đọc cookie; chỉ có quyền ở `facebook.com` và webapp; test chặn dùng `document.cookie` |
 | Che giấu việc tự động hóa (độ trễ ngẫu nhiên, đổi user-agent, proxy, vân tay trình duyệt, tài khoản mua lại) | Mọi độ trễ là **số cố định**; test chặn `Math.random`, đụng `navigator.userAgent`, proxy... |
@@ -416,7 +418,7 @@ Làm theo thứ tự. Mỗi bài tập nhỏ, an toàn.
 
 **Extension có đọc được tin nhắn Messenger không?** Không. Nó chỉ mở những link bài webapp giao và chỉ đọc phần bình luận.
 
-**Có đăng bài hộ, comment hộ, hay trả lời "ib" hộ không?** Không, và có test chặn. Giai đoạn 2 (nếu làm) sẽ *điền sẵn* câu trả lời rồi **dừng lại để người bấm gửi**.
+**Có đăng bài hộ, comment hộ, hay trả lời "ib" hộ không?** Không tự gửi gì, và có test chặn. Extension chỉ *điền sẵn* câu trả lời đã được duyệt trên webapp rồi **dừng lại để người bấm gửi** (mục 17).
 
 **Nhiều nhân sự dùng thế nào?** Mỗi nhân sự một tài khoản webapp, một hoặc nhiều nick, mỗi máy một mã kết nối riêng. Thấy hết lead ở chung một nơi, phân quyền theo vai trò.
 
@@ -481,6 +483,76 @@ Làm theo thứ tự. Mỗi bài tập nhỏ, an toàn.
 | Lịch chọn bài cần quét | `lib/fb/schedule.ts` |
 | Các trang web | `app/(app)/fb/` (`leads`, `posts`, `groups`, `connect`) |
 | Cấu trúc bảng dữ liệu | `prisma/schema.prisma` (cuối file, phần "Module Lead Facebook") |
-| Các quyết định và lý do | `docs/DECISIONS.md` mục D91 |
+| Các quyết định và lý do | `docs/DECISIONS.md` mục D91 (giai đoạn 1), D131 (trả lời và luồng nhà sản xuất) |
+| Soạn câu mời, chống chào lặp, AI phân loại nhà sản xuất | `lib/fb/offers.ts`, `lib/fb/offer-rules.ts`, `lib/fb/reply-text.ts`, `lib/fb/supplier-ai.ts` |
+| Nhận kết quả extension báo về, khép hàng chờ sau lần quét | `lib/fb/reply-result.ts`, `lib/fb/reply-jobs.ts` |
+| Extension điền câu, chọn danh tính | `extension/src/content/reply.ts`, `fill.ts`, `identity.ts`; phần điều phối ở `background.ts` (hàm `runReplies`) |
 
 Các file `*.test.ts` đi kèm là cách đọc dễ nhất: mỗi test là một ví dụ "đầu vào → kết quả đúng".
+
+---
+
+## 17. Trả lời comment và luồng nhà sản xuất (bổ sung v1.1)
+
+### 17.1. Bài toán
+1. Nhân sự đăng bài "tìm nhà sản xuất cho mẫu áo / sản phẩm X" vào nhóm, rồi thêm bài vào danh sách theo dõi với mục đích **Tìm bên sản xuất**, ghi sản phẩm và chọn vật liệu gợi ý.
+2. Xưởng vào comment, thường để lại số điện thoại.
+3. Hệ thống tạo **lead nhà sản xuất** và soạn sẵn một **câu mời dùng vật liệu**.
+4. Nhân sự duyệt câu đó. Extension điền sẵn vào ô trả lời của đúng comment, **dưới tên fanpage**, rồi dừng. Nhân sự đọc lại và tự bấm gửi.
+5. Sale gọi hoặc nhắn Zalo theo số điện thoại. Comment chỉ là bước làm nóng.
+
+### 17.2. Cần chuẩn bị gì (một lần)
+| Việc | Ở đâu |
+|---|---|
+| Thêm fanpage, đặt mặc định | **Lead Facebook > Mẫu câu & Fanpage**. Tên phải đúng từng chữ như trên Facebook |
+| Đánh dấu nhóm nào fanpage đã vào | **Lead Facebook > Nhóm > Sửa**: "Nhóm cho fanpage tham gia", "Fanpage của xưởng đã vào nhóm" |
+| Sửa mẫu câu cho đúng giọng của xưởng | **Mẫu câu & Fanpage** > Nạp mẫu có sẵn để sửa |
+| Bật/tắt AI, số ngày không chào lại, cách xử lý khi nhóm chưa có fanpage | **Mẫu câu & Fanpage** > Cấu hình (chỉ quản trị viên) |
+| Nick quét bài phải là người quản lý fanpage | Trên Facebook |
+
+### 17.3. Hệ thống soạn câu thế nào
+Khi lần quét thấy comment mới của người khác trên bài **Tìm bên sản xuất**:
+
+- **Có số điện thoại (hoặc Zalo, email):** tạo hoặc cập nhật lead nhà sản xuất, và soạn ngay một câu từ mẫu. Câu có tên fanpage, sản phẩm của bài và **một hoặc hai vật liệu đứng đầu** danh sách gợi ý của bài.
+- **Không có liên hệ:** nếu AI đang bật và AI xếp người comment là **xưởng trực tiếp**, cũng tạo lead (chưa có số) và soạn câu mời.
+- **AI (nếu bật)** chạy nền sau đó, mỗi comment một lượt: xếp *xưởng trực tiếp / môi giới / chưa rõ*, tóm tắt năng lực (làm mặt hàng gì, quy mô), và soạn một câu riêng thay cho câu mẫu. Câu của AI chỉ được dùng khi đạt đủ: 1-2 câu, có tên fanpage, nhắc ít nhất một vật liệu gợi ý của bài, không nhắc số điện thoại của người comment, không có link, không trùng nguyên văn câu đã có trong bài. AI chỉ nhận nội dung comment **đã che số điện thoại và email**, không nhận tên hay link người comment. AI tắt hoặc lỗi thì giữ câu mẫu, loại để "chưa rõ".
+- **Chống chào lặp:** một nhà sản xuất (theo số điện thoại) đã có câu chào đang chờ hoặc đã gửi trong **30 ngày** (chỉnh được) thì comment ở bài khác vẫn ghi thêm vào lead, nhưng không soạn câu chào mới.
+- **Ai đứng tên:** fanpage mặc định, nếu bài thuộc nhóm đã đánh dấu "fanpage đã vào" (hoặc bài không thuộc nhóm nào). Nhóm chưa có fanpage: theo cấu hình, hoặc đứng tên nick đã quét bài, hoặc không soạn câu (vẫn có lead).
+
+Câu soạn ra nằm ở **Hàng chờ trả lời**, trạng thái **Chờ duyệt**. Không có gì được gửi đi.
+
+### 17.4. Vòng đời của một câu trả lời
+```
+Chờ duyệt ──(người duyệt)──► Đã duyệt ──(extension điền, dừng lại)──► Đã điền ──(NGƯỜI bấm gửi)──► Đã gửi
+     │                            │                                        │
+     └──► Bỏ qua                  └──► Lỗi (kèm lý do)                     └──► quá 15 phút không gửi: giao lại
+```
+- **Hàng chờ trả lời**: lọc theo trạng thái, người đứng tên (nick / fanpage), loại câu; sửa câu ngay trong ô (lưu khi bấm ra ngoài); duyệt từng câu hoặc **duyệt cả lô**; bỏ qua; đổi người đứng tên; đưa câu bị bỏ qua hoặc lỗi về chờ duyệt.
+- **Trên extension**: popup có hai nút riêng, **Trả lời bằng nick** và **Trả lời bằng fanpage**, kèm số câu đang chờ. Bấm một nút: extension mở bài (các câu cùng bài chỉ mở một lần), tìm comment theo mã, bấm "Phản hồi", chọn danh tính, điền câu vào ô có viền cam, rồi **dừng**. Một bảng nhỏ ở góc trang nhắc đọc lại và có nút **Bỏ qua câu này**, **Dừng**. Sau khi người bấm gửi và câu trả lời hiện ra, extension báo "đã gửi" và sang câu kế.
+- **Nếu extension không kịp thấy** (đóng tab, tắt máy): lần quét sau thấy câu trả lời của nick hoặc fanpage dưới comment đó thì tự ghi **Đã gửi**. Comment đã có trả lời tay thì câu đang chờ tự chuyển **Bỏ qua**.
+- Khi một câu mời **đã gửi**, lead ghi "lần chào gần nhất": mốc này và các câu còn chờ là căn cứ chống chào lặp.
+
+### 17.5. Trả lời dưới tên fanpage: "không chắc thì không điền"
+Với câu đứng tên fanpage, extension tìm nút chuyển danh tính bình luận, chọn fanpage theo đúng tên đã khai, rồi **kiểm tra lại** danh tính đang dùng trước khi điền.
+
+| Tình huống | Extension làm | Webapp làm |
+|---|---|---|
+| Không thấy nút chuyển danh tính, hoặc fanpage không có trong danh sách | Không điền. Báo lỗi `page_not_available` | Câu chuyển **Lỗi**; nhóm tự bỏ đánh dấu "fanpage đã vào"; các câu fanpage còn chờ của nhóm đó chuyển sang nick và về chờ duyệt (hoặc bỏ qua, theo cấu hình) |
+| Chọn được nhưng không xác nhận lại được danh tính | Không điền. Báo `identity_unverified` | Câu chuyển **Lỗi**, ghi cảnh báo ở Kết nối extension để chỉnh bộ đọc |
+| Trả lời bằng nick nhưng ô trả lời đang ở danh tính fanpage | Chuyển về nick trước; không chuyển được thì không điền | Như trên |
+
+### 17.6. Việc của sale
+**Lead Facebook > Lead > tab Nhà sản xuất**: mỗi dòng có số điện thoại (bấm để gọi, mở Zalo), loại (sửa tay được), năng lực tóm tắt, sản phẩm nguồn, vật liệu gợi ý, trạng thái chào và lần chào gần nhất, và ba nút **Đã gọi**, **Đã nhắn Zalo**, **Đã gửi mẫu** (bấm lần nữa để bỏ đánh dấu). Đánh dấu đã gọi hoặc đã nhắn Zalo cho lead còn "Mới" thì lead chuyển sang "Đã liên hệ". Sale vẫn chỉ thấy lead được gán cho mình.
+
+**Thống kê Lead** có thêm **phễu bài tìm nhà sản xuất**: comment → xưởng thật → đã chào → đã liên hệ được → đã gửi mẫu → có đơn vật liệu (lead ở trạng thái Chốt đơn).
+
+### 17.7. Điều chưa được kiểm chứng (đọc trước khi dùng thật)
+Phần webapp (soạn câu, chống chào lặp, hàng chờ, API, phễu) đã chạy thử đầu-cuối trên một CSDL tạm với AI giả. Phần extension **chưa chạy trên Facebook thật**; nó mới được thử trên trang HTML mô phỏng theo hiểu biết của người viết:
+
+1. **Nút "Phản hồi" và ô trả lời.** Nếu Facebook dựng khác, extension báo lỗi "không thấy nút Phản hồi / ô nhập" và không làm gì thêm.
+2. **Cách chèn chữ vào trình soạn thảo của Facebook.** Extension thử lệnh chèn chữ của trình duyệt rồi tới sự kiện dán, và chỉ báo "đã điền" khi thấy đúng câu đó trong ô.
+3. **Nút chuyển danh tính trong nhóm.** Đây là phần ít chắc nhất: lúc viết không có trình duyệt nào đăng nhập Facebook để xem giao diện thật. Nhãn nhận diện nằm ở `REPLY_LABELS.identitySwitcher` trong `extension/src/content/selectors.ts`. Chừng nào chưa khớp, mọi câu fanpage sẽ báo `page_not_available` (và không điền gì).
+
+**Cách khép vòng:** mở một bài trong nhóm mà fanpage đã vào, bấm "Phản hồi" dưới một comment cho ô trả lời hiện ra, rồi bấm **Chẩn đoán trang này** trên popup và gửi báo cáo. Mục `reply` của báo cáo ghi số nút Phản hồi, nhãn ô nhập và các nút ứng viên của bộ chọn danh tính; tên nick thành `{nick}`, tên fanpage thành `{page}`, tên người khác thành `{…}`.
+
+**Rủi ro:** comment mời hàng dưới tên fanpage trong nhóm của người khác có thể bị quản trị viên nhóm coi là quảng cáo; đọc quy định nhóm (ghi ở trang Nhóm) trước khi duyệt. Giữ nhịp thấp: mỗi câu đều có người đọc và bấm gửi, không có chế độ gửi hàng loạt.

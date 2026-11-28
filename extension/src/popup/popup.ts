@@ -37,7 +37,7 @@ function renderEvents(list: EventEntry[]) {
 
 function render(s: StatusResponse) {
   $("version").textContent = "v" + s.version;
-  for (const [id, path] of [["lnkLeads", "/fb/leads"], ["lnkPosts", "/fb/posts"], ["lnkConnect", "/fb/connect"]] as const) ($(id) as HTMLAnchorElement).href = s.appOrigin + path;
+  for (const [id, path] of [["lnkLeads", "/fb/leads"], ["lnkReplies", "/fb/replies"], ["lnkPosts", "/fb/posts"], ["lnkConnect", "/fb/connect"]] as const) ($(id) as HTMLAnchorElement).href = s.appOrigin + path;
 
   const status = $("status");
   if (s.connected && s.account) {
@@ -50,9 +50,26 @@ function render(s: StatusResponse) {
     $("guide").hidden = false;
   }
 
+  // Câu trả lời đã duyệt: hai nhóm riêng, đứng tên nick và đứng tên fanpage (v1.1 mục 5.2)
+  const rp = s.replyProgress;
+  const waiting = s.replies ?? { account: 0, page: 0 };
+  $("replyBox").hidden = !s.connected || (!rp && waiting.account + waiting.page === 0);
+  const PHASE = { opening: "đang mở bài", filling: "đang tìm comment và điền câu", waiting: "ĐÃ ĐIỀN, chờ bạn đọc và bấm gửi trên tab Facebook" } as const;
+  $("replyInfo").textContent = rp
+    ? `Đang xử lý câu ${rp.index}/${rp.total} bằng ${rp.group === "page" ? "fanpage" : "nick"}: ${PHASE[rp.phase]}.`
+    : "Extension điền sẵn câu vào ô trả lời của đúng comment rồi dừng lại. Bạn đọc lại và tự bấm gửi.";
+  const canReply = s.connected && s.account?.status === "ACTIVE" && !s.running;
+  ($("replyAccount") as HTMLButtonElement).disabled = !canReply || waiting.account === 0;
+  ($("replyAccount") as HTMLButtonElement).textContent = `Trả lời bằng nick (${waiting.account})`;
+  ($("replyPage") as HTMLButtonElement).disabled = !canReply || waiting.page === 0;
+  ($("replyPage") as HTMLButtonElement).textContent = `Trả lời bằng fanpage (${waiting.page})`;
+  $("replyStop").hidden = !rp;
+
   const act = $("activity");
   const parts: string[] = [];
-  if (s.running) {
+  if (rp) {
+    parts.push(`<b>Đang xử lý trả lời</b> câu ${rp.index}/${rp.total}: <span class="muted">${esc(rp.url)}</span><div class="progress"><span style="width:${Math.round((rp.index / Math.max(1, rp.total)) * 100)}%"></span></div>`);
+  } else if (s.running) {
     const p = s.progress;
     parts.push(p ? `<b>Đang quét</b> bài ${p.index}/${p.total}: <span class="muted">${esc(p.url)}</span><div class="progress"><span style="width:${Math.round((p.index / Math.max(1, p.total)) * 100)}%"></span></div>` : "<b>Đang quét...</b> (đang hỏi webapp có bài nào cần quét)");
     parts.push('<span class="muted">Một cửa sổ nhỏ Facebook sẽ tự mở rồi tự đóng; đừng đóng tay.</span>');
@@ -66,7 +83,7 @@ function render(s: StatusResponse) {
 
   const ok = s.connected && s.account?.status === "ACTIVE";
   ($("runNow") as HTMLButtonElement).disabled = !ok || s.running;
-  ($("runNow") as HTMLButtonElement).textContent = s.running ? "Đang quét..." : "Quét ngay";
+  ($("runNow") as HTMLButtonElement).textContent = rp ? "Đang xử lý trả lời..." : s.running ? "Đang quét..." : "Quét ngay";
   ($("follow") as HTMLButtonElement).disabled = !s.connected;
 
   if (s.running && !refreshTimer) refreshTimer = setInterval(() => void refresh(), 2000);
@@ -101,6 +118,28 @@ $("runNow").addEventListener("click", async () => {
     const r = await send<{ started: boolean; message: string }>({ type: "RUN_NOW" });
     setMessage(r.message, r.started ? "ok" : "");
     setTimeout(() => void refresh(), 800);
+  } catch (e) {
+    setMessage(e instanceof Error ? e.message : String(e), "error");
+  }
+});
+
+for (const [id, group] of [["replyAccount", "account"], ["replyPage", "page"]] as const) {
+  $(id).addEventListener("click", async () => {
+    setMessage("");
+    try {
+      const r = await send<{ started: boolean; message: string }>({ type: "START_REPLIES", group });
+      setMessage(r.message, r.started ? "ok" : "");
+      setTimeout(() => void refresh(), 800);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e), "error");
+    }
+  });
+}
+
+$("replyStop").addEventListener("click", async () => {
+  try {
+    const r = await send<SimpleResult>({ type: "STOP_REPLIES" });
+    setMessage(r.message, "ok");
   } catch (e) {
     setMessage(e instanceof Error ? e.message : String(e), "error");
   }

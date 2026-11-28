@@ -22,6 +22,9 @@ const updateSchema = z.object({
   purpose: fields.purpose,
   notes: fields.notes,
   status: z.enum(["ACTIVE", "PAUSED", "BANNED"], "Trạng thái không hợp lệ."),
+  // ô đánh dấu: có đánh dấu thì form gửi "on", không đánh dấu thì không gửi gì
+  pageAllowed: z.string().optional(),
+  pageJoined: z.string().optional(),
 });
 
 export async function createGroupAction(_prev: GroupFormState, formData: FormData): Promise<GroupFormState> {
@@ -52,9 +55,12 @@ export async function updateGroupAction(groupId: string, _prev: GroupFormState, 
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   if (!(await db.fbGroup.findUnique({ where: { id: groupId }, select: { id: true } }))) return { error: "Không tìm thấy nhóm." };
 
+  // "Page đã vào" chỉ có nghĩa khi nhóm cho page tham gia: đánh dấu đã vào thì coi như được vào
+  const pageJoined = parsed.data.pageJoined === "on";
+  const pageAllowed = pageJoined || parsed.data.pageAllowed === "on";
   await db.fbGroup.update({
     where: { id: groupId },
-    data: { name: parsed.data.name, topic: parsed.data.topic || null, purpose: parsed.data.purpose, notes: parsed.data.notes || null, status: parsed.data.status },
+    data: { name: parsed.data.name, topic: parsed.data.topic || null, purpose: parsed.data.purpose, notes: parsed.data.notes || null, status: parsed.data.status, pageAllowed, pageJoined },
   });
   revalidatePath("/fb/groups");
   return { ok: "Đã lưu nhóm." };

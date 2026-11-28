@@ -2,12 +2,14 @@ import { db } from "@/lib/db";
 import { authenticateExt } from "@/lib/ext/auth";
 import { getFbConfig } from "@/lib/ext/config";
 import { acquireScanLeases } from "@/lib/fb/lease";
+import { loadReplyJobs } from "@/lib/fb/reply-jobs";
 import { needsFullScan, pickPostsToScan, shouldMarkDone } from "@/lib/fb/schedule";
 
 /** Số mã comment đã biết gửi kèm mỗi bài (để extension biết phần nào đã có). */
 const MAX_KNOWN_IDS = 3000;
 /**
- * Việc cần làm cho nick của mã này. Giai đoạn 1 chỉ có `scan` (đọc comment); `replies` và `post_tasks` luôn rỗng.
+ * Việc cần làm cho nick của mã này: `scan` (đọc comment) và `replies` (câu trả lời ĐÃ ĐƯỢC NGƯỜI DUYỆT, extension chỉ điền sẵn
+ * rồi dừng cho người bấm gửi; xem lib/fb/reply-jobs.ts). `post_tasks` luôn rỗng (giai đoạn 3 chưa làm).
  * Chỉ giao bài đã được người dùng chủ động thêm vào danh sách theo dõi của nick quét này.
  * Nick tạm dừng hoặc bị hạn chế (checkpoint) thì không giao việc.
  */
@@ -21,8 +23,14 @@ export async function GET(request: Request) {
     return Response.json({ scan: [], replies: [], post_tasks: [], paused_reason: account.status }, { headers });
   }
 
-  const cfg = await getFbConfig();
   const now = Date.now();
+  // ?only=replies: người dùng bấm "Xử lý trả lời" trên popup. Chỉ trả câu đã duyệt, không chọn bài quét (chọn bài là giữ chỗ
+  // bài đó 12 phút cho máy này, sẽ làm chậm lượt quét kế tiếp một cách vô ích).
+  if (new URL(request.url).searchParams.get("only") === "replies") {
+    return Response.json({ scan: [], replies: await loadReplyJobs(account.id, now), post_tasks: [] }, { headers });
+  }
+
+  const cfg = await getFbConfig();
   const tracking = await db.fbPost.findMany({
     where: { accountId: account.id, trackingStatus: "TRACKING", OR: [{ groupId: null }, { group: { status: { not: "BANNED" } } }] },
     select: { id: true, url: true, postedAt: true, createdAt: true, lastScannedAt: true, lastFullScannedAt: true, lastCommentAt: true, reportedCommentCount: true },
@@ -58,5 +66,5 @@ export async function GET(request: Request) {
     });
   }
 
-  return Response.json({ scan, replies: [], post_tasks: [] }, { headers });
+  return Response.json({ scan, replies: await loadReplyJobs(account.id, now), post_tasks: [] }, { headers });
 }

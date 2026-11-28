@@ -3,6 +3,9 @@
  * (một cửa sổ/tab một lúc), gửi kết quả về. Extension KHÔNG tự đăng, tự comment hay tự bấm gửi gì lên Facebook: chỉ mở đúng các
  * link bài mà webapp giao (do người dùng chủ động theo dõi), đọc comment, rồi đóng.
  *
+ * Luồng trả lời (mục 8.3 và bổ sung v1.1 mục 5) chỉ chạy khi người dùng bấm "Xử lý trả lời" trên popup: mở bài, nhờ bộ đọc
+ * trang điền sẵn câu ĐÃ ĐƯỢC NGƯỜI DUYỆT trên webapp vào ô trả lời của đúng comment, rồi chờ người đọc và tự bấm gửi.
+ *
  * Độ trễ giữa các bài là số cố định lấy từ cấu hình của webapp (không ngẫu nhiên hoá): chỉ để không tạo tải bất thường lên tài khoản.
  */
 import { parsePostUrl } from "../../lib/fb/urls";
@@ -11,7 +14,7 @@ import { APP_ORIGIN, EXT_NAME, EXT_VERSION } from "./config";
 import { isCheckpointUrl, isLoginUrl } from "./content/selectors";
 import { store } from "./storage";
 import { canSkipFullScan } from "./scan-policy";
-import type { BackgroundMessage, CommentCountResult, ContentMessage, CycleSummary, DiagnosticReport, MeResponse, PostInfo, ScanJob, ScanResult, SimpleResult, StatusResponse } from "./types";
+import type { BackgroundMessage, CommentCountResult, ContentMessage, CycleSummary, DiagnosticReport, FillResult, MeResponse, PostInfo, ReplyJob, ReplyProgress, ScanJob, ScanResult, SimpleResult, StatusResponse, WaitResult } from "./types";
 
 const ALARM = "data-lead-poll";
 const TAB_LOAD_TIMEOUT_MS = 60_000;
@@ -20,7 +23,11 @@ const KEEP_ALIVE_MS = 20_000;
 /** Cửa sổ quét riêng: đủ rộng để Facebook hiện giao diện máy tính (dưới ~900px Facebook có thể đổi bố cục). */
 const SCAN_WINDOW = { width: 980, height: 760 };
 
+/** Đang quét hoặc đang xử lý trả lời: hai việc không chạy chồng nhau (cùng dùng tab Facebook và cùng một nick). */
 let running = false;
+let replyProgress: ReplyProgress = null;
+/** Người dùng bấm "Dừng" trên popup trong lúc xử lý trả lời. */
+let replyStop = false;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -309,6 +316,212 @@ async function runCycle(trigger: "alarm" | "manual", force: boolean): Promise<vo
   }
 }
 
+/* ---------- Xử lý trả lời: điền sẵn câu đã duyệt, người tự bấm gửi ---------- */
+
+/** Tìm comment trên bài lớn cần mở rộng nhiều lần: cho tối đa 4 phút mỗi câu. */
+const REPLY_FILL_TIMEOUT_MS = 4 * 60_000;
+/** Mỗi lượt hỏi "đã gửi chưa" ngắn, để service worker không giữ một yêu cầu quá lâu và để nút Dừng trên popup có tác dụng nhanh. */
+const REPLY_WAIT_SLICE_MS = 8_000;
+/** Chờ người đọc và bấm gửi tối đa bấy nhiêu cho một câu; quá thì dừng cả lượt (câu vẫn nằm trong ô, không mất). */
+const REPLY_WAIT_TOTAL_MS = 10 * 60_000;
+/** Nghỉ cố định giữa hai câu. */
+const REPLY_GAP_MS = 2_000;
+/** Lỗi do không nhận ra phần tử trên trang: báo thêm về webapp như một cảnh báo selector để người phát triển chỉnh bộ đọc. */
+const SELECTOR_REASONS = ["reply_button_not_found", "reply_box_not_found", "fill_failed", "identity_unverified"];
+
+async function setPanel(tabId: number, text: string, tone: "info" | "ok" | "warn", buttons = false): Promise<void> {
+  await chrome.tabs.sendMessage(tabId, { type: "REPLY_PANEL", text, tone, buttons } satisfies ContentMessage).catch(() => undefined);
+}
+
+async function endReplyInPage(tabId: number, clearBox: boolean): Promise<void> {
+  await chrome.tabs.sendMessage(tabId, { type: "REPLY_CANCEL", clearBox } satisfies ContentMessage).catch(() => undefined);
+}
+
+type ReplyReport = Parameters<typeof api.replyResult>;
+
+/**
+ * Báo kết quả một câu về webapp. Trả null khi webapp từ chối vì câu đó không còn ở trạng thái đã duyệt (vừa bị bỏ duyệt, bỏ qua,
+ * hoặc đổi người đứng tên trên webapp trong lúc extension đang làm): nơi gọi bỏ qua câu đó và làm tiếp. Lỗi mã kết nối và lỗi
+ * mạng vẫn ném ra để dừng cả lượt.
+ */
+async function reportReply(token: string, replyId: ReplyReport[1], status: ReplyReport[2], reason?: ReplyReport[3]): Promise<{ page_joined_cleared: boolean } | null> {
+  try {
+    return await api.replyResult(token, replyId, status, reason);
+  } catch (e) {
+    if (e instanceof ApiError && !e.isAuthFailure && (e.status === 404 || e.status === 409)) return null;
+    throw e;
+  }
+}
+
+/** Chờ người dùng bấm gửi (extension chỉ nhìn trang, không bấm). */
+async function waitUntilSent(tabId: number): Promise<WaitResult["state"] | "timeout"> {
+  const end = Date.now() + REPLY_WAIT_TOTAL_MS;
+  while (Date.now() < end) {
+    if (replyStop) return "stopped";
+    let r: WaitResult;
+    try {
+      r = await sendToContent<WaitResult>(tabId, { type: "REPLY_WAIT", sliceMs: REPLY_WAIT_SLICE_MS }, REPLY_WAIT_SLICE_MS + 15_000);
+    } catch {
+      return "lost";
+    }
+    if (r.state !== "waiting") return r.state;
+  }
+  return "timeout";
+}
+
+/**
+ * Xử lý các câu đã duyệt của MỘT nhóm (đứng tên nick, hoặc đứng tên fanpage). Các câu cùng một bài được webapp xếp liền nhau:
+ * mở bài một lần trong một tab đang hiện, xử lý lần lượt từng comment (v1.1 mục 5.2). Với mỗi câu: điền, báo `filled`, dừng chờ
+ * người bấm gửi, thấy câu trả lời xuất hiện thì báo `sent`.
+ */
+async function runReplies(group: "account" | "page"): Promise<void> {
+  if (running) return;
+  const token = await store.getToken();
+  if (!token) return;
+  running = true;
+  replyStop = false;
+  const keepAlive = setInterval(() => void chrome.runtime.getPlatformInfo(), KEEP_ALIVE_MS);
+  const count = { sent: 0, skipped: 0, failed: 0 };
+  let tabId: number | null = null;
+  let note: string | null = null;
+  const who = group === "page" ? "fanpage" : "nick";
+  try {
+    const me = await api.me(token);
+    if (me.account.status !== "ACTIVE") {
+      note = "Nick đang tạm dừng hoặc bị hạn chế trên webapp.";
+      return;
+    }
+    let queue: ReplyJob[] = (await api.replies(token)).filter((j) => j.reply_as === group && parsePostUrl(j.post_url)); // chỉ mở link bài Facebook đúng dạng mà webapp giao
+    const total = queue.length;
+    if (total === 0) {
+      note = `Không có câu nào đã duyệt chờ trả lời bằng ${who}.`;
+      return;
+    }
+    await store.addEvent("info", `Bắt đầu xử lý ${total} câu trả lời bằng ${who}.`);
+
+    let currentUrl = "";
+    for (let index = 1; queue.length > 0 && !replyStop; index++) {
+      const job = queue.shift()!;
+      const label = shortUrl(job.post_url);
+      replyProgress = { group, total, index, phase: "opening", url: label };
+
+      // Mở bài một lần cho mọi câu của bài đó; sang bài khác thì dùng lại chính tab này
+      if (tabId === null || currentUrl !== job.post_url) {
+        if (tabId === null) {
+          const tab = await chrome.tabs.create({ url: job.post_url, active: true });
+          if (tab.id === undefined) throw new Error("Không mở được tab Facebook.");
+          tabId = tab.id;
+        } else {
+          await chrome.tabs.update(tabId, { url: job.post_url, active: true });
+          await sleep(800); // chờ tab rời trang cũ rồi mới kiểm tra "tải xong"
+        }
+        currentUrl = job.post_url;
+        if (!(await waitTabComplete(tabId, TAB_LOAD_TIMEOUT_MS))) {
+          await reportReply(token, job.reply_id, "failed", "page_load_timeout").catch(() => undefined);
+          count.failed++;
+          currentUrl = "";
+          continue;
+        }
+        const url = (await chrome.tabs.get(tabId)).url ?? "";
+        if (isCheckpointUrl(url)) {
+          await api.log(token, "checkpoint", { post_id: job.post_id, url: job.post_url }).catch(() => undefined);
+          note = "Facebook đang yêu cầu xác minh nick. Đã dừng và báo về webapp.";
+          break;
+        }
+        if (isLoginUrl(url)) {
+          note = "Facebook đang hiện trang đăng nhập. Hãy đăng nhập rồi bấm lại.";
+          break;
+        }
+      }
+
+      replyProgress = { group, total, index, phase: "filling", url: label };
+      let fill: FillResult;
+      try {
+        fill = await sendToContent<FillResult>(
+          tabId,
+          { type: "REPLY_FILL", fbCommentId: job.fb_comment_id, parentFbCommentId: job.parent_fb_comment_id, text: job.text, replyAs: job.reply_as, pageName: job.page_name, ownProfileUrl: me.account.profile_url, ownDisplayName: me.account.display_name, pageNames: me.pages ?? [] },
+          REPLY_FILL_TIMEOUT_MS,
+        );
+      } catch (e) {
+        note = /No tab with id|không tồn tại/i.test(errText(e)) ? "Tab Facebook bị đóng giữa chừng. Các câu chưa xử lý vẫn nằm trong danh sách đã duyệt." : `Không làm việc được với trang Facebook: ${errText(e).slice(0, 120)}`;
+        break;
+      }
+
+      if (fill.state === "checkpoint") {
+        await api.log(token, "checkpoint", { post_id: job.post_id, url: job.post_url }).catch(() => undefined);
+        note = "Facebook đang yêu cầu xác minh nick. Đã dừng và báo về webapp.";
+        break;
+      }
+      if (fill.state === "login") {
+        note = "Facebook đang hiện trang đăng nhập. Hãy đăng nhập rồi bấm lại.";
+        break;
+      }
+      if (fill.state === "already_replied") {
+        await reportReply(token, job.reply_id, "skipped", "already_replied");
+        count.skipped++;
+        await setPanel(tabId, `Câu ${index}/${total}: comment này đã có trả lời của ${who}, bỏ qua.`, "info");
+      } else if (fill.state === "failed") {
+        const r = await reportReply(token, job.reply_id, "failed", fill.reason);
+        count.failed++;
+        if (SELECTOR_REASONS.includes(fill.reason)) await api.log(token, "selector_broken", { item: fill.item ?? fill.reason, detail: fill.detail, post_id: job.post_id, reply_id: job.reply_id, flow: "reply" }).catch(() => undefined);
+        await store.addEvent("warn", `Câu ${index}/${total} (bài ${label}): không điền được, lý do ${fill.reason}${fill.detail ? ` (${fill.detail.slice(0, 100)})` : ""}.`);
+        await setPanel(tabId, `Câu ${index}/${total}: không điền được (${fill.reason}). Xem lý do ở webapp, mục Hàng chờ trả lời > Lỗi.`, "warn");
+        if (fill.reason === "page_not_available" || r?.page_joined_cleared) {
+          // Webapp vừa đổi các câu còn chờ của nhóm này (sang nick hoặc bỏ qua): chỉ làm tiếp những câu webapp còn giao
+          const still = new Set((await api.replies(token)).map((x) => x.reply_id));
+          queue = queue.filter((x) => still.has(x.reply_id));
+        }
+      } else if ((await reportReply(token, job.reply_id, "filled")) === null) {
+        // Câu vừa bị bỏ duyệt / bỏ qua trên webapp trong lúc extension điền: xoá chữ khỏi ô, không để lại câu chưa được duyệt
+        await endReplyInPage(tabId, true);
+        count.skipped++;
+        await store.addEvent("warn", `Câu ${index}/${total} (bài ${label}): webapp không còn giao câu này (vừa bị bỏ duyệt hoặc bỏ qua), đã xoá khỏi ô trả lời.`);
+        await setPanel(tabId, `Câu ${index}/${total}: câu này vừa bị bỏ duyệt hoặc bỏ qua trên webapp nên đã được xoá khỏi ô trả lời.`, "warn");
+      } else {
+        replyProgress = { group, total, index, phase: "waiting", url: label };
+        await setPanel(tabId, `Câu ${index}/${total} đã điền vào ô có viền cam, dưới tên ${group === "page" ? `fanpage ${job.page_name ?? ""}` : "nick của bạn"}.\nHãy đọc lại, sửa nếu cần, rồi TỰ bấm Enter để gửi. Extension không tự gửi.`, "warn", true);
+        const outcome = await waitUntilSent(tabId);
+        if (outcome === "sent") {
+          await reportReply(token, job.reply_id, "sent");
+          count.sent++;
+          await endReplyInPage(tabId, false);
+          await setPanel(tabId, `Câu ${index}/${total}: đã gửi.${queue.length > 0 ? " Đang chuyển sang câu kế..." : ""}`, "ok");
+        } else if (outcome === "skipped") {
+          await reportReply(token, job.reply_id, "skipped", "skipped_in_extension");
+          count.skipped++;
+          await endReplyInPage(tabId, true);
+          await setPanel(tabId, `Câu ${index}/${total}: đã bỏ qua.${queue.length > 0 ? " Đang chuyển sang câu kế..." : ""}`, "info");
+        } else {
+          // Dừng, hết thời gian chờ, hoặc trang bị tải lại: không báo gì thêm. Câu ở trạng thái "Đã điền" trên webapp; lần quét sau
+          // thấy câu trả lời thì tự ghi "Đã gửi", không thì sau 15 phút được giao lại.
+          await endReplyInPage(tabId, false);
+          note = outcome === "stopped" ? "Đã dừng theo yêu cầu. Câu đang điền vẫn nằm trong ô trả lời." : outcome === "timeout" ? "Chưa thấy câu trả lời được gửi sau 10 phút nên dừng ở đây." : "Trang Facebook đã tải lại nên không theo dõi tiếp được câu đang điền.";
+          break;
+        }
+      }
+      if (queue.length > 0 && !replyStop) await sleep(REPLY_GAP_MS);
+    }
+    if (replyStop && !note) note = "Đã dừng theo yêu cầu.";
+    await store.setError(null);
+  } catch (e) {
+    if (e instanceof ApiError && e.isAuthFailure) {
+      note = e.code === "TOKEN_REVOKED" ? "Mã kết nối đã bị thu hồi trên webapp." : e.message;
+      await store.setError(note);
+      await chrome.alarms.clear(ALARM);
+    } else {
+      note = errText(e);
+    }
+  } finally {
+    clearInterval(keepAlive);
+    const summary = `Trả lời bằng ${who}: ${count.sent} câu đã gửi, ${count.skipped} bỏ qua, ${count.failed} lỗi.${note ? " " + note : ""}`;
+    await store.addEvent(count.failed > 0 || note ? "warn" : "ok", summary);
+    if (tabId !== null) await setPanel(tabId, summary, count.failed > 0 || note ? "warn" : "ok");
+    replyProgress = null;
+    replyStop = false;
+    running = false;
+  }
+}
+
 /* ---------- Theo dõi bài đang mở, chẩn đoán ---------- */
 
 async function activeFacebookTab(tabId: number): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
@@ -359,7 +572,7 @@ async function diagnoseActiveTab(tabId: number, deep = false): Promise<{ ok: boo
   if (token) me = await api.me(token).catch(() => null);
   let report: DiagnosticReport;
   try {
-    report = await sendToContent<DiagnosticReport>(tabId, { type: "DIAGNOSE", ownProfileUrl: me?.account.profile_url ?? "", ownDisplayName: me?.account.display_name ?? "", deep }, deep ? 10 * 60_000 : 40_000);
+    report = await sendToContent<DiagnosticReport>(tabId, { type: "DIAGNOSE", ownProfileUrl: me?.account.profile_url ?? "", ownDisplayName: me?.account.display_name ?? "", deep, pageNames: me?.pages ?? [] }, deep ? 10 * 60_000 : 40_000);
   } catch (e) {
     return { ok: false, message: `Không chạy được chẩn đoán trên tab này: ${errText(e)}` };
   }
@@ -373,11 +586,11 @@ async function diagnoseActiveTab(tabId: number, deep = false): Promise<{ ok: boo
 
 async function getStatus(): Promise<StatusResponse> {
   const [lastCycle, progress, settings, alarm, token] = await Promise.all([store.getLastCycle(), store.getProgress(), store.getSettings(), chrome.alarms.get(ALARM), store.getToken()]);
-  const base = { running, progress: running ? progress : null, lastCycle, appOrigin: APP_ORIGIN, version: EXT_VERSION, settings, nextRunAt: alarm?.scheduledTime ? new Date(alarm.scheduledTime).toISOString() : null };
+  const base = { running, progress: running ? progress : null, replyProgress, replies: null, lastCycle, appOrigin: APP_ORIGIN, version: EXT_VERSION, settings, nextRunAt: alarm?.scheduledTime ? new Date(alarm.scheduledTime).toISOString() : null };
   if (!token) return { ...base, connected: false, error: await store.getError() };
   try {
     const me = await api.me(token);
-    return { ...base, connected: true, user: me.user, account: me.account, error: await store.getError() };
+    return { ...base, replies: me.replies ?? null, connected: true, user: me.user, account: me.account, error: await store.getError() };
   } catch (e) {
     return { ...base, connected: false, error: errText(e) };
   }
@@ -394,6 +607,14 @@ async function handle(msg: BackgroundMessage): Promise<unknown> {
       void runCycle("manual", true);
       return { started: true, message: "Đang quét các bài theo dõi, lần lượt từng bài. Có thể đóng cửa sổ này." };
     }
+    case "START_REPLIES": {
+      if (running) return { started: false, message: replyProgress ? "Đang xử lý trả lời rồi. Xem tab Facebook vừa mở." : "Đang có một lần quét chạy. Chờ quét xong rồi bấm lại." };
+      void runReplies(msg.group);
+      return { started: true, message: `Đang mở bài trên Facebook. Extension điền sẵn từng câu ${msg.group === "page" ? "dưới tên fanpage" : "bằng nick"} rồi dừng lại; bạn đọc lại và tự bấm gửi.` };
+    }
+    case "STOP_REPLIES":
+      replyStop = true;
+      return { ok: true, message: "Sẽ dừng sau câu đang xử lý." } satisfies SimpleResult;
     case "FOLLOW_ACTIVE_TAB":
       return followActiveTab(msg.tabId);
     case "DIAGNOSE_ACTIVE_TAB":

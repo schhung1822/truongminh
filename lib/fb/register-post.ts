@@ -13,6 +13,9 @@ export type RegisterPostInput = {
   postedAt?: Date | null;
   /** Link nhóm do người dùng/extension báo, dùng khi link bài không cho biết nhóm (ví dụ link chia sẻ rút gọn). */
   groupUrl?: string | null;
+  /** v1.1, bài tìm nhà sản xuất: sản phẩm đang tìm xưởng và các chất liệu (materials.id) gợi ý cho sản phẩm đó. */
+  productRef?: string | null;
+  suggestedMaterialIds?: string[];
 };
 
 export type RegisterPostResult = { ok: true; postId: string; created: boolean } | { ok: false; error: string };
@@ -47,6 +50,9 @@ export async function registerPost(input: RegisterPostInput): Promise<RegisterPo
       contentSnapshot: input.contentSnapshot?.trim() ? input.contentSnapshot.trim().slice(0, 20000) : null,
       postedAt: input.postedAt ?? null,
       registeredById: input.registeredById,
+      ...(input.purpose === "FIND_SUPPLIER"
+        ? { productRef: input.productRef?.trim().slice(0, 200) || null, ...(input.suggestedMaterialIds?.length ? { suggestedMaterialIds: input.suggestedMaterialIds } : {}) }
+        : {}),
     },
     select: { id: true },
   });

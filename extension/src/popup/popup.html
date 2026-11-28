@@ -30,6 +30,16 @@
       <button id="runNow" type="button" title="Quét ngay các bài đang theo dõi, bỏ qua lịch chờ">Quét ngay</button>
       <button id="follow" type="button" class="secondary" title="Thêm bài đang mở ở tab này vào danh sách theo dõi (có thể là bài của người khác, cần mở ở trang riêng của bài)">Theo dõi bài này</button>
     </div>
+    <section id="replyBox" class="card" hidden>
+      <b>Câu trả lời đã duyệt</b>
+      <p id="replyInfo" class="muted"></p>
+      <div class="actions">
+        <button id="replyAccount" type="button" class="secondary" title="Mở từng bài, điền sẵn câu đã duyệt vào ô trả lời của đúng comment bằng nick của bạn, rồi dừng lại để bạn đọc và tự bấm gửi">Trả lời bằng nick</button>
+        <button id="replyPage" type="button" class="secondary" title="Như trên, nhưng chuyển danh tính bình luận sang fanpage trước khi điền. Không chuyển được thì không điền và báo về webapp">Trả lời bằng fanpage</button>
+        <button id="replyStop" type="button" class="link small" hidden>Dừng</button>
+      </div>
+    </section>
+
     <div class="actions">
       <button id="diagnose" type="button" class="secondary small" title="Đọc thử cấu trúc trang Facebook đang mở và tạo báo cáo (không chứa tên hay nội dung) để chỉnh bộ đọc">Chẩn đoán trang này</button>
       <button id="deepRead" type="button" class="secondary small" title="Chạy bộ đọc thật trên trang đang mở (cuộn, bấm Xem thêm bình luận/phản hồi đến hết) và chỉ cho biết SỐ ĐẾM. Không lưu, không gửi tên, nội dung hay số điện thoại.">Thử đọc sâu (chỉ đếm)</button>
@@ -45,10 +55,11 @@
 
     <nav class="links">
       <a id="lnkLeads" href="#" target="_blank" rel="noopener">Lead</a> ·
+      <a id="lnkReplies" href="#" target="_blank" rel="noopener">Hàng chờ trả lời</a> ·
       <a id="lnkPosts" href="#" target="_blank" rel="noopener">Bài đăng</a> ·
       <a id="lnkConnect" href="#" target="_blank" rel="noopener">Kết nối extension</a>
     </nav>
-    <p class="hint">Extension kiểm tra tổng comment trong tab nền; chỉ đọc sâu khi tổng thay đổi hoặc tới lượt kiểm tra đầy đủ. Không tự đăng, không tự comment, không tự bấm gửi.</p>
+    <p class="hint">Extension kiểm tra tổng comment trong tab nền; chỉ đọc sâu khi tổng thay đổi hoặc tới lượt kiểm tra đầy đủ. Câu trả lời chỉ được điền sẵn sau khi bạn duyệt trên webapp; bạn đọc lại và tự bấm gửi. Không tự đăng, không tự bấm gửi.</p>
 
     <script src="popup.js"></script>
   </body>

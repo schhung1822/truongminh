@@ -17,6 +17,10 @@ export type LeadFilterParams = {
   assigned?: string;
   from?: string;
   to?: string;
+  /** "supplier" = tab Nhà sản xuất của trang Lead (v1.1): chỉ lead nhà sản xuất. */
+  view?: string;
+  /** Loại nhà sản xuất, chỉ có nghĩa ở tab Nhà sản xuất: MANUFACTURER | BROKER | UNKNOWN. */
+  stype?: string;
 };
 
 export type ParsedLeadFilters = {
@@ -40,7 +44,9 @@ export function parseLeadFilters(user: Pick<SessionUser, "id" | "role">, params:
   const toStart = zonedStartOfDay(params.to ?? "", tz);
   const toEnd = toStart ? new Date(toStart.getTime() + DAY_MS) : null;
   const status = (STATUS_VALUES as readonly string[]).includes(params.status ?? "") ? (params.status as string) : "";
-  const type = params.type === "CUSTOMER" || params.type === "SUPPLIER" ? params.type : "";
+  const supplierView = params.view === "supplier";
+  const type = supplierView ? "SUPPLIER" : params.type === "CUSTOMER" || params.type === "SUPPLIER" ? params.type : "";
+  const stype = supplierView && (params.stype === "MANUFACTURER" || params.stype === "BROKER" || params.stype === "UNKNOWN") ? params.stype : "";
   const group = params.group ?? "";
   const assigned = params.assigned ?? "";
 
@@ -50,6 +56,7 @@ export function parseLeadFilters(user: Pick<SessionUser, "id" | "role">, params:
   else if (assigned === "none") base.push({ assignedToId: null });
   else if (assigned) base.push({ assignedToId: assigned });
   if (type) base.push({ leadType: type });
+  if (stype) base.push({ supplierType: stype });
   if (group) base.push({ groupId: group });
   if (fromDate || toEnd) base.push({ createdAt: { ...(fromDate ? { gte: fromDate } : {}), ...(toEnd ? { lt: toEnd } : {}) } });
   if (q) {
@@ -59,7 +66,7 @@ export function parseLeadFilters(user: Pick<SessionUser, "id" | "role">, params:
   }
 
   const where: Prisma.FbLeadWhereInput = { AND: status ? [...base, { status: status as Prisma.FbLeadWhereInput["status"] }] : base };
-  const filtering = !!(q || status || type || group || assigned || fromDate || toEnd);
+  const filtering = !!(q || status || (type && !supplierView) || stype || group || assigned || fromDate || toEnd);
   return { where, base, status, manager, filtering };
 }
 

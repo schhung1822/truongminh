@@ -23,6 +23,7 @@ const WARN_LABEL: Record<string, string> = {
   SELECTOR_BROKEN: "Không đọc được trang Facebook (giao diện có thể đã đổi)",
   CHECKPOINT: "Facebook yêu cầu xác minh / hạn chế nick",
   SCAN_FAIL: "Quét không trọn vẹn",
+  REPLY_FAIL: "Không điền được câu trả lời",
 };
 /** Lý do extension báo kèm trong detail.reason của SCAN_FAIL. */
 const REASON_LABEL: Record<string, string> = {
@@ -33,11 +34,17 @@ const REASON_LABEL: Record<string, string> = {
   diagnostic: "Báo cáo chẩn đoán do nhân sự bấm gửi",
   partial: "Đọc chưa hết bài (quá giới hạn), chu kỳ sau quét lại",
 };
+/** Lý do của REPLY_FAIL đáng nêu riêng ở cột Loại. */
+const REPLY_FAIL_LABEL: Record<string, string> = {
+  page_not_available: "Không trả lời được dưới tên fanpage (đã bỏ đánh dấu Page đã vào của nhóm)",
+  identity_unverified: "Không xác nhận được danh tính fanpage nên không điền (cần chỉnh bộ đọc)",
+};
 
 function warnText(type: string, detail: unknown): { label: string; detail: string } {
   const d = (detail && typeof detail === "object" ? detail : {}) as Record<string, unknown>;
   const reason = typeof d.reason === "string" ? d.reason : d.complete === false ? "partial" : null;
-  const label = type === "SCAN_FAIL" && reason ? (REASON_LABEL[reason] ?? `Lỗi quét: ${reason}`) : (WARN_LABEL[type] ?? type);
+  const label =
+    type === "SCAN_FAIL" && reason ? (REASON_LABEL[reason] ?? `Lỗi quét: ${reason}`) : type === "REPLY_FAIL" && reason && REPLY_FAIL_LABEL[reason] ? REPLY_FAIL_LABEL[reason] : (WARN_LABEL[type] ?? type);
   const rest = Object.fromEntries(Object.entries(d).filter(([k]) => !["reason", "post_id"].includes(k)));
   const text = Object.keys(rest).length ? JSON.stringify(rest) : "";
   return { label, detail: text.length > 300 ? text.slice(0, 300) + "…" : text };
@@ -106,7 +113,7 @@ export default async function ExtensionConnectionPage() {
     db.fbAccount.findMany({ where: own, orderBy: { createdAt: "asc" }, include: { user: { select: { name: true } } } }),
     db.extToken.findMany({ where: own, orderBy: { createdAt: "asc" } }),
     db.extLog.findMany({
-      where: { type: { in: ["SELECTOR_BROKEN", "CHECKPOINT", "SCAN_FAIL"] }, createdAt: { gte: since }, token: own },
+      where: { type: { in: ["SELECTOR_BROKEN", "CHECKPOINT", "SCAN_FAIL", "REPLY_FAIL"] }, createdAt: { gte: since }, token: own },
       orderBy: { createdAt: "desc" },
       take: 30,
       include: { token: { select: { label: true, account: { select: { displayName: true } } } } },

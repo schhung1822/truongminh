@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireFbManager } from "@/lib/fb/access";
-import { loadLeadStats, type LeadFunnel } from "@/lib/fb/lead-stats";
+import { loadLeadStats, loadSupplierFunnel, SUPPLIER_FUNNEL_STEPS, type LeadFunnel } from "@/lib/fb/lead-stats";
 import { getEnv } from "@/lib/env";
 import { parseRange } from "@/lib/stats/range";
 import { rangeBounds } from "@/lib/stats/queries";
@@ -40,7 +40,7 @@ export default async function LeadStatsPage({ searchParams }: { searchParams: Pr
   const today = todayKey();
   const range = parseRange(params, today);
   const { start, end } = rangeBounds(range.from, range.to, tz);
-  const stats = await loadLeadStats(start, end, range.days, tz);
+  const [stats, supplier] = await Promise.all([loadLeadStats(start, end, range.days, tz), loadSupplierFunnel(start, end)]);
 
   const won = stats.funnel.WON;
   const lostInvalid = funnelCount(stats.funnel, ["LOST", "INVALID"]);
@@ -169,6 +169,37 @@ export default async function LeadStatsPage({ searchParams }: { searchParams: Pr
           <p className="mt-3 text-sm text-muted-foreground">
             Mất: <b className="text-foreground">{nf.format(stats.funnel.LOST)}</b> · Không hợp lệ: <b className="text-foreground">{nf.format(stats.funnel.INVALID)}</b>
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Phễu của bài tìm nhà sản xuất (v1.1) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Phễu bài tìm nhà sản xuất</CardTitle>
+          <CardDescription>
+            Từ comment trên bài tìm nhà sản xuất đến đơn vật liệu. Có {nf.format(supplier.leads)} lead nhà sản xuất trong khoảng này; các bước sau tính trên những lead đó, mỗi bước đếm riêng.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {supplier.comments === 0 && supplier.leads === 0 ? (
+            <p className="text-sm text-muted-foreground">Chưa có comment nào trên bài tìm nhà sản xuất trong khoảng này.</p>
+          ) : (
+            <div className="flex flex-wrap items-stretch gap-2">
+              {SUPPLIER_FUNNEL_STEPS.map((step, i) => (
+                <div key={step.key} className="flex items-center gap-2">
+                  <div className="flex min-w-32 flex-1 flex-col items-center gap-1 rounded-xl border bg-card p-3 text-center" title={step.hint}>
+                    <span className="text-xs text-muted-foreground">{step.label}</span>
+                    <span className="text-xl font-semibold tabular-nums">{nf.format(supplier[step.key])}</span>
+                    <span className="text-xs text-muted-foreground">{step.key === "comments" ? "trên bài" : `${pct(supplier[step.key], supplier.leads)} lead`}</span>
+                  </div>
+                  {i < SUPPLIER_FUNNEL_STEPS.length - 1 && <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" />}
+                </div>
+              ))}
+            </div>
+          )}
+          <Link href="/fb/leads?view=supplier" className="mt-3 inline-block text-sm underline underline-offset-4">
+            Xem danh sách nhà sản xuất
+          </Link>
         </CardContent>
       </Card>
 

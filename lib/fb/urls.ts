@@ -46,6 +46,24 @@ export function canonicalProfileUrl(raw: string): string | null {
   return `${BASE}/${seg[0]}`;
 }
 
+/**
+ * Fanpage: /<tên trang>, /profile.php?id=<số>, và các dạng Facebook dùng riêng cho trang: /people/<tên>/<số>,
+ * /pages/<tên>/<số>, /p/<tên>-<số>. Dạng có id số đều quy về /profile.php?id=<số> để so được với link người viết trong nhóm.
+ */
+export function canonicalPageUrl(raw: string): string | null {
+  const u = parse(raw);
+  if (!u) return null;
+  const seg = segments(u);
+  const first = seg[0]?.toLowerCase();
+  if ((first === "people" || first === "pages") && /^\d{5,}$/.test(seg[2] ?? "")) return `${BASE}/profile.php?id=${seg[2]}`;
+  if (first === "p" && seg[1]) {
+    const id = /(?:^|-)(\d{5,})$/.exec(seg[1])?.[1];
+    return id ? `${BASE}/profile.php?id=${id}` : null;
+  }
+  if (first === "people" || first === "pages" || first === "p") return null;
+  return canonicalProfileUrl(raw);
+}
+
 /** Nhóm: /groups/<id hoặc tên>. */
 export function canonicalGroupUrl(raw: string): string | null {
   const u = parse(raw);

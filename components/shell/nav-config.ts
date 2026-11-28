@@ -12,6 +12,8 @@ import {
   HomeIcon,
   InboxIcon,
   CalendarHeartIcon,
+  MessageSquareReplyIcon,
+  MessagesSquareIcon,
   LayoutGridIcon,
   MessageCircleIcon,
   NewspaperIcon,
@@ -76,8 +78,10 @@ export const navGroups: NavGroup[] = [
     items: [
       { href: "/fb/leads", label: "Lead", icon: TargetIcon, ready: true },
       { href: "/fb/leads/stats", label: "Thống kê Lead", icon: TrendingUpIcon, ready: true, roles: ["MKT"] },
+      { href: "/fb/replies", label: "Hàng chờ trả lời", icon: MessageSquareReplyIcon, ready: true, roles: ["MKT"] },
       { href: "/fb/posts", label: "Bài đăng", icon: NewspaperIcon, ready: true, roles: ["MKT"] },
       { href: "/fb/groups", label: "Nhóm", icon: UsersRoundIcon, ready: true, roles: ["MKT"] },
+      { href: "/fb/templates", label: "Mẫu câu & Fanpage", icon: MessagesSquareIcon, ready: true, roles: ["MKT"] },
     ],
   },
   {

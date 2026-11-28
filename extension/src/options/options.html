@@ -83,6 +83,14 @@
         <li>Extension tự quét theo chu kỳ (mặc định 10 phút). Muốn quét ngay: bấm <b>Quét ngay</b>. Khi quét, một cửa sổ Facebook nhỏ tự mở rồi tự đóng; đừng đóng tay.</li>
         <li>Lead xuất hiện ở webapp <b>Lead Facebook › Lead</b>. Sale được gán lead sẽ thấy ở đó.</li>
       </ol>
+      <h3>Trả lời comment (câu đã duyệt trên webapp)</h3>
+      <ol>
+        <li>Trên webapp, vào <b>Lead Facebook › Hàng chờ trả lời</b>: đọc câu soạn sẵn, sửa nếu cần, bấm <b>Duyệt</b> (hoặc duyệt cả lô).</li>
+        <li>Bấm biểu tượng extension. Mục <b>Câu trả lời đã duyệt</b> có hai nút: <b>Trả lời bằng nick</b> và <b>Trả lời bằng fanpage</b>. Bấm một nút.</li>
+        <li>Extension mở bài, tìm đúng comment, mở ô trả lời của comment đó, chọn đúng danh tính (với fanpage: chuyển danh tính bình luận sang fanpage và kiểm tra lại), điền câu vào ô có <b>viền cam</b>, rồi <b>dừng lại</b>.</li>
+        <li>Bạn đọc lại, sửa nếu cần, và <b>tự bấm Enter để gửi</b>. Thấy câu trả lời xuất hiện, extension chuyển sang câu kế. Không muốn gửi câu nào thì bấm <b>Bỏ qua câu này</b> trên bảng nhỏ ở góc trang; muốn nghỉ thì bấm <b>Dừng</b>.</li>
+      </ol>
+      <p class="muted">Để trả lời bằng fanpage: nick đang đăng nhập phải quản lý fanpage đó, fanpage phải đã tham gia nhóm, và tên fanpage trên webapp (Lead Facebook › Mẫu câu &amp; Fanpage) phải đúng từng chữ như trên Facebook. Extension không chắc đang ở đúng danh tính thì không điền gì và báo về webapp.</p>
       <h3>Cần nhớ</h3>
       <ul>
         <li>Chrome phải đang mở (thu nhỏ được) và máy không ngủ thì mới quét theo chu kỳ.</li>
@@ -94,7 +102,8 @@
       </ul>
       <h3>Extension KHÔNG làm gì</h3>
       <ul>
-        <li>Không tự đăng bài, không tự comment, không gõ chữ, không bấm gửi. Chỉ bấm các nút mở rộng nội dung đã có ("Xem thêm bình luận", "Xem phản hồi", "Xem thêm").</li>
+        <li>Không tự đăng bài, không tự gửi comment, không bấm nút gửi, không giả lập phím Enter. Khi quét chỉ bấm các nút mở rộng nội dung đã có ("Xem thêm bình luận", "Xem phản hồi", "Xem thêm").</li>
+        <li>Chỉ điền sẵn câu trả lời mà <b>người đã duyệt trên webapp</b>, vào ô trả lời của đúng comment, sau khi bạn bấm nút trên popup. Điền xong là dừng; gửi hay không là do bạn.</li>
         <li>Không đọc tin nhắn, cookie hay mật khẩu Facebook; chỉ mở đúng những bài webapp giao.</li>
         <li>Không dùng độ trễ ngẫu nhiên, proxy hay kỹ thuật che giấu. Mọi độ trễ là số cố định, chỉ để không tạo tải bất thường lên tài khoản.</li>
         <li>Không lưu comment hay số điện thoại trên máy này.</li>
@@ -112,6 +121,9 @@
           <tr><td>Quét xong nhưng 0 comment dù bài có comment, hoặc "Không đọc được trang Facebook"</td><td>Facebook có thể đã đổi giao diện. Mở bài đó, bấm <b>Chẩn đoán trang này</b>, rồi <b>Sao chép báo cáo</b> và gửi cho người phát triển (báo cáo không chứa tên hay nội dung comment). Thử đổi "Cách mở bài khi quét" sang cửa sổ nhỏ riêng.</td></tr>
           <tr><td>"Theo dõi bài này" báo không phải trang bài đăng</td><td>Đang ở trang chủ, trang cá nhân hoặc nhóm. Bấm vào dòng thời gian đăng của bài để mở bài ở trang riêng, rồi bấm lại.</td></tr>
           <tr><td>Bài của người khác quét được 0 comment</td><td>Kiểm tra nick đang kết nối có xem được đầy đủ bài và comment hay không. Mở bài đó, chọn "Tất cả bình luận", rồi dùng <b>Thử đọc sâu</b> hoặc <b>Chẩn đoán trang này</b>.</td></tr>
+          <tr><td>Trả lời bằng fanpage báo "không trả lời được dưới tên fanpage"</td><td>Nhóm không cho fanpage tham gia, fanpage chưa vào nhóm, nick không quản lý fanpage, hoặc tên fanpage trên webapp khác tên trên Facebook. Webapp tự bỏ đánh dấu "Page đã vào" của nhóm đó; ở Hàng chờ trả lời › Lỗi có thể đổi câu sang trả lời bằng nick.</td></tr>
+          <tr><td>Trả lời báo "không thấy nút Phản hồi / ô nhập", hoặc "không xác nhận được danh tính"</td><td>Facebook có thể dựng phần trả lời khác với bộ đọc đang biết. Mở bài đó, bấm <b>Phản hồi</b> dưới một comment cho ô trả lời hiện ra, rồi bấm <b>Chẩn đoán trang này</b> và gửi báo cáo cho người phát triển (mục <code>reply</code> của báo cáo đã che tên).</td></tr>
+          <tr><td>Đã điền nhưng lỡ đóng tab hoặc chưa gửi</td><td>Câu ở trạng thái "Đã điền" trên webapp. Nếu bạn đã gửi, lần quét sau sẽ tự ghi "Đã gửi". Nếu chưa, sau 15 phút câu được giao lại, hoặc đưa về chờ duyệt ở webapp.</td></tr>
           <tr><td>Bấm nút mà không thấy gì</td><td>Vào <code>chrome://extensions</code>, bấm nút tải lại của Data Lead Facebook, tải lại trang Facebook (F5), thử lại.</td></tr>
         </tbody>
       </table>
@@ -119,7 +131,7 @@
 
     <h2 id="chandoan">5. Chẩn đoán</h2>
     <div class="card">
-      <p class="muted">Khi bấm <b>Chẩn đoán trang này</b> ở popup, extension đọc thử cấu trúc trang Facebook đang mở và ghi lại số đếm, nhãn nút, mẫu đường link (đã thay số bằng #). Không có tên người, nội dung comment hay số điện thoại. Báo cáo gần nhất:</p>
+      <p class="muted">Khi bấm <b>Chẩn đoán trang này</b> ở popup, extension đọc thử cấu trúc trang Facebook đang mở và ghi lại số đếm, nhãn nút, mẫu đường link (đã thay số bằng #), và cấu trúc phần trả lời (nút Phản hồi, ô nhập, nút chọn danh tính; tên trong nhãn đã được che). Không có tên người, nội dung comment hay số điện thoại. Báo cáo gần nhất:</p>
       <textarea id="report" readonly spellcheck="false" placeholder="Chưa có báo cáo. Mở một bài trên Facebook, bấm biểu tượng extension → Chẩn đoán trang này."></textarea>
       <button id="copyReport" type="button" class="secondary">Sao chép báo cáo</button>
       <p id="reportMsg" class="msg"></p>
@@ -127,7 +139,7 @@
 
     <h2 id="thongtin">6. Thông tin</h2>
     <div class="card">
-      <p>Webapp: <code id="origin"></code><br />Phiên bản extension: <code id="version2"></code><br />Nguồn: thư mục <code>extension/</code> trong dự án; thiết kế ở <code>docs/thiet-ke-module-lead-facebook.md</code>, hướng dẫn chi tiết ở <code>docs/huong-dan-lead-facebook.md</code>.</p>
+      <p>Webapp: <code id="origin"></code><br />Phiên bản extension: <code id="version2"></code><br />Nguồn: thư mục <code>extension/</code> trong dự án; thiết kế ở <code>docs/thiet-ke-module-lead-facebook.md</code> và bản bổ sung v1.1 (luồng nhà sản xuất), hướng dẫn chi tiết ở <code>docs/huong-dan-lead-facebook.md</code>.</p>
       <p class="muted">Dữ liệu cá nhân (số điện thoại khách) được dùng để liên hệ đúng nhu cầu khách đã nêu trong comment. Khách yêu cầu xoá thì quản trị viên xoá lead cùng comment liên quan trên webapp.</p>
     </div>
 

@@ -1,12 +1,14 @@
 /**
  * Đọc nội dung trang Facebook. File này CHỈ ĐỌC trang, cuộn trang, và bấm các nút mở rộng nội dung (Xem thêm bình luận,
  * Xem phản hồi, Xem thêm, menu sắp xếp). Không điền chữ, không bấm gửi/đăng/trả lời (có test chặn trong guard.test.ts).
+ * Việc điền sẵn câu trả lời đã duyệt nằm riêng ở fill.ts và reply.ts.
  * Cách tìm phần tử nằm ở selectors.ts; Facebook đổi giao diện thì sửa ở đó.
  */
 import { canonicalGroupUrl, isPostHref, parsePostUrl, profileUrlFromAnyLink } from "../../../lib/fb/urls";
 import { extractContacts } from "../../../lib/fb/phone";
 import { EXT_VERSION } from "../config";
 import type { CommentPayload, DiagnosticReport, PostInfo } from "../types";
+import { actAndWaitForDom } from "./dom-wait";
 import {
   LABELS,
   authorFromCommentLabel,
@@ -67,6 +69,19 @@ export function findClickables(kind: LabelKind, opts: { root?: ParentNode; skip?
 }
 
 export const findClickable = (kind: LabelKind, skip?: Set<Element>) => findClickables(kind, { skip })[0] ?? null;
+
+/** Đổi bộ lọc bình luận sang "Tất cả bình luận". Cố gắng hết sức: không thấy menu thì bỏ qua (bài ít comment có thể không có menu). */
+export async function switchToAllComments(): Promise<void> {
+  const sort = findClickable("sortButton");
+  if (!sort) return;
+  const current = (sort.innerText || sort.getAttribute("aria-label") || "").trim();
+  if (labelMatches(current, "allComments")) return;
+  await actAndWaitForDom(() => sort.click(), { timeoutMs: 3_000 });
+  const item = findClickable("allComments");
+  if (item) {
+    await actAndWaitForDom(() => item.click(), { timeoutMs: 5_000, quietMs: 800 });
+  }
+}
 
 /* ---------- Bình luận ---------- */
 
@@ -277,6 +292,63 @@ export async function scrollToLoad(rounds = 4): Promise<void> {
   const all = commentArticles();
   all.at(-1)?.scrollIntoView({ block: "end" });
   await sleep(500);
+}
+
+/* ---------- Tìm một bình luận theo mã (cho luồng trả lời) ---------- */
+
+/** Giới hạn khi mở rộng bình luận để tìm một comment: đủ cho bài vài trăm comment, không kéo dài vô hạn. */
+const LOCATE_LIMIT = { maxSteps: 120, maxMs: 150_000 };
+
+function articleOf(fbCommentId: string, own: { profileUrl: string; displayName: string }): HTMLElement | null {
+  return commentArticles().find((a) => readComment(a, own)?.fb_comment_id === fbCommentId) ?? null;
+}
+
+/**
+ * Tìm bình luận theo mã, mở rộng dần cho tới khi thấy: bấm "Xem thêm bình luận", "Xem phản hồi", "Xem thêm" và cuộn, đúng các
+ * nút mở rộng nội dung mà lần quét vẫn bấm. Comment dùng mã tạm (băm từ người viết + nội dung) chỉ khớp khi nội dung đã được
+ * mở hết, nên có bấm "Xem thêm". Không thấy thì trả null.
+ */
+export async function findCommentArticle(fbCommentId: string, own: { profileUrl: string; displayName: string }, limit = LOCATE_LIMIT): Promise<HTMLElement | null> {
+  const started = Date.now();
+  const dead = new Set<Element>();
+  const expanded = new WeakSet<Element>();
+  let steps = 0;
+  let idleRounds = 0;
+  for (;;) {
+    const hit = articleOf(fbCommentId, own);
+    if (hit) return hit;
+    if (Date.now() - started > limit.maxMs || steps >= limit.maxSteps) return null;
+
+    const more = seeMoreButtons().filter((b) => !expanded.has(b));
+    if (more.length > 0) {
+      for (const b of more) expanded.add(b);
+      await actAndWaitForDom(() => more.forEach((b) => b.click()), { timeoutMs: 2_500, quietMs: 400 });
+      continue;
+    }
+    const target = findClickable("viewReplies", dead) ?? findClickable("viewMoreComments", dead);
+    if (target) {
+      idleRounds = 0;
+      const before = commentArticles().length;
+      await actAndWaitForDom(
+        () => {
+          target.scrollIntoView({ block: "center" });
+          target.click();
+        },
+        { timeoutMs: 5_000, quietMs: 700 },
+      );
+      steps++;
+      if (commentArticles().length <= before || !target.isConnected) dead.add(target);
+      continue;
+    }
+    // Hết nút: cuộn qua các vùng để Facebook vẽ lại phần bị gỡ khỏi DOM, hai vòng không thấy gì mới thì thôi
+    for (const position of ["top", "middle", "bottom"] as const) {
+      await actAndWaitForDom(() => scrollCommentArea(position), { timeoutMs: 1_500, quietMs: 400 });
+      const found = articleOf(fbCommentId, own);
+      if (found) return found;
+    }
+    await scrollToLoad(1);
+    if (++idleRounds >= 2) return articleOf(fbCommentId, own);
+  }
 }
 
 /* ---------- Chẩn đoán ---------- */

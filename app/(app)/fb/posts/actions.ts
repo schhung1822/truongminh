@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 import { requireFbManager } from "@/lib/fb/access";
+import { parseMaterialIds } from "@/lib/fb/offer-rules";
 import { registerPost } from "@/lib/fb/register-post";
 import { zonedStartOfDay } from "@/lib/time";
 
@@ -15,7 +17,22 @@ const addSchema = z.object({
   purpose: z.enum(["FIND_CUSTOMER", "FIND_SUPPLIER"], "Vui lòng chọn mục đích của bài."),
   content: z.string().max(20000).optional(),
   postedDate: z.string().optional(),
+  productRef: z.string().trim().max(200, "Tên sản phẩm tối đa 200 ký tự.").optional(),
 });
+
+/** Ô chọn vật liệu gửi lên một chuỗi JSON các mã chất liệu; chỉ giữ mã còn tồn tại và đang bật, đúng thứ tự người dùng chọn. */
+async function readMaterialIds(raw: FormDataEntryValue | string | null): Promise<string[]> {
+  let parsed: unknown = [];
+  try {
+    parsed = JSON.parse(typeof raw === "string" && raw ? raw : "[]");
+  } catch {
+    /* chuỗi hỏng: coi như không chọn */
+  }
+  const ids = parseMaterialIds(parsed);
+  if (ids.length === 0) return [];
+  const found = new Set((await db.material.findMany({ where: { id: { in: ids }, isActive: true }, select: { id: true } })).map((m) => m.id));
+  return ids.filter((id) => found.has(id));
+}
 
 /** Dán permalink một bài để nick Facebook đã kết nối mở và quét comment mà nick đó nhìn thấy. */
 export async function addPostAction(_prev: PostFormState, formData: FormData): Promise<PostFormState> {
@@ -26,6 +43,7 @@ export async function addPostAction(_prev: PostFormState, formData: FormData): P
     purpose: formData.get("purpose"),
     content: formData.get("content") ?? undefined,
     postedDate: formData.get("postedDate") ?? undefined,
+    productRef: formData.get("productRef") ?? undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -41,6 +59,8 @@ export async function addPostAction(_prev: PostFormState, formData: FormData): P
     registeredById: user.id,
     contentSnapshot: parsed.data.content,
     postedAt,
+    productRef: parsed.data.productRef,
+    suggestedMaterialIds: parsed.data.purpose === "FIND_SUPPLIER" ? await readMaterialIds(formData.get("materialIds")) : [],
   });
   if (!r.ok) return { error: r.error };
   revalidatePath("/fb/posts");
@@ -59,6 +79,24 @@ export async function setPurposeAction(postId: string, purpose: "FIND_CUSTOMER" 
   await db.fbPost.update({ where: { id: postId }, data: { purpose } });
   revalidatePath("/fb/posts");
   return { ok: "Đã đổi mục đích của bài." };
+}
+
+/**
+ * Sản phẩm và vật liệu gợi ý của một bài tìm nhà sản xuất (v1.1 mục 6, trang Đăng bài). Câu mời soạn SAU lúc lưu mới dùng
+ * giá trị mới; câu đã nằm trong hàng chờ giữ nguyên.
+ */
+export async function setPostOfferAction(postId: string, input: { productRef: string; materialIds: string[] }): Promise<PostFormState> {
+  const user = await requireFbManager();
+  const productRef = (input.productRef ?? "").trim();
+  if (productRef.length > 200) return { error: "Tên sản phẩm tối đa 200 ký tự." };
+  const post = await db.fbPost.findUnique({ where: { id: postId }, include: { account: { select: { userId: true } } } });
+  if (!post) return { error: "Không tìm thấy bài." };
+  if (user.role !== "ADMIN" && post.account.userId !== user.id) return { error: "Bài này không thuộc danh sách theo dõi của bạn." };
+
+  const ids = await readMaterialIds(JSON.stringify(Array.isArray(input.materialIds) ? input.materialIds : []));
+  await db.fbPost.update({ where: { id: postId }, data: { productRef: productRef || null, suggestedMaterialIds: ids.length > 0 ? ids : Prisma.DbNull } });
+  revalidatePath("/fb/posts");
+  return { ok: "Đã lưu sản phẩm và vật liệu gợi ý. Áp dụng cho câu mời soạn từ lúc này." };
 }
 
 export async function setTrackingAction(postId: string, status: "TRACKING" | "PAUSED" | "DONE"): Promise<PostFormState> {

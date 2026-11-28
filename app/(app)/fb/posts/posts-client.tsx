@@ -1,24 +1,31 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useTransition } from "react";
-import { CheckIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { CheckIcon, Loader2Icon, PackageIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { addPostAction, setPurposeAction, setTrackingAction, type PostFormState } from "./actions";
+import { addPostAction, setPostOfferAction, setPurposeAction, setTrackingAction, type PostFormState } from "./actions";
+import { MaterialPicker, type PickerMaterial } from "./material-picker";
 
-export function AddPostForm({ accounts }: { accounts: { id: string; displayName: string }[] }) {
+export function AddPostForm({ accounts, materials }: { accounts: { id: string; displayName: string }[]; materials: PickerMaterial[] }) {
   const [state, action, pending] = useActionState<PostFormState, FormData>(addPostAction, {});
   const formRef = useRef<HTMLFormElement>(null);
+  const [purpose, setPurpose] = useState("FIND_CUSTOMER");
+  const [materialIds, setMaterialIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (state.ok) {
       toast.success(state.ok);
       formRef.current?.reset();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- đưa phần chọn của form về ban đầu sau khi thêm bài xong
+      setPurpose("FIND_CUSTOMER");
+      setMaterialIds([]);
     }
   }, [state]);
 
@@ -49,11 +56,27 @@ export function AddPostForm({ accounts }: { accounts: { id: string; displayName:
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="post-purpose">Mục đích bài</Label>
-        <NativeSelect id="post-purpose" name="purpose" required defaultValue="FIND_CUSTOMER">
+        <NativeSelect id="post-purpose" name="purpose" required value={purpose} onChange={(e) => setPurpose(e.target.value)}>
           <option value="FIND_CUSTOMER">Tìm khách</option>
           <option value="FIND_SUPPLIER">Tìm bên sản xuất</option>
         </NativeSelect>
       </div>
+      {purpose === "FIND_SUPPLIER" && (
+        <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-3 sm:col-span-2">
+          <p className="text-sm text-muted-foreground">
+            Bài tìm nhà sản xuất: khi xưởng comment (thường kèm số điện thoại), hệ thống tạo lead nhà sản xuất và soạn sẵn câu mời dùng vật liệu để bạn duyệt ở Hàng chờ trả lời.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="post-product">Mẫu áo / sản phẩm đang tìm nhà sản xuất</Label>
+            <Input id="post-product" name="productRef" maxLength={200} className="h-10" placeholder="Ví dụ: Áo polo mẫu P01" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Vật liệu gợi ý cho sản phẩm này</Label>
+            <MaterialPicker materials={materials} value={materialIds} onChange={setMaterialIds} />
+            <input type="hidden" name="materialIds" value={JSON.stringify(materialIds)} />
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="post-date">Ngày đăng (không bắt buộc)</Label>
         <Input id="post-date" name="postedDate" type="date" className="h-10" />
@@ -94,6 +117,69 @@ export function PurposeSelect({ id, purpose }: { id: string; purpose: "FIND_CUST
       <option value="FIND_CUSTOMER">Tìm khách</option>
       <option value="FIND_SUPPLIER">Tìm bên sản xuất</option>
     </NativeSelect>
+  );
+}
+
+/** Sản phẩm và vật liệu gợi ý của một bài tìm nhà sản xuất: xem nhanh trên dòng, bấm để sửa. */
+export function PostOfferDialog({ id, productRef, materialIds, materials }: { id: string; productRef: string; materialIds: string[]; materials: PickerMaterial[] }) {
+  const [open, setOpen] = useState(false);
+  const [product, setProduct] = useState(productRef);
+  const [ids, setIds] = useState(materialIds);
+  const [pending, startTransition] = useTransition();
+  const names = materialIds.map((mid) => materials.find((m) => m.id === mid)?.name).filter(Boolean);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setProduct(productRef);
+          setIds(materialIds);
+        }
+      }}
+    >
+      <DialogTrigger render={<button type="button" className="mt-1 flex w-full max-w-56 items-start gap-1 rounded-md border border-dashed px-2 py-1 text-left text-xs hover:bg-muted" />}>
+        <PackageIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
+        <span className="min-w-0">
+          <span className="block truncate">{productRef || <span className="text-muted-foreground">Chưa ghi sản phẩm</span>}</span>
+          <span className="block truncate text-muted-foreground">{names.length > 0 ? `${names.length} vật liệu: ${names.slice(0, 2).join(", ")}${names.length > 2 ? "…" : ""}` : "Chưa chọn vật liệu gợi ý"}</span>
+        </span>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Sản phẩm và vật liệu gợi ý</DialogTitle>
+          <DialogDescription>Dùng để soạn câu mời khi xưởng comment vào bài này. Câu đã nằm trong hàng chờ không đổi.</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`po-product-${id}`}>Mẫu áo / sản phẩm đang tìm nhà sản xuất</Label>
+            <Input id={`po-product-${id}`} value={product} maxLength={200} className="h-10" onChange={(e) => setProduct(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Vật liệu gợi ý</Label>
+            <MaterialPicker materials={materials} value={ids} onChange={setIds} />
+          </div>
+          <Button
+            className="h-10"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const r = await setPostOfferAction(id, { productRef: product, materialIds: ids });
+                if (r.error) toast.error(r.error);
+                else {
+                  toast.success(r.ok ?? "Đã lưu.");
+                  setOpen(false);
+                }
+              })
+            }
+          >
+            {pending && <Loader2Icon className="animate-spin" />}
+            Lưu
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

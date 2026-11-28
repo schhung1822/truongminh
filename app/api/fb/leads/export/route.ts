@@ -2,6 +2,7 @@ import { apiUser, isResponse } from "@/lib/api";
 import { db } from "@/lib/db";
 import { fmtDateTime } from "@/lib/fb/format";
 import { parseLeadFilters } from "@/lib/fb/lead-filters";
+import { SUPPLIER_TYPE_LABEL } from "@/lib/fb/reply-labels";
 import { csvLine } from "@/lib/stats/csv";
 import { STATUS_LABEL } from "@/app/(app)/fb/leads/lead-status";
 
@@ -21,6 +22,8 @@ export async function GET(req: Request) {
     assigned: sp.get("assigned") ?? undefined,
     from: sp.get("from") ?? undefined,
     to: sp.get("to") ?? undefined,
+    view: sp.get("view") ?? undefined,
+    stype: sp.get("stype") ?? undefined,
   });
   const oldestFirst = sp.get("sort") === "old";
 
@@ -36,7 +39,9 @@ export async function GET(req: Request) {
     },
   });
 
-  const lines = [csvLine(["Tên", "Số điện thoại", "Zalo", "Email", "Loại", "Trạng thái", "Nhóm", "Phụ trách", "Khách hàng liên kết", "Ghi chú", "Bài đăng", "Ngày tạo"])];
+  const lines = [
+    csvLine(["Tên", "Số điện thoại", "Zalo", "Email", "Loại", "Trạng thái", "Nhóm", "Phụ trách", "Khách hàng liên kết", "Ghi chú", "Bài đăng", "Ngày tạo", "Loại nhà sản xuất", "Năng lực", "Chào gần nhất", "Đã gọi", "Đã nhắn Zalo", "Đã gửi mẫu"]),
+  ];
   for (const l of leads) {
     lines.push(
       csvLine([
@@ -52,6 +57,12 @@ export async function GET(req: Request) {
         l.note ?? "",
         l.post.url,
         fmtDateTime(l.createdAt),
+        l.supplierType ? SUPPLIER_TYPE_LABEL[l.supplierType] : "",
+        l.capability ?? "",
+        l.lastOfferedAt ? fmtDateTime(l.lastOfferedAt) : "",
+        l.calledAt ? fmtDateTime(l.calledAt) : "",
+        l.zaloMessagedAt ? fmtDateTime(l.zaloMessagedAt) : "",
+        l.sampleSentAt ? fmtDateTime(l.sampleSentAt) : "",
       ]),
     );
   }

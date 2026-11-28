@@ -11,7 +11,7 @@
  */
 import { fold } from "../../../lib/fb/phone";
 
-/** Mỗi loại nút chỉ gồm các nút ĐỌC/MỞ RỘNG nội dung. Không có nhãn nào thuộc nút gửi, đăng, trả lời. */
+/** Mỗi loại nút chỉ gồm các nút ĐỌC/MỞ RỘNG nội dung. Không có nhãn nào thuộc nút gửi, đăng, trả lời (nhãn của luồng trả lời ở REPLY_LABELS). */
 export const LABELS = {
   /** Nút đổi cách sắp xếp bình luận: nhãn hiện tại của nó là một trong các giá trị này. */
   sortButton: [/^(phu hop nhat|most relevant|moi nhat|newest|cu nhat|oldest|tat ca binh luan|all comments)$/],
@@ -33,6 +33,87 @@ export const LABELS = {
 } as const;
 
 export type LabelKind = keyof typeof LABELS;
+
+/**
+ * Nhãn của luồng TRẢ LỜI (v1.0 mục 8.3, v1.1 mục 5.1): extension mở ô trả lời của một comment, chọn đúng danh tính (nick hoặc
+ * fanpage), điền câu đã được người duyệt rồi DỪNG. Hai mục dưới đây chỉ là nút mở ô nhập và nút mở danh sách danh tính; không
+ * mục nào là nút gửi.
+ *
+ * CHƯA XÁC MINH trên trang Facebook thật (không có quyền truy cập lúc viết): `identitySwitcher` gồm các nhãn Facebook đã từng
+ * dùng cho nút chọn "bình luận với tư cách ai". Nút "Chẩn đoán trang này" ghi lại các nút ứng viên (mục `reply` của báo cáo) để
+ * chỉnh danh sách này. Chừng nào chưa khớp, extension báo page_not_available và KHÔNG điền gì dưới tên fanpage.
+ */
+export const REPLY_LABELS = {
+  /** Nút "Phản hồi" dưới một bình luận: mở ô trả lời của bình luận đó. */
+  replyAction: [/^(phan hoi|tra loi|reply)$/],
+  /** identity_switcher, cách 1 và 2: nút mở danh sách danh tính, nhận theo nhãn / aria-label. */
+  identitySwitcher: [
+    /^(bo chon giong noi|voice selector|actor selector)$/,
+    /(tuong tac|binh luan|thich va binh luan|phan hoi|dang bai) (voi tu cach|duoi ten|duoi danh nghia)/,
+    /\b(interact(ing)?|comment(ing)?|lik(e|ing) and comment(ing)?|reply(ing)?|post(ing)?) as\b/,
+    /^(chon|doi|chuyen) (danh tinh|nguoi binh luan|nguoi tuong tac|cach tuong tac)/,
+    /^(choose|change|switch) (identity|who you|how you|commenter)/,
+  ],
+} as const;
+
+export type ReplyLabelKind = keyof typeof REPLY_LABELS;
+
+export function replyLabelMatches(raw: string, kind: ReplyLabelKind): boolean {
+  const whole = normalizeLabel(raw);
+  if (!whole) return false;
+  const first = normalizeLabel(raw.split(/\r?\n/).find((l) => l.trim()) ?? "");
+  return REPLY_LABELS[kind].some((re) => re.test(whole) || (!!first && re.test(first)));
+}
+
+/**
+ * Nhãn của các nút GỬI / ĐĂNG. Extension không bao giờ bấm nút nào có nhãn này: hàm safeClick (content/fill.ts) từ chối, và
+ * guard.test.ts kiểm tra mọi lần bấm trong luồng trả lời đều đi qua safeClick.
+ */
+export const SEND_LABELS = [/^(gui|send|dang|post|dang bai|binh luan|comment|cap nhat|update|luu|save|xong|done|chia se|share|chia se ngay|share now)$/];
+
+export function isSendLabel(raw: string): boolean {
+  const whole = normalizeLabel(raw);
+  return !!whole && SEND_LABELS.some((re) => re.test(whole));
+}
+
+/** Hai tên có phải là một không (tên fanpage, tên nick): so sau khi bỏ dấu, hạ chữ thường, gộp khoảng trắng. */
+export function sameName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = normalizeLabel(a ?? "");
+  return !!x && x === normalizeLabel(b ?? "");
+}
+
+/** Nhãn có nhắc tới tên này không (ví dụ "Bình luận dưới tên Vật Liệu ABC" có tên "Vật Liệu ABC"). So nguyên từ, không so nửa chữ. */
+export function labelHasName(label: string | null | undefined, name: string | null | undefined): boolean {
+  const n = normalizeLabel(name ?? "");
+  if (!n) return false;
+  const l = normalizeLabel(label ?? "");
+  const at = l.indexOf(n);
+  if (at < 0) return false;
+  const before = at === 0 ? "" : l[at - 1];
+  const after = l[at + n.length] ?? "";
+  return !/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after);
+}
+
+/**
+ * Che tên riêng trong một nhãn trước khi đưa vào báo cáo chẩn đoán: tên nick và tên fanpage đã biết đổi thành {nick} / {page};
+ * phần đứng sau các cụm "dưới tên", "với tư cách", "as", "trả lời", "của" (thường là tên người) đổi thành {…}.
+ */
+export function maskLabel(raw: string, known: { nick?: string | null; pages?: string[] }): string {
+  let out = raw.normalize("NFC").replace(/\s+/g, " ").trim().slice(0, 120);
+  const swap = (name: string | null | undefined, token: string) => {
+    const n = (name ?? "").normalize("NFC").trim();
+    if (n.length >= 2) out = out.replace(new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu"), token);
+  };
+  for (const p of known.pages ?? []) swap(p, "{page}");
+  swap(known.nick, "{nick}");
+  // Lượt 1: sau cụm chỉ danh tính ("dưới tên X"). Lượt 2: sau cụm chỉ người được nhắc tới ("trả lời X"), trừ khi theo sau là
+  // cụm danh tính đã xử lý ở lượt 1 ("Phản hồi dưới tên {page}" giữ nguyên).
+  const ident = "dưới tên|với tư cách|dưới danh nghĩa|\\bas";
+  const token = "\\{(?:page|nick)\\}";
+  out = out.replace(new RegExp(`((?:${ident})\\s+)(?!${token})\\S.*$`, "iu"), "$1{…}");
+  out = out.replace(new RegExp(`((?:trả lời|phản hồi|bình luận của|\\bcủa|reply to|replying to|comment by)\\s+)(?!${token}|${ident})\\S.*$`, "iu"), "$1{…}");
+  return out;
+}
 
 /** Chuẩn hoá nhãn nút: bỏ dấu, chữ thường, bỏ dấu "…" hoặc "..." đầu chuỗi, gộp khoảng trắng. */
 export function normalizeLabel(raw: string): string {

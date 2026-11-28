@@ -92,6 +92,8 @@ export default async function FbGroupsPage({ searchParams }: { searchParams: Pro
                   <SortHead sort="ratio" current={sort}>
                     Lead / bài
                   </SortHead>
+                  <TableHead title="Nhóm có cho fanpage tham gia không">Page được vào</TableHead>
+                  <TableHead title="Fanpage của xưởng đã vào nhóm chưa; đã vào thì câu mời nhà sản xuất đứng tên fanpage">Page đã vào</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead className="text-right">Thao tác</TableHead>
                 </TableRow>
@@ -110,11 +112,13 @@ export default async function FbGroupsPage({ searchParams }: { searchParams: Pro
                     <TableCell className="text-right tabular-nums">{p}</TableCell>
                     <TableCell className="text-right tabular-nums">{l}</TableCell>
                     <TableCell className="text-right tabular-nums">{p > 0 ? ratio.toFixed(1) : "-"}</TableCell>
+                    <TableCell>{g.pageAllowed ? "Có" : <span className="text-muted-foreground">Không / chưa rõ</span>}</TableCell>
+                    <TableCell>{g.pageJoined ? <Badge variant="outline">Đã vào</Badge> : <span className="text-muted-foreground">Chưa</span>}</TableCell>
                     <TableCell>
                       <Badge variant={g.status === "ACTIVE" ? "default" : g.status === "BANNED" ? "destructive" : "secondary"}>{STATUS_LABEL[g.status]}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <GroupEditDialog group={{ id: g.id, name: g.name, topic: g.topic ?? "", purpose: g.purpose, notes: g.notes ?? "", status: g.status }} />
+                      <GroupEditDialog group={{ id: g.id, name: g.name, topic: g.topic ?? "", purpose: g.purpose, notes: g.notes ?? "", status: g.status, pageAllowed: g.pageAllowed, pageJoined: g.pageJoined }} />
                     </TableCell>
                   </TableRow>
                 ))}

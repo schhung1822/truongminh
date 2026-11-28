@@ -1,7 +1,7 @@
 import { apiUser, isResponse, jsonError } from "@/lib/api";
 import { getEnv } from "@/lib/env";
 import { canManageFb } from "@/lib/fb/access";
-import { LEAD_STATUS_ORDER, loadLeadStats } from "@/lib/fb/lead-stats";
+import { LEAD_STATUS_ORDER, loadLeadStats, loadSupplierFunnel, SUPPLIER_FUNNEL_STEPS } from "@/lib/fb/lead-stats";
 import { todayKey } from "@/lib/jobs/limits";
 import { STATUS_LABEL } from "@/app/(app)/fb/leads/lead-status";
 import { csvLine } from "@/lib/stats/csv";
@@ -18,10 +18,12 @@ export async function GET(req: Request) {
   const tz = getEnv().APP_TIMEZONE;
   const range = parseRange({ preset: sp.get("preset") ?? undefined, from: sp.get("from") ?? undefined, to: sp.get("to") ?? undefined }, todayKey());
   const { start, end } = rangeBounds(range.from, range.to, tz);
-  const stats = await loadLeadStats(start, end, range.days, tz);
+  const [stats, supplier] = await Promise.all([loadLeadStats(start, end, range.days, tz), loadSupplierFunnel(start, end)]);
 
   const lines = [`# Lead Facebook — từ ${range.from} đến ${range.to}`, "", csvLine(["Trạng thái", "Số lead"])];
   for (const s of LEAD_STATUS_ORDER) lines.push(csvLine([STATUS_LABEL[s], stats.funnel[s]]));
+  lines.push("", csvLine(["Phễu bài tìm nhà sản xuất", "Số lượng"]), csvLine(["Lead nhà sản xuất", supplier.leads]));
+  for (const s of SUPPLIER_FUNNEL_STEPS) lines.push(csvLine([s.label, supplier[s.key]]));
   lines.push("", csvLine(["Ngày", "Số lead mới"]));
   for (const d of stats.byDay) lines.push(csvLine([d.day, d.count]));
   lines.push("", csvLine(["Sale", "Tổng lead", "Đã chốt"]));

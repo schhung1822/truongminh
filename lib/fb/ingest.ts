@@ -4,6 +4,8 @@ import type { FbPostPurpose } from "@/generated/prisma/enums";
 import { db } from "@/lib/db";
 import { prepareComment, type IngestPayload, type PreparedComment } from "./comments";
 import { ensureGroup } from "./groups";
+import { enqueueReplies } from "./offers";
+import { reconcileReplied } from "./reply-result";
 import { parsePostUrl } from "./urls";
 
 export type IngestInput = {
@@ -14,14 +16,24 @@ export type IngestInput = {
   now?: Date;
 };
 
-export type IngestResult = { newComments: number; updatedComments: number; newLeads: number; leadSources: number };
+export type IngestResult = {
+  newComments: number;
+  updatedComments: number;
+  newLeads: number;
+  leadSources: number;
+  /** Số dòng mới trong hàng chờ trả lời (câu mời nhà sản xuất + câu dẫn khách về inbox), đều ở trạng thái chờ duyệt. */
+  newReplies: number;
+  /** Các comment cần AI xem ở bước chạy nền (lib/fb/offers.ts runSupplierAi); rỗng khi không có gì hoặc AI đang tắt. */
+  aiCommentIds: string[];
+};
 
 type Stored = { id: string; authorName: string; authorProfileUrl: string | null; extractedPhone: string | null; extractedOther: PreparedComment["extractedOther"] };
 
 /**
  * Lưu một lần quét (docs/thiet-ke-module-lead-facebook.md mục 7.3): upsert comment theo (bài, mã comment Facebook), tách số
  * và phân loại cho comment mới hoặc vừa sửa, tạo lead (cùng số điện thoại thì chỉ thêm nguồn), cập nhật bộ đếm của bài.
- * Chạy lại cùng dữ liệu không tạo dòng trùng. Không có bước nào gửi gì ra Facebook.
+ * Sau đó soạn câu trả lời chờ duyệt cho comment mới (v1.1: câu mời nhà sản xuất dùng vật liệu) và khép các dòng hàng chờ mà
+ * lần quét thấy đã có trả lời. Chạy lại cùng dữ liệu không tạo dòng trùng. Không có bước nào gửi gì ra Facebook.
  */
 export async function ingestComments(opts: IngestInput): Promise<IngestResult> {
   const now = opts.now ?? new Date();
@@ -39,10 +51,13 @@ export async function ingestComments(opts: IngestInput): Promise<IngestResult> {
     }
   }
 
+  // Comment do fanpage của mình viết cũng tính là "của mình" (không tách số, không thành lead), kể cả fanpage đang tạm dừng
+  const ownPages = opts.payload.comments.length > 0 ? await db.fbPage.findMany({ select: { name: true, url: true } }) : [];
+
   // Một mã comment xuất hiện hai lần trong cùng lần gửi: lấy bản cuối
   const byId = new Map<string, PreparedComment>();
   for (const raw of opts.payload.comments) {
-    byId.set(raw.fb_comment_id, prepareComment(raw, { accountProfileUrl: opts.account.profileUrl, now }));
+    byId.set(raw.fb_comment_id, prepareComment(raw, { accountProfileUrl: opts.account.profileUrl, now, ownPages }));
   }
   const prepared = [...byId.values()];
 
@@ -109,6 +124,12 @@ export async function ingestComments(opts: IngestInput): Promise<IngestResult> {
     }
   }
 
+  // Hàng chờ trả lời: soạn câu cho comment mới / vừa sửa của người khác, rồi khép các dòng mà lần quét thấy đã có trả lời
+  // (thứ tự này để comment và câu trả lời tay của nó đến cùng một lần quét thì dòng vừa soạn bị bỏ qua ngay).
+  const fresh = [...toCreate, ...toUpdate];
+  const queued = await enqueueReplies({ postId: post.id, fbCommentIds: fresh.filter((p) => !p.isOwn).map((p) => p.fbCommentId), now });
+  await reconcileReplied(post.id, fresh.filter((p) => p.isOwn && p.parentFbCommentId).map((p) => p.parentFbCommentId as string), now);
+
   // Bộ đếm và mốc quét của bài
   const [commentCount, leadCount] = await Promise.all([
     db.fbComment.count({ where: { postId: post.id } }),
@@ -131,11 +152,11 @@ export async function ingestComments(opts: IngestInput): Promise<IngestResult> {
     data: {
       tokenId: opts.tokenId,
       type: opts.payload.complete ? "SCAN_OK" : "SCAN_FAIL",
-      detail: { post_id: post.id, received: opts.payload.comments.length, new_comments: toCreate.length, updated_comments: toUpdate.length, new_leads: newLeads, complete: opts.payload.complete, unchanged: opts.payload.unchanged, reported_comment_count: opts.payload.reported_comment_count ?? null, ...(opts.payload.note ? { note: opts.payload.note } : {}) },
+      detail: { post_id: post.id, received: opts.payload.comments.length, new_comments: toCreate.length, updated_comments: toUpdate.length, new_leads: newLeads, new_replies: queued.offers + queued.interestReplies, complete: opts.payload.complete, unchanged: opts.payload.unchanged, reported_comment_count: opts.payload.reported_comment_count ?? null, ...(opts.payload.note ? { note: opts.payload.note } : {}) },
     },
   });
 
-  return { newComments: toCreate.length, updatedComments: toUpdate.length, newLeads, leadSources };
+  return { newComments: toCreate.length, updatedComments: toUpdate.length, newLeads, leadSources, newReplies: queued.offers + queued.interestReplies, aiCommentIds: queued.aiCommentIds };
 }
 
 /** Thời điểm quét: lấy giờ extension báo nhưng không cho nằm trong tương lai (đồng hồ máy lệch). */
@@ -181,6 +202,8 @@ async function attachLead(post: IngestInput["post"], c: Stored): Promise<"create
         email,
         profileUrl: c.authorProfileUrl,
         leadType: post.purpose === "FIND_SUPPLIER" ? "SUPPLIER" : "CUSTOMER",
+        // loại nhà sản xuất do AI xếp sau (lib/fb/offers.ts); AI tắt hoặc lỗi thì giữ "chưa rõ" (v1.1 mục 4.2)
+        ...(post.purpose === "FIND_SUPPLIER" ? { supplierType: "UNKNOWN" as const } : {}),
         sources: { create: { commentId: c.id } },
       },
     });

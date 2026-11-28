@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { classifyComment, type CommentCategory } from "./classify";
+import { fold } from "./phone";
 import { parseRelativeTime } from "./relative-time";
 import { profileUrlFromAnyLink, sameProfile } from "./urls";
 
@@ -52,17 +53,27 @@ export type PreparedComment = {
   extractedOther: { phones: string[]; zalo: string | null; emails: string[]; spelledOut: boolean } | null;
 };
 
+/** Fanpage của xưởng (bảng fb_pages): comment do fanpage viết cũng là comment "của mình". */
+export type OwnPage = { name: string; url: string };
+
+/** Comment này do một fanpage của mình viết: trùng link, hoặc trùng tên hiển thị (trong nhóm, link người viết là dạng id số nên không so link được). */
+function byOwnPage(authorName: string, authorProfileUrl: string | null, pages: OwnPage[]): boolean {
+  const name = fold(authorName).replace(/\s+/g, " ").trim();
+  return pages.some((p) => sameProfile(authorProfileUrl, p.url) || (!!name && name === fold(p.name).replace(/\s+/g, " ").trim()));
+}
+
 /**
  * Chuẩn bị một comment để lưu.
- * - Comment do CHÍNH nick của mình viết (extension báo is_own hoặc link tác giả trùng link nick) luôn là OTHER và KHÔNG tách
- *   số: câu trả lời của nhân sự có thể chứa số của xưởng, không được biến thành lead.
+ * - Comment do CHÍNH nick của mình viết (extension báo is_own hoặc link tác giả trùng link nick), hoặc do fanpage của mình viết
+ *   (v1.1: fanpage trả lời comment), luôn là OTHER và KHÔNG tách số: câu trả lời của nhân sự có thể chứa số của xưởng, không
+ *   được biến thành lead.
  * - Còn lại: tách số/Zalo/email và phân loại.
  */
-export function prepareComment(input: CommentInput, ctx: { accountProfileUrl: string; now: Date }): PreparedComment {
+export function prepareComment(input: CommentInput, ctx: { accountProfileUrl: string; now: Date; ownPages?: OwnPage[] }): PreparedComment {
   const text = input.text.replace(/\u0000/g, "").trim().slice(0, MAX_TEXT);
   const rawProfile = input.author_profile_url?.trim() || null;
   const authorProfileUrl = rawProfile ? (profileUrlFromAnyLink(rawProfile) ?? rawProfile.slice(0, 500)) : null;
-  const isOwn = input.is_own || sameProfile(authorProfileUrl, ctx.accountProfileUrl);
+  const isOwn = input.is_own || sameProfile(authorProfileUrl, ctx.accountProfileUrl) || byOwnPage(input.author_name, authorProfileUrl, ctx.ownPages ?? []);
   const timeText = input.time_text?.trim() || null;
 
   const base = {

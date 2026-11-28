@@ -11,8 +11,9 @@ import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { requireFbManager } from "@/lib/fb/access";
 import { fmtAgo, fmtDateTime } from "@/lib/fb/format";
+import { parseMaterialIds } from "@/lib/fb/offer-rules";
 import { pageWindow } from "@/lib/pagination";
-import { AddPostForm, PurposeSelect, TrackingActions } from "./posts-client";
+import { AddPostForm, PostOfferDialog, PurposeSelect, TrackingActions } from "./posts-client";
 
 export const metadata: Metadata = { title: "Bài đăng theo dõi" };
 
@@ -44,11 +45,14 @@ export default async function FbPostsPage({ searchParams }: { searchParams: Prom
     ],
   };
 
-  const [total, accounts, groups] = await Promise.all([
+  const [total, accounts, groups, materialRows] = await Promise.all([
     db.fbPost.count({ where }),
     db.fbAccount.findMany({ where: isAdmin ? {} : { userId: user.id }, orderBy: { displayName: "asc" }, select: { id: true, displayName: true } }),
     db.fbGroup.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // thư viện chất liệu của webapp, để chọn vật liệu gợi ý cho bài tìm nhà sản xuất (v1.1)
+    db.material.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }], select: { id: true, code: true, name: true, groupName: true, printTech: true } }),
   ]);
+  const materials = materialRows.map((m) => ({ id: m.id, code: m.code, name: m.name, kind: [m.groupName, m.printTech].filter(Boolean).join(", ") }));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1), totalPages);
   const posts = await db.fbPost.findMany({
@@ -80,7 +84,7 @@ export default async function FbPostsPage({ searchParams }: { searchParams: Prom
           <CardDescription>Dán permalink của bài cần theo dõi. Nhóm chưa có trong danh sách sẽ được tạo tự động (đặt lại tên ở trang Nhóm).</CardDescription>
         </CardHeader>
         <CardContent>
-          <AddPostForm accounts={accounts} />
+          <AddPostForm accounts={accounts} materials={materials} />
         </CardContent>
       </Card>
 
@@ -158,6 +162,7 @@ export default async function FbPostsPage({ searchParams }: { searchParams: Prom
                           {p.postedAt ? fmtDateTime(p.postedAt).split(",")[0] : "đưa vào " + fmtDateTime(p.createdAt).split(",")[0]}
                         </span>
                         <PurposeSelect id={p.id} purpose={p.purpose} />
+                        {p.purpose === "FIND_SUPPLIER" && <PostOfferDialog id={p.id} productRef={p.productRef ?? ""} materialIds={parseMaterialIds(p.suggestedMaterialIds)} materials={materials} />}
                       </TableCell>
                       <TableCell>{p.group?.name ?? <span className="text-muted-foreground">Trang cá nhân</span>}</TableCell>
                       <TableCell>{p.account.displayName}</TableCell>

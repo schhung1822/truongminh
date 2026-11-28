@@ -88,6 +88,40 @@ export async function linkCustomerAction(leadId: string, customerId: string | nu
   return { ok: customerId ? "Đã gắn vào khách hàng." : "Đã bỏ gắn khách hàng." };
 }
 
+const SUPPLIER_STEPS = { called: "calledAt", zalo: "zaloMessagedAt", sample: "sampleSentAt" } as const;
+export type SupplierStep = keyof typeof SUPPLIER_STEPS;
+
+/**
+ * Việc của sale với một nhà sản xuất (v1.1 mục 4.3): "Đã gọi", "Đã nhắn Zalo", "Đã gửi mẫu". Bấm lần nữa để bỏ đánh dấu.
+ * Đánh dấu đã gọi / đã nhắn Zalo cho lead còn "Mới" thì lead chuyển sang "Đã liên hệ".
+ */
+export async function setSupplierStepAction(leadId: string, step: SupplierStep, on: boolean): Promise<LeadActionResult> {
+  const user = await requireUser();
+  if (!(step in SUPPLIER_STEPS)) return { error: "Việc không hợp lệ." };
+  const lead = await db.fbLead.findUnique({ where: { id: leadId }, select: { id: true, assignedToId: true, status: true, leadType: true } });
+  if (!lead || !canViewLead(user, lead)) return { error: "Không tìm thấy lead." };
+  if (lead.leadType !== "SUPPLIER") return { error: "Chỉ áp dụng cho lead nhà sản xuất." };
+
+  const advance = on && step !== "sample" && lead.status === "NEW";
+  await db.fbLead.update({ where: { id: leadId }, data: { [SUPPLIER_STEPS[step]]: on ? new Date() : null, ...(advance ? { status: "CONTACTED" as const } : {}) } });
+  revalidatePath("/fb/leads");
+  const label = step === "called" ? "đã gọi" : step === "zalo" ? "đã nhắn Zalo" : "đã gửi mẫu";
+  return { ok: on ? `Đã ghi nhận ${label}.${advance ? " Lead chuyển sang Đã liên hệ." : ""}` : `Đã bỏ đánh dấu ${label}.` };
+}
+
+/** Sửa tay loại nhà sản xuất (AI xếp có thể sai, hoặc AI đang tắt). */
+export async function setSupplierTypeAction(leadId: string, supplierType: string): Promise<LeadActionResult> {
+  const user = await requireUser();
+  const parsed = z.enum(["MANUFACTURER", "BROKER", "UNKNOWN"], "Loại không hợp lệ.").safeParse(supplierType);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const lead = await db.fbLead.findUnique({ where: { id: leadId }, select: { id: true, assignedToId: true, leadType: true } });
+  if (!lead || !canViewLead(user, lead)) return { error: "Không tìm thấy lead." };
+  if (lead.leadType !== "SUPPLIER") return { error: "Chỉ áp dụng cho lead nhà sản xuất." };
+  await db.fbLead.update({ where: { id: leadId }, data: { supplierType: parsed.data } });
+  revalidatePath("/fb/leads");
+  return { ok: "Đã đổi loại nhà sản xuất." };
+}
+
 export type LeadDetail = {
   sources: { authorName: string; text: string; timeText: string | null; postUrl: string; groupName: string | null; at: string }[];
   /** Khách hàng có số điện thoại trùng với lead (so sau khi chuẩn hoá); hệ thống chỉ gợi ý, người dùng tự bấm gắn. */

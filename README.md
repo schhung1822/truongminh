@@ -278,8 +278,8 @@ Trên máy cá nhân bạn bấm đăng bằng tay trong mục **Kịch bản ch
 */10 * * * * curl -fsS -X POST -H "x-cron-secret: KHÓA_CỦA_BẠN" https://tên-miền/api/jobs/zalo-care >> /root/truongminh/backups/care.log 2>&1
 ```
 
-### Lead Facebook (thu comment trên bài của mình, tách số điện thoại)
-Phòng marketing đăng bài lên nhóm Facebook; extension Chrome **Data Lead Facebook** **chỉ đọc** comment trên các bài do chính nick của mình đăng và gửi về web, web tách số điện thoại và tạo lead. Không tự đăng, không tự comment, không tự bấm gửi. Thiết kế: `docs/thiet-ke-module-lead-facebook.md`; hướng dẫn đọc hiểu: `docs/huong-dan-lead-facebook.md`; quyết định: D91, D92 trong `docs/DECISIONS.md`.
+### Lead Facebook (thu comment trên bài đang theo dõi, tách số điện thoại)
+Phòng marketing đăng bài lên nhóm Facebook; extension Chrome **Data Lead Facebook** đọc comment trên các bài người dùng chủ động theo dõi và gửi về web, web tách số điện thoại và tạo lead. Không tự đăng, không tự gửi comment, không tự bấm gửi. Thiết kế: `docs/thiet-ke-module-lead-facebook.md`; hướng dẫn đọc hiểu: `docs/huong-dan-lead-facebook.md`; quyết định: D91, D92 trong `docs/DECISIONS.md`.
 1. Cập nhật mã và CSDL trên VPS: `git pull`, `npx prisma migrate deploy` (thêm vai trò Marketing và các bảng `fb_*`, `ext_*`; **sao lưu CSDL trước**), `npm run build`, nạp lại web.
 2. **Quản trị > Người dùng**: tạo tài khoản vai trò **Marketing** cho nhân sự (Sale chỉ thấy lead được gán cho mình).
 3. Menu **Lead Facebook**: Marketing thêm nick Facebook và tạo mã kết nối cho từng máy ở **Hệ thống > Kết nối > Extension Facebook**, thêm bài ở **Bài đăng**.
@@ -289,6 +289,13 @@ Phòng marketing đăng bài lên nhóm Facebook; extension Chrome **Data Lead F
 30 3 * * * curl -fsS -X POST -H "x-cron-secret: KHÓA_CỦA_BẠN" https://tên-miền/api/jobs/fb-retention >> /root/truongminh/backups/fb-retention.log 2>&1
 ```
 Chưa kiểm chứng trên Facebook thật: xem mục "Chưa kiểm chứng" trong `extension/README.md`. Khi quét không ra comment, nhân sự bấm **Chẩn đoán trang này** trong popup; báo cáo (không chứa dữ liệu cá nhân) hiện ở **Kết nối extension > Cảnh báo** để người phát triển chỉnh bộ đọc.
+
+#### Trả lời comment và luồng nhà sản xuất (v1.1, extension 0.4.0)
+Xưởng comment vào bài **Tìm bên sản xuất** thì web tạo lead nhà sản xuất và soạn sẵn câu mời dùng vật liệu (từ mẫu, hoặc AI soạn). Người duyệt ở **Hàng chờ trả lời**; extension chỉ **điền sẵn** câu đã duyệt vào ô trả lời của đúng comment, dưới tên fanpage hoặc nick, rồi dừng cho người đọc và tự bấm gửi. Thiết kế: `thiet-ke-module-lead-facebook-v1.1-luong-nha-san-xuat.md`; hướng dẫn: mục 17 của `docs/huong-dan-lead-facebook.md`; quyết định: D131.
+1. Cập nhật trên VPS: **sao lưu CSDL**, `git pull`, `npx prisma migrate deploy` (migration `20261128100000_fb_supplier_offer`, chỉ thêm bảng và cột), `npm run build`, nạp lại web (nhớ `APP_PORT=3009`).
+2. Build lại extension (`npm run ext:build`) và phát bản 0.4.0 cho nhân sự: `chrome://extensions` > nút tải lại. Mã kết nối giữ nguyên.
+3. **Lead Facebook > Mẫu câu & Fanpage**: thêm fanpage (tên đúng như trên Facebook), sửa mẫu câu, xem cấu hình. **Nhóm**: đánh dấu nhóm nào fanpage đã vào. **Bài đăng**: với bài Tìm bên sản xuất, ghi sản phẩm và chọn vật liệu gợi ý.
+4. Luồng trả lời của extension **chưa chạy trên Facebook thật** (nhất là nút chuyển danh tính sang fanpage). Thử trước với MỘT câu trả lời bằng nick; lỗi thì gửi báo cáo **Chẩn đoán trang này**. Không chắc đang ở đúng danh tính thì extension không điền gì.
 
 ### Pinterest (thư viện mẫu và ảnh phong cách cho AI)
 1. Tạo App tại Pinterest Developers, xin Trial access với các scope đọc: `boards:read`, `pins:read`, `user_accounts:read`; nếu cần board bí mật thì xin thêm `boards:read_secret`, `pins:read_secret` và đặt `PINTEREST_INCLUDE_SECRET_BOARDS="true"`.

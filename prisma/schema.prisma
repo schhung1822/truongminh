@@ -90,6 +90,7 @@ model User {
   extTokens         ExtToken[]
   assignedFbLeads   FbLead[]           @relation("FbLeadAssignee")
   registeredFbPosts FbPost[]           @relation("FbPostRegistrar")
+  approvedFbReplies FbReplyQueue[]     @relation("FbReplyApprover")
   pinterestAccounts PinterestAccount[]
   logoFavoritePins  LogoFavoritePin[]
 
@@ -1069,7 +1070,9 @@ model MachineTimeLog {
 // ============================================================================================
 // Module Lead Facebook (docs/thiet-ke-module-lead-facebook.md, quyết định D91).
 // Giai đoạn 1: thu thập comment trên những bài người dùng chủ động theo dõi, tách số điện thoại, tạo lead.
-// Extension chỉ ĐỌC trang và báo về; không có bảng hay trường nào dùng để tự gửi comment hay tự đăng bài.
+// Giai đoạn 2 + bổ sung v1.1 (thiet-ke-module-lead-facebook-v1.1-luong-nha-san-xuat.md, quyết định D131): hàng chờ trả lời
+// (fb_reply_queue), mẫu câu, fanpage. Extension chỉ ĐIỀN SẴN câu đã được người duyệt rồi dừng lại; người đọc và tự bấm gửi.
+// Không có bảng hay trường nào dùng để tự gửi comment hay tự đăng bài.
 // ============================================================================================
 
 enum FbAccountStatus {
@@ -1130,6 +1133,44 @@ enum ExtLogType {
   CHECKPOINT
   REPLY_SENT
   POST_DONE
+  REPLY_FAIL // điền câu trả lời không thành (không thấy comment, không đổi được danh tính sang fanpage...)
+}
+
+enum FbPageStatus {
+  ACTIVE
+  PAUSED
+}
+
+// Trả lời dưới tên nick đã quét bài hay dưới tên fanpage
+enum FbReplyAs {
+  ACCOUNT
+  PAGE
+}
+
+enum FbReplyIntent {
+  ANSWER_INTEREST // khách "ib", "quan tâm", hỏi giá: dẫn về inbox fanpage (v1.0 mục 6.2)
+  SUPPLIER_OFFER // xưởng comment ở bài tìm nhà sản xuất: mời dùng vật liệu (v1.1)
+}
+
+enum FbReplyStatus {
+  DRAFT // mới soạn, chờ người duyệt
+  APPROVED // đã duyệt, chờ extension điền
+  FILLED // extension đã điền vào ô trả lời, chờ người bấm gửi
+  SENT // đã thấy câu trả lời xuất hiện dưới comment
+  SKIPPED
+  FAILED
+}
+
+enum FbTemplateCategory {
+  INTEREST
+  QUESTION
+  SUPPLIER_OFFER
+}
+
+enum FbSupplierType {
+  MANUFACTURER // xưởng trực tiếp
+  BROKER // môi giới
+  UNKNOWN
 }
 
 // Nick Facebook của nhân sự dùng để mở và quét các bài đã đăng ký theo dõi.
@@ -1142,9 +1183,10 @@ model FbAccount {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  user   User       @relation(fields: [userId], references: [id])
-  posts  FbPost[]
-  tokens ExtToken[]
+  user    User           @relation(fields: [userId], references: [id])
+  posts   FbPost[]
+  tokens  ExtToken[]
+  replies FbReplyQueue[]
 
   @@index([userId])
   @@map("fb_accounts")
@@ -1158,6 +1200,10 @@ model FbGroup {
   purpose   FbGroupPurpose @default(BOTH)
   notes     String?        @db.Text // quy định của nhóm, lưu ý admin
   status    FbGroupStatus  @default(ACTIVE)
+  // v1.1: nhóm có cho fanpage tham gia không, và fanpage của xưởng đã vào nhóm chưa. Chỉ nhóm "đã vào" mới được soạn câu trả
+  // lời dưới tên fanpage; extension báo page_not_available thì hệ thống tự bỏ đánh dấu "đã vào".
+  pageAllowed Boolean      @default(false)
+  pageJoined  Boolean      @default(false)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
@@ -1184,6 +1230,10 @@ model FbPost {
   commentCount         Int              @default(0)
   leadCount            Int              @default(0)
   registeredById       String? // người đã chủ động đăng ký bài này vào danh sách theo dõi
+  // v1.1, chỉ dùng cho bài FIND_SUPPLIER: mẫu áo / sản phẩm đang tìm nhà sản xuất, và các chất liệu (materials.id) hợp với
+  // sản phẩm đó để mời xưởng dùng. Mảng JSON các id; chất liệu đã tắt hoặc đã xóa thì tự bị bỏ qua lúc soạn câu.
+  productRef           String?          @db.VarChar(200)
+  suggestedMaterialIds Json?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
 
@@ -1219,6 +1269,7 @@ model FbComment {
   post    FbPost         @relation(fields: [postId], references: [id], onDelete: Cascade)
   lead    FbLead?
   sources FbLeadSource[]
+  reply   FbReplyQueue?
 
   @@unique([postId, fbCommentId])
   @@index([category, createdAt])
@@ -1241,6 +1292,13 @@ model FbLead {
   assignedToId String?
   customerId   String? // gắn tay vào khách hàng có sẵn (hệ thống chỉ gợi ý khi trùng số điện thoại)
   note         String?      @db.Text
+  // v1.1, chỉ dùng cho lead nhà sản xuất (leadType = SUPPLIER)
+  supplierType   FbSupplierType? // xưởng trực tiếp / môi giới / chưa rõ; trống = lead khách
+  capability     String?         @db.Text // tóm tắt từ comment: làm mặt hàng gì, quy mô nếu có nói
+  lastOfferedAt  DateTime? // lần gần nhất câu mời dùng vật liệu ĐÃ GỬI; cùng các dòng chào đang chờ, dùng để chống chào lặp
+  calledAt       DateTime? // sale bấm "Đã gọi"
+  zaloMessagedAt DateTime? // sale bấm "Đã nhắn Zalo"
+  sampleSentAt   DateTime? // sale bấm "Đã gửi mẫu"
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -1250,12 +1308,14 @@ model FbLead {
   assignedTo User?          @relation("FbLeadAssignee", fields: [assignedToId], references: [id])
   customer   Customer?      @relation(fields: [customerId], references: [id])
   sources    FbLeadSource[]
+  replies    FbReplyQueue[]
 
   @@index([status, createdAt])
   @@index([assignedToId])
   @@index([postId])
   @@index([groupId])
   @@index([customerId])
+  @@index([leadType, createdAt])
   @@map("fb_leads")
 }
 
@@ -1272,6 +1332,77 @@ model FbLeadSource {
 
   @@index([leadId])
   @@map("fb_lead_sources")
+}
+
+// Fanpage của xưởng dùng để trả lời comment (v1.1 mục 3.1). `name` phải đúng tên hiển thị trên Facebook: extension tìm
+// fanpage trong danh sách chuyển danh tính theo tên này. Chỉ một fanpage là mặc định cho luồng mời nhà sản xuất.
+model FbPage {
+  id        String       @id @default(cuid())
+  name      String       @db.VarChar(150)
+  url       String       @unique @db.VarChar(300)
+  isDefault Boolean      @default(false)
+  status    FbPageStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  replies FbReplyQueue[]
+
+  @@map("fb_pages")
+}
+
+// Hàng chờ trả lời (v1.0 mục 5.6 + v1.1). Mỗi comment tối đa một dòng. Vòng đời: DRAFT -> (người duyệt) APPROVED ->
+// (extension điền rồi dừng lại) FILLED -> (người tự bấm gửi, extension thấy câu trả lời xuất hiện) SENT.
+model FbReplyQueue {
+  id           String        @id @default(cuid())
+  commentId    String        @unique
+  accountId    String // nick mở bài và trả lời (với replyAs = PAGE: nick này phải quản lý fanpage)
+  leadId       String? // lead của người comment, để chống chào lặp và thống kê
+  intent       FbReplyIntent
+  replyAs      FbReplyAs     @default(ACCOUNT)
+  pageId       String?
+  templateId   String? // mẫu đã dùng để soạn, để không dùng một mẫu cho hai comment liền nhau trong cùng bài
+  draftText    String        @db.Text
+  finalText    String?       @db.Text // sau khi nhân sự sửa
+  aiGenerated  Boolean       @default(false)
+  status       FbReplyStatus @default(DRAFT)
+  approvedById String?
+  approvedAt   DateTime?
+  filledAt     DateTime?
+  sentAt       DateTime?
+  failReason   String?       @db.VarChar(200)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  comment    FbComment        @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  account    FbAccount        @relation(fields: [accountId], references: [id])
+  lead       FbLead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  page       FbPage?          @relation(fields: [pageId], references: [id], onDelete: SetNull)
+  template   FbReplyTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  approvedBy User?            @relation("FbReplyApprover", fields: [approvedById], references: [id])
+
+  @@index([accountId, status])
+  @@index([status, createdAt])
+  @@index([leadId, intent, createdAt])
+  @@index([pageId])
+  @@index([templateId])
+  @@index([approvedById])
+  @@map("fb_reply_queue")
+}
+
+// Mẫu câu trả lời (v1.0 mục 5.7 + v1.1). Biến: {ten} {ten_page} {link_page} {san_pham} {vat_lieu_goi_y}.
+model FbReplyTemplate {
+  id        String             @id @default(cuid())
+  purpose   FbPostPurpose
+  category  FbTemplateCategory
+  text      String             @db.Text
+  active    Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  replies FbReplyQueue[]
+
+  @@index([purpose, category, active])
+  @@map("fb_reply_templates")
 }
 
 // Mã kết nối extension: chỉ lưu băm (sha256), mã gốc hiện đúng một lần lúc tạo.

@@ -1,6 +1,6 @@
 /**
  * Content script chạy trên facebook.com (mọi host con: www, web, m). Chỉ làm khi background nhờ (PING, SCAN, GET_POST_INFO,
- * DIAGNOSE); không tự chạy gì. Luồng quét một bài (docs/thiet-ke-module-lead-facebook.md mục 8.2): chờ trang tải, kiểm tra
+ * DIAGNOSE, và các tin REPLY_* của luồng điền sẵn câu trả lời, xem reply.ts); không tự chạy gì. Luồng quét một bài (docs/thiet-ke-module-lead-facebook.md mục 8.2): chờ trang tải, kiểm tra
  * không phải trang đăng nhập/xác minh, cuộn để Facebook vẽ bình luận, đổi bộ lọc sang "Tất cả bình luận", bấm "Xem thêm
  * bình luận" và "Xem phản hồi" cho tới khi hết (có giới hạn), đọc từng comment.
  *
@@ -10,8 +10,9 @@ import type { CommentCountResult, ContentMessage, ScanResult } from "../types";
 import { hasReliableCoverage } from "../scan-policy";
 import { CommentCollector } from "./comment-collector";
 import { actAndWaitForDom } from "./dom-wait";
-import { commentArticles, diagnose, findClickable, mainPostRoot, pageCommentCount, pageState, readAllComments, readPostInfo, scrollCommentArea, scrollToLoad, seeMoreButtons, waitFor, type ReadComment } from "./extract";
-import { labelMatches } from "./selectors";
+import { commentArticles, diagnose, findClickable, mainPostRoot, pageCommentCount, pageState, readAllComments, readPostInfo, scrollCommentArea, scrollToLoad, seeMoreButtons, switchToAllComments, waitFor, type ReadComment } from "./extract";
+import { cancelReply, fillReply, showReplyPanel, waitForSent } from "./reply";
+import { diagnoseReply } from "./reply-diagnose";
 
 /** Bài lớn được thêm thời gian và lượt mở rộng, nhưng vẫn có trần để không tạo tải bất thường lên tài khoản. */
 const SMALL_SCAN = { maxSteps: 160, maxMs: 5 * 60_000 };
@@ -21,19 +22,6 @@ const MAX_COMMENTS_PER_SCAN = 3_000; // khớp giới hạn của API /comments
 const STABLE_ROUNDS = 3;
 const EXPANSION_WAIT_MS = 5_000;
 const PAGE_READY_TIMEOUT_MS = 25_000;
-
-/** Đổi bộ lọc bình luận sang "Tất cả bình luận". Cố gắng hết sức: không thấy menu thì bỏ qua (bài ít comment có thể không có menu). */
-async function switchToAllComments(): Promise<void> {
-  const sort = findClickable("sortButton");
-  if (!sort) return;
-  const current = (sort.innerText || sort.getAttribute("aria-label") || "").trim();
-  if (labelMatches(current, "allComments")) return;
-  await actAndWaitForDom(() => sort.click(), { timeoutMs: 3_000 });
-  const item = findClickable("allComments");
-  if (item) {
-    await actAndWaitForDom(() => item.click(), { timeoutMs: 5_000, quietMs: 800 });
-  }
-}
 
 type OwnAccount = { profileUrl: string; displayName: string };
 type ExpansionResult = { complete: boolean; steps: number; stableRounds: number; comments: ReadComment[]; note?: string };
@@ -236,17 +224,32 @@ if (!window.__dataLeadContent) {
       case "GET_POST_INFO":
         sendResponse(readPostInfo());
         return false;
+      case "REPLY_FILL":
+        void fillReply(msg).then(sendResponse, (e: unknown) => sendResponse({ state: "failed", reason: "fill_failed", detail: String((e as Error)?.message ?? e).slice(0, 200) }));
+        return true;
+      case "REPLY_WAIT":
+        void waitForSent(msg.sliceMs).then(sendResponse, () => sendResponse({ state: "lost" }));
+        return true;
+      case "REPLY_PANEL":
+        showReplyPanel(msg.text, msg.tone, msg.buttons);
+        sendResponse({ ok: true });
+        return false;
+      case "REPLY_CANCEL":
+        cancelReply(msg.clearBox);
+        sendResponse({ ok: true });
+        return false;
       case "DIAGNOSE": {
         const own = { profileUrl: msg.ownProfileUrl, displayName: msg.ownDisplayName };
+        const known = { nick: msg.ownDisplayName, pages: msg.pageNames ?? [] };
         void (async () => {
           await scrollToLoad(2);
-          if (!msg.deep) return sendResponse(diagnose(own));
+          if (!msg.deep) return sendResponse({ ...diagnose(own), reply: diagnoseReply(known) });
           // Thử đọc sâu: chạy đúng bộ gom cuốn chiếu, nhưng báo cáo chỉ giữ số đếm (không gửi dữ liệu comment ra ngoài trang)
           const t0 = Date.now();
           await switchToAllComments();
           const reportedCount = pageCommentCount();
           const exp = await expandAll(t0, own, reportedCount);
-          sendResponse(diagnose(own, { expanded: true, steps: exp.steps, complete: exp.complete, seconds: Math.round((Date.now() - t0) / 1000), stableRounds: exp.stableRounds, reportedCount }, exp.comments));
+          sendResponse({ ...diagnose(own, { expanded: true, steps: exp.steps, complete: exp.complete, seconds: Math.round((Date.now() - t0) / 1000), stableRounds: exp.stableRounds, reportedCount }, exp.comments), reply: diagnoseReply(known) });
         })();
         return true;
       }

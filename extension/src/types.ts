@@ -4,11 +4,55 @@ export type MeResponse = {
   user: string;
   account: { id: string; display_name: string; profile_url: string; status: "ACTIVE" | "PAUSED" | "RESTRICTED" };
   config: { poll_minutes: number; max_posts_per_cycle: number; delay_seconds_between_posts: number };
+  /** Số câu trả lời đã duyệt đang chờ điền, tách theo người đứng tên. Webapp bản cũ không gửi trường này. */
+  replies?: { account: number; page: number };
+  /** Tên các fanpage đang bật trên webapp (để che tên trong báo cáo chẩn đoán và nhận ra danh tính đang chọn). */
+  pages?: string[];
   server_time: string;
 };
 
 export type ScanJob = { post_id: string; url: string; known_comment_ids: string[]; reported_comment_count: number | null; force_full_scan: boolean };
-export type JobsResponse = { scan: ScanJob[]; paused_reason?: string };
+
+/** Một câu trả lời ĐÃ ĐƯỢC NGƯỜI DUYỆT trên webapp. Extension điền vào ô trả lời của comment rồi dừng; người tự bấm gửi. */
+export type ReplyJob = {
+  reply_id: string;
+  post_id: string;
+  post_url: string;
+  fb_comment_id: string;
+  parent_fb_comment_id: string | null;
+  author_name: string;
+  text: string;
+  reply_as: "account" | "page";
+  page_name: string | null;
+  intent: "answer_interest" | "supplier_offer";
+};
+export type JobsResponse = { scan: ScanJob[]; replies?: ReplyJob[]; paused_reason?: string };
+
+/** Lý do không điền được, gửi về webapp trong fail_reason (nhãn hiển thị ở lib/fb/reply-labels.ts). */
+export type ReplyFailReason =
+  | "page_not_available"
+  | "identity_unverified"
+  | "comment_not_found"
+  | "reply_button_not_found"
+  | "reply_box_not_found"
+  | "fill_failed"
+  | "tab_closed"
+  | "page_load_timeout"
+  | "content_unreachable";
+
+/** Kết quả content script trả về sau khi thử điền một câu. */
+export type FillResult =
+  | { state: "filled" }
+  | { state: "already_replied" }
+  | { state: "login" }
+  | { state: "checkpoint" }
+  | { state: "failed"; reason: ReplyFailReason; item?: string; detail?: string };
+
+/**
+ * Kết quả một lượt chờ người bấm gửi: `sent` = câu trả lời đã xuất hiện; `skipped` / `stopped` = người bấm nút trên bảng nhỏ của
+ * extension; `waiting` = hết lượt chờ ngắn, background hỏi tiếp; `lost` = trang đã tải lại nên không còn theo dõi được.
+ */
+export type WaitResult = { state: "sent" } | { state: "skipped" } | { state: "stopped" } | { state: "waiting" } | { state: "lost" };
 
 export type CommentPayload = {
   fb_comment_id: string;
@@ -61,6 +105,11 @@ export type DiagnosticReport = {
     repliesRead: number;
     commentsWithPhone: number;
   };
+  /**
+   * Cấu trúc của luồng trả lời (v1.1), để chỉnh REPLY_LABELS trong selectors.ts: số nút "Phản hồi", số ô nhập, nhãn ô nhập và các
+   * nút ứng viên của bộ chọn danh tính. Nhãn đã che tên: tên nick thành {nick}, tên fanpage thành {page}, tên khác thành {…}.
+   */
+  reply?: { replyActions: number; textboxes: number; textboxLabels: string[]; identityByLabel: string[]; identityByStructure: string[] };
   /** Chế độ thử đọc sâu: có bấm mở rộng hết các nút "Xem thêm" không, bao nhiêu lần bấm, có đọc trọn vẹn không. */
   deep: { expanded: boolean; steps: number; complete: boolean; seconds: number; stableRounds?: number; reportedCount?: number | null } | null;
   buttons: Record<string, string[]>;
@@ -80,7 +129,23 @@ export type ContentMessage =
   | { type: "SCAN"; ownProfileUrl: string; ownDisplayName: string }
   | { type: "GET_COMMENT_COUNT" }
   | { type: "GET_POST_INFO" }
-  | { type: "DIAGNOSE"; ownProfileUrl: string; ownDisplayName: string; deep?: boolean };
+  | { type: "DIAGNOSE"; ownProfileUrl: string; ownDisplayName: string; deep?: boolean; pageNames?: string[] }
+  | {
+      /** Tìm comment, mở ô trả lời, chọn đúng danh tính, điền câu rồi DỪNG. Không bao giờ gửi. */
+      type: "REPLY_FILL";
+      fbCommentId: string;
+      parentFbCommentId: string | null;
+      text: string;
+      replyAs: "account" | "page";
+      pageName: string | null;
+      ownProfileUrl: string;
+      ownDisplayName: string;
+      /** Tên mọi fanpage đang bật: để nhận ra khi ô trả lời đang ở danh tính fanpage lúc cần trả lời bằng nick. */
+      pageNames: string[];
+    }
+  | { type: "REPLY_WAIT"; sliceMs: number }
+  | { type: "REPLY_PANEL"; text: string; tone: "info" | "ok" | "warn"; buttons: boolean }
+  | { type: "REPLY_CANCEL"; clearBox: boolean };
 
 export type ScanMode = "window" | "tab";
 
@@ -104,7 +169,10 @@ export type BackgroundMessage =
   | { type: "GET_SETTINGS" }
   | { type: "SET_SETTINGS"; settings: Partial<Settings> }
   | { type: "GET_EVENTS" }
-  | { type: "GET_LAST_DIAGNOSTIC" };
+  | { type: "GET_LAST_DIAGNOSTIC" }
+  /** Người dùng bấm "Xử lý trả lời" trên popup cho một nhóm: câu đứng tên nick, hoặc câu đứng tên fanpage. */
+  | { type: "START_REPLIES"; group: "account" | "page" }
+  | { type: "STOP_REPLIES" };
 
 export type CycleSummary = {
   at: string;
@@ -117,6 +185,9 @@ export type CycleSummary = {
 
 export type Progress = { total: number; index: number; url: string; startedAt: string } | null;
 
+/** Tiến độ của một lượt "Xử lý trả lời" đang chạy (chỉ giữ trong bộ nhớ của service worker). */
+export type ReplyProgress = { group: "account" | "page"; total: number; index: number; phase: "opening" | "filling" | "waiting"; url: string } | null;
+
 export type EventLevel = "info" | "ok" | "warn" | "error";
 export type EventEntry = { at: string; level: EventLevel; text: string };
 
@@ -126,6 +197,9 @@ export type StatusResponse = {
   account?: MeResponse["account"];
   running: boolean;
   progress: Progress;
+  replyProgress: ReplyProgress;
+  /** Số câu đã duyệt đang chờ điền (chỉ có khi đã kết nối). */
+  replies: { account: number; page: number } | null;
   lastCycle: CycleSummary | null;
   error: string | null;
   appOrigin: string;

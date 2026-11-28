@@ -71,7 +71,7 @@ export function GroupForm() {
   );
 }
 
-export type GroupEditValues = { id: string; name: string; topic: string; purpose: string; notes: string; status: string };
+export type GroupEditValues = { id: string; name: string; topic: string; purpose: string; notes: string; status: string; pageAllowed: boolean; pageJoined: boolean };
 
 export function GroupEditDialog({ group }: { group: GroupEditValues }) {
   const [open, setOpen] = useState(false);
@@ -129,6 +129,20 @@ export function GroupEditDialog({ group }: { group: GroupEditValues }) {
               </NativeSelect>
             </div>
           </div>
+          <fieldset className="flex flex-col gap-2 rounded-lg border p-3">
+            <legend className="px-1 text-sm font-medium">Fanpage trong nhóm này</legend>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="pageAllowed" defaultChecked={group.pageAllowed} className="mt-0.5 size-4" />
+              <span>Nhóm cho fanpage tham gia</span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="pageJoined" defaultChecked={group.pageJoined} className="mt-0.5 size-4" />
+              <span>
+                Fanpage của xưởng đã vào nhóm
+                <span className="block text-xs text-muted-foreground">Chỉ khi đánh dấu ô này, câu mời nhà sản xuất ở các bài trong nhóm mới đứng tên fanpage. Extension báo không trả lời được dưới tên fanpage thì ô này tự bỏ đánh dấu.</span>
+              </span>
+            </label>
+          </fieldset>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`g-notes-${group.id}`}>Quy định của nhóm, lưu ý admin</Label>
             <Textarea id={`g-notes-${group.id}`} name="notes" rows={3} maxLength={5000} defaultValue={group.notes} />

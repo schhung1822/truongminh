@@ -1,5 +1,6 @@
 import "server-only";
 import { getEnv } from "@/lib/env";
+import { SUPPLIER_AI_MARKER } from "@/lib/fb/supplier-ai";
 import { MATERIAL_PICK_MARKER } from "@/lib/materials/suggest";
 import { ASSISTANT_MARKER, STEP_SUFFIX, TOOL_RESULT_PREFIX } from "@/lib/zalo/agent/protocol";
 import { PLAN_MARKER } from "@/lib/zalo/care-plan";
@@ -159,6 +160,25 @@ export class MockChat implements ChatProvider {
       const total = Number(/DANH SÁCH CHẤT LIỆU \((\d+) dòng\)/.exec(usr)?.[1] ?? 0);
       const picks = Array.from({ length: Math.min(want, total) }, (_, i) => ({ id: i + 1, reason: "(Mock) hợp phong cách logo" }));
       return { text: JSON.stringify({ summary: "(Mock) Logo đơn giản, nét đậm.", isBadge: false, picks }), promptTokens: 30, completionTokens: 60 };
+    }
+    // Lead Facebook v1.1: phân loại nhà sản xuất và soạn câu mời dùng vật liệu, đoán bằng từ khóa trong comment
+    if (sys.includes(SUPPLIER_AI_MARKER)) {
+      const usr = input.messages.find((m) => m.role === "user")?.content.map((p) => (p.type === "text" ? p.text : "")).join(" ") ?? "";
+      const comment = /COMMENT CẦN XỬ LÝ[^\n]*\n([\s\S]*?)\n\nVẬT LIỆU GỢI Ý/.exec(usr)?.[1] ?? "";
+      const page = /Có tên "([^"]+)"/.exec(usr)?.[1] ?? "bên em";
+      const material = /\n1\. ([^|\n]+)/.exec(usr)?.[1]?.trim();
+      const maker = /xưởng|nhà máy|gia công|nhận may|nhận in/i.test(comment);
+      const broker = /môi giới|trung gian/i.test(comment);
+      return {
+        text: JSON.stringify({
+          supplier_type: broker ? "broker" : maker ? "manufacturer" : "unknown",
+          capability: maker || broker ? `(Mock) ${comment.replace(/\s+/g, " ").slice(0, 80)}` : "",
+          should_reply: !/tuyển ctv/i.test(comment),
+          draft: `(Mock) Dạ chào anh/chị, bên em là ${page} chuyên cung cấp vật liệu làm logo cho xưởng${material ? `, mẫu này hợp với ${material}` : ""}. Anh/chị nhắn page để em gửi bảng mẫu nhé.`,
+        }),
+        promptTokens: 30,
+        completionTokens: 40,
+      };
     }
     const last = [...input.messages].reverse().find((m) => m.role === "user");
     const said = (last?.content.map((p) => (p.type === "text" ? p.text : "[ảnh]")).join(" ") ?? "").replace(STEP_SUFFIX, "");

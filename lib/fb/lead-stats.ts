@@ -8,6 +8,45 @@ export type LeadFunnel = Record<(typeof LEAD_STATUS_ORDER)[number], number>;
 
 export type SaleLeadRow = { id: string; name: string; total: number; won: number };
 
+/**
+ * Phễu của các bài tìm nhà sản xuất (v1.1 mục 6): comment của người khác trên bài tìm nhà sản xuất, rồi các lead nhà sản xuất
+ * tạo trong khoảng đang xem đi qua từng bước. Mỗi bước đếm độc lập (không bắt buộc qua bước trước), nên "đã gửi mẫu" có thể
+ * lớn hơn "đã chào" khi sale gọi thẳng mà không cần câu chào.
+ */
+export type SupplierFunnel = {
+  comments: number;
+  leads: number;
+  manufacturers: number;
+  offered: number;
+  contacted: number;
+  sampleSent: number;
+  won: number;
+};
+
+export const SUPPLIER_FUNNEL_STEPS: { key: keyof SupplierFunnel; label: string; hint: string }[] = [
+  { key: "comments", label: "Comment", hint: "Comment của người khác trên bài tìm nhà sản xuất" },
+  { key: "manufacturers", label: "Xưởng thật", hint: "Lead được xếp là xưởng trực tiếp" },
+  { key: "offered", label: "Đã chào", hint: "Câu mời dùng vật liệu đã gửi" },
+  { key: "contacted", label: "Đã liên hệ được", hint: "Sale đã gọi hoặc nhắn Zalo" },
+  { key: "sampleSent", label: "Đã gửi mẫu", hint: "Sale đánh dấu đã gửi mẫu" },
+  { key: "won", label: "Có đơn vật liệu", hint: "Lead ở trạng thái Chốt đơn" },
+];
+
+export async function loadSupplierFunnel(start: Date, end: Date): Promise<SupplierFunnel> {
+  const created = { createdAt: { gte: start, lt: end } };
+  const lead = { ...created, leadType: "SUPPLIER" as const };
+  const [comments, leads, manufacturers, offered, contacted, sampleSent, won] = await Promise.all([
+    db.fbComment.count({ where: { ...created, isOwn: false, post: { purpose: "FIND_SUPPLIER" } } }),
+    db.fbLead.count({ where: lead }),
+    db.fbLead.count({ where: { ...lead, supplierType: "MANUFACTURER" } }),
+    db.fbLead.count({ where: { ...lead, lastOfferedAt: { not: null } } }),
+    db.fbLead.count({ where: { ...lead, OR: [{ calledAt: { not: null } }, { zaloMessagedAt: { not: null } }] } }),
+    db.fbLead.count({ where: { ...lead, sampleSentAt: { not: null } } }),
+    db.fbLead.count({ where: { ...lead, status: "WON" } }),
+  ]);
+  return { comments, leads, manufacturers, offered, contacted, sampleSent, won };
+}
+
 export type LeadStats = {
   total: number;
   funnel: LeadFunnel;
